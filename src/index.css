@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Poppins', sans-serif !important;
+  background-color: #f5f6fa !important;
+  color: #1f2430 !important;
+}
+
+.font-poppins {
+  font-family: 'Poppins', sans-serif !important;
+}
+
+/* Brand helpers */
+.text-brand {
+  color: #1B17E0 !important;
+}
+
+.bg-brand {
+  background-color: #1B17E0 !important;
+}
+
+.button-color {
+  background-color: #14149C !important;
+  color: #fff !important;
+}
+
+.button-color:hover {
+  background-color: #1B17E0 !important;
+}
+
+.text-color {
+  color: #14149C !important;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
+  border: 1px solid #f0f1f5;
+}
+
+.hover-lift {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(16, 24, 40, 0.06), 0 16px 40px rgba(16, 24, 40, 0.08);
+}
+
+/* Logo wordmark */
+.bol-logo {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  color: #1B17E0;
+  letter-spacing: -1px;
+}
+
+/* Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #d7d9e3;
+  border-radius: 10px;
+}
+
+/* Antd overrides for light theme */
+.ant-popover-inner {
+  padding: 0 !important;
+  border-radius: 16px !important;
+  font-family: 'Poppins';
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08) !important;
+}
+
+.ant-modal-content {
+  border-radius: 18px !important;
+  font-family: 'Poppins';
+}
+
+.ant-table {
+  font-family: 'Poppins' !important;
+}
+
+/* Inputs */
+.ant-input-affix-wrapper,
+.ant-input {
+  border-color: #eceef3 !important;
+  background: #fafbfc !important;
+}
+.ant-input-affix-wrapper:focus-within,
+.ant-input:focus {
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgba(27, 23, 224, 0.08) !important;
+}
+
+/* Soft brand chip */
+.brand-soft {
+  background: #f0f0fd;
+  color: #1B17E0;
+}
+
+/* Status pills */
+.status-pending { color: #E5A300; background: #FFF6E0; }
+.status-accepted, .status-delivered { color: #1AA251; background: #E7F8EF; }
+.status-canceled { color: #E5484D; background: #FDECEC; }
+.status-transit, .status-progress { color: #1B17E0; background: #ECECFB; }
