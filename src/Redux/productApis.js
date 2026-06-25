@@ -116,6 +116,15 @@ const productApis = baseApis.injectEndpoints({
       invalidatesTags: ["Products", "Connection"],
     }),
 
+    // POST /spreadsheet/sync-asin
+    syncAsin: builder.mutation({
+      query: ({ asin, country = "NL" }) => ({
+        url: `/spreadsheet/sync-asin?asin=${asin}&country=${country}`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
     // Create a Bol.com draft from an Amazon ASIN (2.5x markup) → used before publishing.
     // POST /bol/drafts/from-amazon  { asin, country?, stock_amount? }
     createDraftFromAmazon: builder.mutation({
@@ -160,6 +169,7 @@ export const {
   useGetRawItemsQuery,
   useScrapeAsinQuery,
   useSyncInventoryMutation,
+  useSyncAsinMutation,
   useImportOauthMutation,
   useResyncInventoryMutation,
   useCreateDraftFromAmazonMutation,

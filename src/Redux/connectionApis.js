@@ -49,6 +49,47 @@ const connectionApis = baseApis.injectEndpoints({
       }),
       invalidatesTags: ["Connection"],
     }),
+    // POST /spreadsheet/import-public  { spreadsheet_url, sheet_id? }
+    importPublicSheet: builder.mutation({
+      query: (data) => ({
+        url: "/spreadsheet/import-public",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Connection", "Products"],
+    }),
+
+    // POST /spreadsheet/import-oauth  { spreadsheet_url, access_token, refresh_token, sheet_id? }
+    importOAuthSheet: builder.mutation({
+      query: (data) => ({
+        url: "/spreadsheet/import-oauth",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Connection", "Products"],
+    }),
+
+    // GET /spreadsheet/list-user-sheets ? access_token=...
+    getListUserSheets: builder.query({
+      query: (access_token) => `/spreadsheet/list-user-sheets?access_token=${access_token}`,
+    }),
+
+    // GET /spreadsheet/tabs ? spreadsheet_url=... & access_token=...
+    getSpreadsheetTabs: builder.query({
+      query: ({ spreadsheet_url, access_token }) => {
+        let url = `/spreadsheet/tabs?spreadsheet_url=${encodeURIComponent(spreadsheet_url)}`;
+        if (access_token) url += `&access_token=${access_token}`;
+        return url;
+      },
+    }),
+
+    exchangeGoogleCode: builder.mutation({
+      query: (data) => ({
+        url: "/spreadsheet/exchange-code",
+        method: "POST",
+        body: data,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -60,6 +101,11 @@ export const {
   useSaveBolCredentialsMutation,
   useGetAmazonCredentialsQuery,
   useSaveAmazonCredentialsMutation,
+  useImportPublicSheetMutation,
+  useImportOAuthSheetMutation,
+  useLazyGetListUserSheetsQuery,
+  useLazyGetSpreadsheetTabsQuery,
+  useExchangeGoogleCodeMutation,
 } = connectionApis;
 
 export default connectionApis;

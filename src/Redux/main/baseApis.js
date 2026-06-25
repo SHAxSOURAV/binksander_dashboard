@@ -5,6 +5,7 @@ import { getToken, getRefreshToken, updateTokens, clearSession } from "../../uti
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: url,
   prepareHeaders: (headers) => {
+    headers.set("ngrok-skip-browser-warning", "69420"); // Bypass ngrok warning
     const token = getToken();
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);

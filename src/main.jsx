@@ -1,4 +1,5 @@
 import { StrictMode } from "react";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 import router from "./Routes/Routes.jsx";
@@ -21,10 +22,12 @@ createRoot(document.getElementById("root")).render(
         },
       }}
     >
-      <Provider store={store}>
-        <RouterProvider router={router} />
-        <Toaster position="top-center" reverseOrder={false} />
-      </Provider>
+      <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+        <Provider store={store}>
+          <RouterProvider router={router} />
+          <Toaster position="top-center" reverseOrder={false} />
+        </Provider>
+      </GoogleOAuthProvider>
     </ConfigProvider>
   </StrictMode>,
 );
