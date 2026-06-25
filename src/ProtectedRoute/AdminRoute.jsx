@@ -1,7 +1,8 @@
 import { Navigate } from "react-router-dom";
+import { getToken } from "../utils/session";
 
 const AdminRoute = ({ children }) => {
-  if (!localStorage.getItem("token")) return <Navigate to="/login" />;
+  if (!getToken()) return <Navigate to="/login" />;
   return children;
 };
 

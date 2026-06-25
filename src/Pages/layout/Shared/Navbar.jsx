@@ -7,8 +7,7 @@ import { useUI } from "../../../Provider/ContextProvider";
 import { getUser } from "../../../utils/session";
 import { useGetProfileQuery } from "../../../Redux/profileApis";
 
-const AVATAR =
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80";
+const AVATAR = "/Deafult Profile/profile.webp";
 
 const Navbar = ({ onMenuClick }) => {
   const { openSettings, setLogoutOpen } = useUI();

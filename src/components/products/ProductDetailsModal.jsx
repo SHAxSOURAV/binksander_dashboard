@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from "react";
 import { Modal, Input, Select, Spin } from "antd";
 import toast from "react-hot-toast";
 import { FaStar } from "react-icons/fa";
-import { FiExternalLink } from "react-icons/fi";
+import { FiExternalLink, FiRefreshCw } from "react-icons/fi";
 import {
   useCreateDraftFromAmazonMutation,
   usePublishDraftMutation,
   useScrapeAsinQuery,
+  useSyncAsinMutation,
 } from "../../Redux/productApis";
 
 const { TextArea } = Input;
@@ -31,6 +32,7 @@ const ProductDetailsModal = ({ open, onClose, product }) => {
   const [createDraft, { isLoading: drafting }] =
     useCreateDraftFromAmazonMutation();
   const [publishDraft, { isLoading: publishing }] = usePublishDraftMutation();
+  const [syncAsin, { isLoading: isSyncing }] = useSyncAsinMutation();
 
   // Live-scrape the full Amazon product (all photos, description) for this ASIN.
   const { data: details, isFetching: loadingDetails } = useScrapeAsinQuery(
@@ -106,7 +108,26 @@ const ProductDetailsModal = ({ open, onClose, product }) => {
     <Modal open={open} onCancel={onClose} footer={null} centered width={820}>
       <div className="font-poppins pt-2">
         <h2 className="text-base font-bold text-brand mb-1">Product Details</h2>
-        <p className="text-xs text-gray-400 mb-1">ASIN : {product.asin}</p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-xs text-gray-400">ASIN : {product?.asin}</p>
+          {product?.asin && (
+            <button
+              onClick={async () => {
+                try {
+                  await syncAsin({ asin: product.asin, country: "NL" }).unwrap();
+                  toast.success("Successfully synced ASIN");
+                } catch (err) {
+                  toast.error(err?.data?.detail || "Failed to sync ASIN");
+                }
+              }}
+              disabled={isSyncing}
+              className="text-gray-400 hover:text-brand transition-colors disabled:opacity-50"
+              title="Sync ASIN"
+            >
+              <FiRefreshCw className={isSyncing ? "animate-spin" : ""} size={14} />
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2 mb-5">
           <FaStar className="text-yellow-400" size={13} />
           <span className="text-xs font-medium">{view.rating || "—"}</span>

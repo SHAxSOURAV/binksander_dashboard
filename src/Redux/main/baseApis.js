@@ -1,10 +1,12 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { url } from "./server";
+import { getToken, getRefreshToken, updateTokens, clearSession } from "../../utils/session";
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: url,
   prepareHeaders: (headers) => {
-    const token = localStorage.getItem("token");
+    headers.set("ngrok-skip-browser-warning", "69420"); // Bypass ngrok warning
+    const token = getToken();
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
@@ -17,7 +19,7 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
   let result = await rawBaseQuery(args, api, extraOptions);
 
   if (result?.error?.status === 401) {
-    const refreshToken = localStorage.getItem("refreshToken");
+    const refreshToken = getRefreshToken();
     if (refreshToken) {
       const refresh = await rawBaseQuery(
         {
@@ -29,17 +31,14 @@ const baseQueryWithReauth = async (args, api, extraOptions) => {
         extraOptions,
       );
       if (refresh?.data?.access_token) {
-        localStorage.setItem("token", refresh.data.access_token);
-        localStorage.setItem("refreshToken", refresh.data.refresh_token);
+        updateTokens(refresh.data.access_token, refresh.data.refresh_token);
         result = await rawBaseQuery(args, api, extraOptions);
         return result;
       }
     }
     // Refresh failed → clear session and bounce to login.
     if (!window.location.pathname.includes("/login")) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("user");
+      clearSession();
       window.location.href = "/login";
     }
   }

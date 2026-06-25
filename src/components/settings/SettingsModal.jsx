@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Modal, Input, Form, Button, Spin } from "antd";
+import { Modal, Input, Form, Button, Spin, Checkbox } from "antd";
 import toast from "react-hot-toast";
 import {
   FiUser,
@@ -30,8 +30,14 @@ import {
   useSaveBolCredentialsMutation,
   useGetAmazonCredentialsQuery,
   useSaveAmazonCredentialsMutation,
+  useImportPublicSheetMutation,
+  useImportOAuthSheetMutation,
+  useLazyGetListUserSheetsQuery,
+  useLazyGetSpreadsheetTabsQuery,
+  useExchangeGoogleCodeMutation,
 } from "../../Redux/connectionApis";
 import { useRegisterBolWebhookMutation } from "../../Redux/fulfillmentApis";
+import { useGoogleLogin } from "@react-oauth/google";
 
 const tabs = [
   { key: "account", label: "Account", icon: <FiUser size={16} /> },
@@ -71,6 +77,31 @@ const SettingsModal = () => {
 
   const [bolForm] = Form.useForm();
   const [amazonForm] = Form.useForm();
+
+  // New states for Spreadsheet connection
+  const [publicLinkModalOpen, setPublicLinkModalOpen] = useState(false);
+  const [publicLinkUrl, setPublicLinkUrl] = useState("");
+  
+  const [oauthSheetsModalOpen, setOauthSheetsModalOpen] = useState(false);
+  const [oauthSheetsList, setOauthSheetsList] = useState([]);
+  const [oauthToken, setOauthToken] = useState("");
+  const [oauthRefreshToken, setOauthRefreshToken] = useState("");
+  
+  const [tabsModalOpen, setTabsModalOpen] = useState(false);
+  const [tabsList, setTabsList] = useState([]);
+  const [selectedSheetUrl, setSelectedSheetUrl] = useState("");
+  const [isPublicTabSelect, setIsPublicTabSelect] = useState(false); // To know if we should call importPublic or importOAuth
+
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
+  const [disconnectSheetUrl, setDisconnectSheetUrl] = useState("");
+  const [disconnectDeleteData, setDisconnectDeleteData] = useState(false);
+  const [disconnectItemCount, setDisconnectItemCount] = useState(0);
+
+  const [importPublicSheet, { isLoading: importingPublic }] = useImportPublicSheetMutation();
+  const [importOAuthSheet, { isLoading: importingOAuth }] = useImportOAuthSheetMutation();
+  const [exchangeGoogleCode, { isLoading: exchangingCode }] = useExchangeGoogleCodeMutation();
+  const [getListUserSheets, { isFetching: fetchingUserSheets }] = useLazyGetListUserSheetsQuery();
+  const [getSpreadsheetTabs, { isFetching: fetchingTabs }] = useLazyGetSpreadsheetTabsQuery();
 
   // Account edit (full name + avatar)
   const [editingName, setEditingName] = useState(false);
@@ -136,26 +167,24 @@ const SettingsModal = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleUnlink = (spreadsheet_url, itemCount) => {
-    Modal.confirm({
-      title: "Disconnect this spreadsheet?",
-      content: `This removes the connection and its ${
-        itemCount ?? ""
-      } imported products. You can reconnect the sheet again later.`,
-      okText: "Disconnect",
-      okButtonProps: { danger: true },
-      cancelText: "Cancel",
-      onOk: async () => {
-        try {
-          // delete_data: true — the "connected" state is derived from imported
-          // items, so they must be removed for the sheet to actually disconnect.
-          await unlinkSheet({ spreadsheet_url, delete_data: true }).unwrap();
-          toast.success("Spreadsheet disconnected");
-        } catch (err) {
-          toast.error(err?.data?.detail || "Failed to disconnect");
-        }
-      },
-    });
+  const handleOpenUnlink = (spreadsheet_url, itemCount) => {
+    setDisconnectSheetUrl(spreadsheet_url);
+    setDisconnectItemCount(itemCount || 0);
+    setDisconnectDeleteData(false);
+    setDisconnectModalOpen(true);
+  };
+
+  const executeUnlink = async () => {
+    try {
+      const res = await unlinkSheet({
+        spreadsheet_url: disconnectSheetUrl,
+        delete_data: disconnectDeleteData,
+      }).unwrap();
+      toast.success(res.message || "Spreadsheet disconnected");
+      setDisconnectModalOpen(false);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to disconnect");
+    }
   };
 
   const onSaveBol = async (values) => {
@@ -202,7 +231,75 @@ const SettingsModal = () => {
     }
   };
 
+  const loginWithGoogle = useGoogleLogin({
+    flow: "auth-code",
+    onSuccess: async (codeResponse) => {
+      console.log("Got OAuth code:", codeResponse.code);
+      try {
+        const res = await exchangeGoogleCode({
+          code: codeResponse.code,
+          redirect_uri: "postmessage"
+        }).unwrap();
+        
+        console.log("exchangeGoogleCode response:", res);
+        setOauthToken(res.access_token);
+        setOauthRefreshToken(res.refresh_token);
+        setOauthSheetsList(res.sheets || []);
+        setOauthSheetsModalOpen(true);
+      } catch (err) {
+        console.error("exchangeGoogleCode error:", err);
+        toast.error(err?.data?.detail || "Failed to authenticate with Google");
+      }
+    },
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+  });
+
+  const handleFetchPublicTabs = async () => {
+    if (!publicLinkUrl) return toast.error("Please enter a link");
+    try {
+      const res = await getSpreadsheetTabs({ spreadsheet_url: publicLinkUrl }).unwrap();
+      setTabsList(res.tabs || []);
+      setSelectedSheetUrl(publicLinkUrl);
+      setIsPublicTabSelect(true);
+      setPublicLinkModalOpen(false);
+      setTabsModalOpen(true);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to fetch tabs");
+    }
+  };
+
+  const handleSelectOauthSheet = async (sheet) => {
+    const sheetUrl = sheet.webViewLink;
+    try {
+      const res = await getSpreadsheetTabs({ spreadsheet_url: sheetUrl, access_token: oauthToken }).unwrap();
+      setTabsList(res.tabs || []);
+      setSelectedSheetUrl(sheetUrl);
+      setIsPublicTabSelect(false);
+      setOauthSheetsModalOpen(false);
+      setTabsModalOpen(true);
+    } catch (err) {
+      toast.error("Failed to fetch tabs for this sheet");
+    }
+  };
+
+  const handleImportSheet = async (sheetId) => {
+    try {
+      if (isPublicTabSelect) {
+        await importPublicSheet({ spreadsheet_url: selectedSheetUrl, sheet_id: sheetId }).unwrap();
+        toast.success("Public Spreadsheet Imported!");
+      } else {
+        await importOAuthSheet({ spreadsheet_url: selectedSheetUrl, sheet_id: sheetId, access_token: oauthToken, refresh_token: oauthRefreshToken }).unwrap();
+        toast.success("OAuth Spreadsheet Imported!");
+      }
+      setTabsModalOpen(false);
+      setPublicLinkUrl("");
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to import sheet");
+    }
+  };
+
   return (
+    <>
     <Modal
       open={settingsOpen}
       onCancel={() => setSettingsOpen(false)}
@@ -248,19 +345,11 @@ const SettingsModal = () => {
                   {/* Avatar */}
                   <div className="flex items-center gap-4 mb-4">
                     <div className="relative">
-                      {account.profile_picture ? (
-                        <img
-                          src={account.profile_picture}
-                          alt="avatar"
-                          className="w-16 h-16 rounded-full object-cover border border-gray-100"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 rounded-full bg-[#f0f0fd] text-brand flex items-center justify-center text-xl font-bold">
-                          {(account.full_name || account.email || "?")
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
-                      )}
+                      <img
+                        src={account.profile_picture || "/Deafult Profile/profile.webp"}
+                        alt="avatar"
+                        className="w-16 h-16 rounded-full object-cover border border-gray-100"
+                      />
                       <button
                         type="button"
                         onClick={() => avatarInputRef.current?.click()}
@@ -363,14 +452,17 @@ const SettingsModal = () => {
               </p>
 
               {/* Inventory sheets */}
-              <p className="text-xs font-semibold text-gray-500 mb-2">
-                Inventory (Google Spreadsheet)
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-500">
+                  Inventory (Google Spreadsheet)
+                </p>
+              </div>
+
               {loadingSheets ? (
                 <Spin />
               ) : sheets.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-5">
-                  No spreadsheet connected. Use the Products page to connect one.
+                  No spreadsheet connected. Please add one below.
                 </div>
               ) : (
                 <div className="space-y-3 mb-5">
@@ -402,18 +494,34 @@ const SettingsModal = () => {
                             </span>
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleUnlink(s.spreadsheet_url, s.item_count)}
-                          disabled={unlinking}
-                          className="flex items-center gap-1.5 text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
-                        >
-                          <LuUnplug size={13} /> Disconnect
-                        </button>
+                          <button
+                            onClick={() => handleOpenUnlink(s.spreadsheet_url, s.item_count)}
+                            disabled={unlinking}
+                            className="flex items-center gap-1.5 text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                          >
+                            <LuUnplug size={13} /> Disconnect
+                          </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+
+              {/* Add Spreadsheet Buttons */}
+              <div className="flex gap-3 mb-5">
+                <button
+                  onClick={() => setPublicLinkModalOpen(true)}
+                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50"
+                >
+                  Add Public Link
+                </button>
+                <button
+                  onClick={() => loginWithGoogle()}
+                  className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium py-2 rounded-lg hover:bg-blue-100 flex items-center justify-center gap-2"
+                >
+                  Connect with Google
+                </button>
+              </div>
 
               {/* Bol.com credentials */}
               <p className="text-xs font-semibold text-gray-500 mb-2">
@@ -683,6 +791,114 @@ const SettingsModal = () => {
         </div>
       </div>
     </Modal>
+
+    {/* Public Link Modal */}
+    <Modal
+      open={publicLinkModalOpen}
+      onCancel={() => setPublicLinkModalOpen(false)}
+      title="Import Public Spreadsheet"
+      footer={null}
+      zIndex={1050}
+    >
+      <div className="py-4">
+        <p className="text-sm text-gray-500 mb-4">Paste the link to your public Google Spreadsheet.</p>
+        <Input 
+          placeholder="https://docs.google.com/spreadsheets/d/..." 
+          value={publicLinkUrl} 
+          onChange={e => setPublicLinkUrl(e.target.value)} 
+          className="mb-4 h-10 rounded-lg"
+        />
+        <Button type="primary" onClick={handleFetchPublicTabs} loading={fetchingTabs} className="w-full h-10 rounded-lg button-color font-semibold">
+          Next
+        </Button>
+      </div>
+    </Modal>
+
+    {/* OAuth Sheets Modal */}
+    <Modal
+      open={oauthSheetsModalOpen}
+      onCancel={() => setOauthSheetsModalOpen(false)}
+      title="Select Spreadsheet"
+      footer={null}
+      zIndex={1050}
+    >
+      <div className="py-4 max-h-[400px] overflow-y-auto">
+        {fetchingUserSheets ? (
+          <div className="flex justify-center py-4"><Spin /></div>
+        ) : oauthSheetsList.length === 0 ? (
+          <p className="text-sm text-gray-500">No spreadsheets found.</p>
+        ) : (
+          <div className="space-y-2">
+            {oauthSheetsList.map(sheet => (
+              <button 
+                key={sheet.id}
+                onClick={() => handleSelectOauthSheet(sheet)}
+                className="w-full text-left p-3 border border-gray-100 rounded-lg hover:bg-gray-50 flex items-center gap-3"
+              >
+                <BsFileEarmarkSpreadsheet className="text-green-600" size={18} />
+                <span className="text-sm font-medium text-gray-800 truncate">{sheet.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+
+    {/* Sheet Tabs Modal */}
+    <Modal
+      open={tabsModalOpen}
+      onCancel={() => setTabsModalOpen(false)}
+      title="Select Tab"
+      footer={null}
+      zIndex={1050}
+    >
+      <div className="py-4">
+        <p className="text-sm text-gray-500 mb-4">Select the specific tab to import from the spreadsheet.</p>
+        {fetchingTabs ? (
+          <div className="flex justify-center py-4"><Spin /></div>
+        ) : tabsList.length === 0 ? (
+          <p className="text-sm text-gray-500">No tabs found.</p>
+        ) : (
+          <div className="space-y-2">
+            {tabsList.map(tab => (
+              <button 
+                key={tab.sheet_id}
+                onClick={() => handleImportSheet(tab.sheet_id)}
+                disabled={importingPublic || importingOAuth}
+                className="w-full text-left p-3 border border-gray-100 rounded-lg hover:bg-gray-50 flex items-center justify-between"
+              >
+                <span className="text-sm font-medium text-gray-800">{tab.title}</span>
+                <FiArrowRight className="text-gray-400" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+    {/* Disconnect Modal */}
+    <Modal
+      open={disconnectModalOpen}
+      onCancel={() => setDisconnectModalOpen(false)}
+      title={<span className="text-red-600">Disconnect Spreadsheet</span>}
+      okText="Disconnect"
+      okButtonProps={{ danger: true, loading: unlinking }}
+      cancelText="Cancel"
+      onOk={executeUnlink}
+      zIndex={1050}
+    >
+      <div className="py-4">
+        <p className="text-sm text-gray-600 mb-4">
+          This will remove the connection to this spreadsheet. It will no longer sync automatically.
+        </p>
+        <Checkbox 
+          checked={disconnectDeleteData} 
+          onChange={e => setDisconnectDeleteData(e.target.checked)}
+        >
+          Also delete all <span className="font-semibold">{disconnectItemCount}</span> imported products from this sheet
+        </Checkbox>
+      </div>
+    </Modal>
+    </>
   );
 };
 

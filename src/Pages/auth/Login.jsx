@@ -14,7 +14,7 @@ const Login = () => {
   const onFinish = async (values) => {
     try {
       const res = await login(values).unwrap();
-      saveSession(res);
+      saveSession(res, values.remember);
       toast.success("Login successful!");
       navigate("/");
     } catch (err) {

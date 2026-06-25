@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiAlertTriangle } from "react-icons/fi";
 import { useUI } from "../../Provider/ContextProvider";
 import { useLogoutMutation } from "../../Redux/authApis";
-import { clearSession } from "../../utils/session";
+import { clearSession, getRefreshToken } from "../../utils/session";
 
 const ConfirmLogout = () => {
   const { logoutOpen, setLogoutOpen } = useUI();
@@ -11,7 +11,7 @@ const ConfirmLogout = () => {
   const [logout, { isLoading }] = useLogoutMutation();
 
   const handleLogout = async () => {
-    const refreshToken = localStorage.getItem("refreshToken");
+    const refreshToken = getRefreshToken();
     try {
       if (refreshToken) await logout({ refresh_token: refreshToken }).unwrap();
     } catch {
