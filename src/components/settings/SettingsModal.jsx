@@ -28,6 +28,7 @@ import {
   useUnlinkSheetMutation,
   useGetBolCredentialsQuery,
   useSaveBolCredentialsMutation,
+  useDeleteBolCredentialsMutation,
   useGetAmazonCredentialsQuery,
   useSaveAmazonCredentialsMutation,
   useImportPublicSheetMutation,
@@ -36,6 +37,7 @@ import {
   useLazyGetSpreadsheetTabsQuery,
   useExchangeGoogleCodeMutation,
 } from "../../Redux/connectionApis";
+import { useResyncInventoryMutation } from "../../Redux/productApis";
 import { useRegisterBolWebhookMutation } from "../../Redux/fulfillmentApis";
 import { useGoogleLogin } from "@react-oauth/google";
 
@@ -65,8 +67,11 @@ const SettingsModal = () => {
   });
 
   const [unlinkSheet, { isLoading: unlinking }] = useUnlinkSheetMutation();
+  const [resyncInventory, { isLoading: resyncing }] = useResyncInventoryMutation();
   const [saveBolCredentials, { isLoading: savingCreds }] =
     useSaveBolCredentialsMutation();
+  const [deleteBolCredentials, { isLoading: deletingCreds }] =
+    useDeleteBolCredentialsMutation();
   const [saveAmazonCredentials, { isLoading: savingAmazon }] =
     useSaveAmazonCredentialsMutation();
   const [registerWebhook, { isLoading: registering }] =
@@ -189,13 +194,33 @@ const SettingsModal = () => {
 
   const onSaveBol = async (values) => {
     try {
-      await saveBolCredentials(values).unwrap();
+      await saveBolCredentials({
+        client_id: values.client_id,
+        client_secret: values.client_secret,
+      }).unwrap();
       toast.success("Bol.com credentials saved");
-      bolForm.resetFields();
       setBolEditOpen(false);
     } catch (err) {
-      toast.error(err?.data?.detail || "Failed to save credentials");
+      toast.error(err?.data?.detail || "Failed to save Bol credentials");
     }
+  };
+
+  const handleDeleteBol = () => {
+    Modal.confirm({
+      title: "Are you sure?",
+      content: "Do you really want to delete your Bol.com credentials? This action cannot be undone.",
+      okText: "Delete",
+      okType: "danger",
+      cancelText: "Cancel",
+      onOk: async () => {
+        try {
+          await deleteBolCredentials().unwrap();
+          toast.success("Bol.com credentials deleted");
+        } catch (err) {
+          toast.error(err?.data?.detail || "Failed to delete Bol credentials");
+        }
+      },
+    });
   };
 
   const onSaveAmazon = async (values) => {
@@ -483,9 +508,15 @@ const SettingsModal = () => {
                             <p className="text-sm font-semibold text-gray-800 truncate">
                               Inventory ({s.item_count} items)
                             </p>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
-                              <FiCheckCircle size={11} /> Connected
-                            </span>
+                            {s.is_syncing ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
+                                <FiCheckCircle size={11} /> Connected & Syncing
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                                <FiXCircle size={11} /> Disconnected
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 bg-[#f7f8fc] rounded-lg px-3 py-1.5 mt-2">
                             <FiLink2 size={12} className="text-gray-400 flex-shrink-0" />
@@ -494,13 +525,71 @@ const SettingsModal = () => {
                             </span>
                           </div>
                         </div>
-                          <button
-                            onClick={() => handleOpenUnlink(s.spreadsheet_url, s.item_count)}
-                            disabled={unlinking}
-                            className="flex items-center gap-1.5 text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
-                          >
-                            <LuUnplug size={13} /> Disconnect
-                          </button>
+                        <div className="flex flex-col gap-2">
+                          {s.is_syncing ? (
+                            <button
+                              onClick={() => {
+                                Modal.confirm({
+                                  title: "Disconnect Syncing?",
+                                  content: "Your products will remain in the dashboard, but will no longer automatically sync from Google Sheets.",
+                                  okText: "Disconnect",
+                                  okType: "danger",
+                                  onOk: async () => {
+                                    try {
+                                      await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: false }).unwrap();
+                                      toast.success("Disconnected from Google Sheet");
+                                    } catch (err) {
+                                      toast.error(err?.data?.detail || "Failed to disconnect");
+                                    }
+                                  }
+                                });
+                              }}
+                              disabled={unlinking}
+                              className="flex items-center justify-center gap-1.5 text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                            >
+                              <LuUnplug size={13} /> Disconnect
+                            </button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  Modal.confirm({
+                                    title: "Delete All Data?",
+                                    content: "Are you sure you want to delete all products imported from this sheet? This action cannot be undone.",
+                                    okText: "Delete",
+                                    okType: "danger",
+                                    onOk: async () => {
+                                      try {
+                                        await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: true }).unwrap();
+                                        toast.success("Sheet and products deleted");
+                                      } catch (err) {
+                                        toast.error(err?.data?.detail || "Failed to delete sheet data");
+                                      }
+                                    }
+                                  });
+                                }}
+                                disabled={unlinking}
+                                className="flex items-center justify-center text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await resyncInventory().unwrap();
+                                    toast.success("Successfully connected and synced");
+                                  } catch (err) {
+                                    toast.error(err?.data?.detail || "Failed to sync");
+                                  }
+                                }}
+                                disabled={resyncing}
+                                className="flex items-center justify-center text-xs font-medium text-brand border border-brand/30 hover:bg-[#f0f0fd] px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                              >
+                                Connect
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -558,12 +647,23 @@ const SettingsModal = () => {
                         </span>
                       </p>
                     </div>
-                    <button
-                      onClick={() => setBolEditOpen(true)}
-                      className="text-xs font-medium text-brand border border-brand/30 hover:bg-[#f0f0fd] px-3 py-2 rounded-lg flex-shrink-0"
-                    >
-                      {bolCreds?.is_secret_set ? "Update" : "Set up"}
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {bolCreds?.is_secret_set && (
+                        <button
+                          onClick={handleDeleteBol}
+                          disabled={deletingCreds}
+                          className="text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg"
+                        >
+                          Delete
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setBolEditOpen(true)}
+                        className="text-xs font-medium text-brand border border-brand/30 hover:bg-[#f0f0fd] px-3 py-2 rounded-lg"
+                      >
+                        {bolCreds?.is_secret_set ? "Update" : "Set up"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (

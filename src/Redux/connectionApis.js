@@ -34,6 +34,15 @@ const connectionApis = baseApis.injectEndpoints({
       invalidatesTags: ["Connection"],
     }),
 
+    // DELETE /users/bol-credentials
+    deleteBolCredentials: builder.mutation({
+      query: () => ({
+        url: "/users/bol-credentials",
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Connection"],
+    }),
+
     // GET /users/amazon-credentials → { email, is_secret_set, has_totp } (404 if none)
     getAmazonCredentials: builder.query({
       query: () => "/users/amazon-credentials",
@@ -99,6 +108,7 @@ export const {
   useUnlinkSheetMutation,
   useGetBolCredentialsQuery,
   useSaveBolCredentialsMutation,
+  useDeleteBolCredentialsMutation,
   useGetAmazonCredentialsQuery,
   useSaveAmazonCredentialsMutation,
   useImportPublicSheetMutation,
