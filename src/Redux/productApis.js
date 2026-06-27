@@ -15,10 +15,12 @@ const mapItem = (it, i) => ({
   // as a stand-in and flag them so the card can render a "syncing" state.
   title: it.product_title || (it.asin ? `ASIN ${it.asin}` : "Syncing…"),
   brand: it.brand || "",
-  category: it["Product notes"] || it.country || "—",
+  category: it["Product category"] || it["Product notes"] || it.country || "—",
   subcategory: "",
   amazonPrice: parsePrice(it.product_price),
-  price: parsePrice(it.product_price),
+  price: parsePrice(it.PRICE) || parsePrice(it.product_price),
+  purchasePrice: parsePrice(it["Purchase price"]),
+  deliveryTime: it["DELIVERY TIME"] || "",
   rating: parseFloat(it.product_star_rating) || 0,
   reviews: parseInt(it.product_num_ratings, 10) || 0,
   image: it.product_photo || "",
@@ -26,6 +28,10 @@ const mapItem = (it, i) => ({
   ean: it.spreadsheet_ean || "",
   stock: it.STOCK || "",
   status: it.STATUS || "",
+  spreadsheetUrl: it.spreadsheet_url || "",
+  spreadsheetTitle: it.spreadsheet_title || "",
+  sheetId: it.sheet_id || "",
+  isValidAmazon: !!it.is_valid_amazon,
   lastUpdated: "",
   published: false,
   description: it["Product notes"] || "",
@@ -37,9 +43,38 @@ const productApis = baseApis.injectEndpoints({
     // GET /spreadsheet/scrape-items?page&limit&search  → { status, total, data: [...] }
     // Live-scrapes Amazon for display data; `search` filters server-side via the cache.
     getProducts: builder.query({
-      query: ({ page = 1, limit = 50, search = "" } = {}) => {
+      query: ({ 
+        page = 1, 
+        limit = 50, 
+        search = "",
+        filter_status,
+        filter_stock,
+        filter_category,
+        filter_delivery,
+        filter_min_price,
+        filter_max_price,
+        filter_min_purchase,
+        filter_max_purchase,
+        filter_is_valid_amazon,
+        filter_min_rating,
+        filter_max_rating
+      } = {}) => {
         const params = new URLSearchParams({ page, limit });
-        if (search.trim()) params.set("search", search.trim());
+        if (search?.trim()) params.set("search", search.trim());
+        if (filter_status?.trim()) params.set("filter_status", filter_status.trim());
+        if (filter_stock?.trim()) params.set("filter_stock", filter_stock.trim());
+        if (filter_category?.trim()) params.set("filter_category", filter_category.trim());
+        if (filter_delivery?.trim()) params.set("filter_delivery", filter_delivery.trim());
+        if (filter_min_price) params.set("filter_min_price", filter_min_price);
+        if (filter_max_price) params.set("filter_max_price", filter_max_price);
+        if (filter_min_purchase) params.set("filter_min_purchase", filter_min_purchase);
+        if (filter_max_purchase) params.set("filter_max_purchase", filter_max_purchase);
+        if (filter_is_valid_amazon !== undefined && filter_is_valid_amazon !== "") {
+            params.set("filter_is_valid_amazon", filter_is_valid_amazon);
+        }
+        if (filter_min_rating) params.set("filter_min_rating", filter_min_rating);
+        if (filter_max_rating) params.set("filter_max_rating", filter_max_rating);
+        
         return `/spreadsheet/scrape-items?${params.toString()}`;
       },
       transformResponse: (res, _meta, arg) => ({
@@ -48,6 +83,11 @@ const productApis = baseApis.injectEndpoints({
         total: res?.total || 0,
         items: (res?.data || []).map(mapItem),
       }),
+      providesTags: ["Products"],
+    }),
+
+    getFiltersMeta: builder.query({
+      query: () => "/spreadsheet/filters-meta",
       providesTags: ["Products"],
     }),
 
@@ -78,13 +118,28 @@ const productApis = baseApis.injectEndpoints({
             (Array.isArray(d.about_product) ? d.about_product.join("\n") : "") ||
             "",
           price: d.product_price || "",
+          originalPrice: d.product_original_price || "",
           rating: d.product_star_rating || "",
           reviews: d.product_num_ratings || 0,
           productUrl: d.product_url || "",
           mainImage: d.product_photo || photos[0] || "",
           photos,
+          delivery: d.delivery || d.delivery_time || "",
+          isPrime: !!d.is_prime,
+          isAmazonChoice: !!d.is_amazon_choice,
+          isBestSeller: !!d.is_best_seller,
+          specs: d.product_information || d.product_details || {},
+          features: Array.isArray(d.about_product) ? d.about_product : [],
+          returnPolicy: d.main_buy_box?.return_policy || "",
+          buyBox: d.main_buy_box || {},
         };
       },
+    }),
+
+    // Get connected spreadsheet info
+    getConnection: builder.query({
+      query: () => "/spreadsheet/connection",
+      providesTags: ["Connection"],
     }),
 
     // Connect inventory — products are imported from a public Google Spreadsheet.
@@ -160,12 +215,20 @@ const productApis = baseApis.injectEndpoints({
       query: () => "/bol/drafts",
       providesTags: ["Drafts"],
     }),
+
+    // GET /bol/drafts/{id}
+    getDraft: builder.query({
+      query: (draftId) => `/bol/drafts/${draftId}`,
+      providesTags: (result, error, id) => [{ type: "Drafts", id }],
+    }),
   }),
   overrideExisting: false,
 });
 
 export const {
+  useGetConnectionQuery,
   useGetProductsQuery,
+  useGetFiltersMetaQuery,
   useGetRawItemsQuery,
   useScrapeAsinQuery,
   useSyncInventoryMutation,
@@ -176,6 +239,7 @@ export const {
   usePublishDraftMutation,
   useUpdateDraftMutation,
   useGetDraftsQuery,
+  useGetDraftQuery,
 } = productApis;
 
 export default productApis;

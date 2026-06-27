@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Shared/Sidebar";
 import Navbar from "./Shared/Navbar";
@@ -6,9 +6,33 @@ import { UIProvider } from "../../Provider/ContextProvider";
 import SettingsModal from "../../components/settings/SettingsModal";
 import ConfirmLogout from "../../components/shared/ConfirmLogout";
 import ContactSupportModal from "../../components/support/ContactSupportModal";
+import { useDispatch } from "react-redux";
+import { baseApis } from "../../Redux/main/baseApis";
+import { getToken } from "../../utils/session";
+import { url as API_URL } from "../../Redux/main/server";
 
 const Dashboard = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+
+    // Connect to Server-Sent Events stream
+    const eventSource = new EventSource(`${API_URL}/events/stream?token=${token}`);
+
+    eventSource.onmessage = (event) => {
+      if (event.data === "SPREADSHEET_UPDATED") {
+        // Trigger silent re-fetch of the product table
+        dispatch(baseApis.util.invalidateTags(["Products"]));
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [dispatch]);
 
   return (
     <UIProvider>
