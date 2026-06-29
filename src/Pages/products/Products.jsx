@@ -41,9 +41,9 @@ const Products = () => {
   const [viewOpen, setViewOpen] = useState(false);
   
   const [columns, setColumns] = useState({
-    serial: true, asin: true, title: true, sheetTitle: true, category: true, 
-    purchasePrice: true, price: true, delivery: true, 
-    sheetSource: true, ratings: true, stock: true, status: true, action: true
+    serial: false, asin: false, title: false, sheetTitle: true, category: true, 
+    purchasePrice: false, price: true, delivery: false, 
+    sheetSource: false, ratings: false, stock: true, status: true, action: true
   });
 
   // Adopt a search term coming from the URL (e.g. the global navbar search).
@@ -284,7 +284,7 @@ const Products = () => {
                   </p>
                 )}
                 {columns.sheetTitle && p.spreadsheetTitle && (
-                  <p className="text-[11px] font-medium text-gray-500 line-clamp-1 mb-1.5" title={p.spreadsheetTitle}>
+                  <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 mb-1.5" title={p.spreadsheetTitle}>
                     📝 {p.spreadsheetTitle}
                   </p>
                 )}
@@ -400,13 +400,13 @@ const Products = () => {
                           className="w-8 h-8 rounded object-cover"
                         />
                       )}
-                      <span className="text-gray-700 line-clamp-1 max-w-[160px]">
+                      <span className="text-gray-700 font-semibold line-clamp-1 max-w-[160px]">
                         {p.title}
                       </span>
                     </div>
                   </td>}
-                  {columns.sheetTitle && <td className="py-3 px-2 text-gray-600 font-medium">
-                    {p.spreadsheetTitle || "—"}
+                  {columns.sheetTitle && <td className="py-3 px-2 text-gray-700 font-semibold">
+                    <span className="line-clamp-2">{p.spreadsheetTitle || "—"}</span>
                   </td>}
                   {columns.category && <td className="py-3 px-2 text-gray-500">{p.category}</td>}
                   {columns.purchasePrice && <td className="py-3 px-2 text-gray-700">

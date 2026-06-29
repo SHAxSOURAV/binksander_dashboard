@@ -31,7 +31,7 @@ const connectionApis = baseApis.injectEndpoints({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: ["Connection"],
+      invalidatesTags: ["Connection", "BolOffers", "Analytics"],
     }),
 
     // DELETE /users/bol-credentials
@@ -40,7 +40,7 @@ const connectionApis = baseApis.injectEndpoints({
         url: "/users/bol-credentials",
         method: "DELETE",
       }),
-      invalidatesTags: ["Connection"],
+      invalidatesTags: ["Connection", "BolOffers", "Analytics"],
     }),
 
     // GET /users/amazon-credentials → { email, is_secret_set, has_totp } (404 if none)

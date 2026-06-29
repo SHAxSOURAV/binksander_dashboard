@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Input, Spin, Empty, Modal } from "antd";
-import { FiSearch } from "react-icons/fi";
+import { FiSearch, FiRefreshCw } from "react-icons/fi";
 import Pagination from "../../components/shared/Pagination";
-import { useGetBolOrdersQuery } from "../../Redux/analyticsApis";
-
-const LIMIT = 50;
+import { useGetBolOrdersQuery, useSyncNowMutation } from "../../Redux/analyticsApis";
+import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
+import OrderCard from "./OrderCard";
+import { useUI } from "../../Provider/ContextProvider";
+import { LuUnplug } from "react-icons/lu";
 
 const STATUS_META = {
   OPEN: { label: "Open", color: "#D97706", bg: "#FFF7E6" },
@@ -18,12 +20,29 @@ const meta = (s) =>
 const Orders = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
   const [selected, setSelected] = useState(null);
+  const { openSettings } = useUI();
 
-  const { data, isLoading, isFetching, isError } = useGetBolOrdersQuery({
+  const { data: bolCreds, isLoading: credsLoading } = useGetBolCredentialsQuery();
+  const isNotConnected = !credsLoading && (!bolCreds || !bolCreds.is_secret_set);
+
+  const [syncNow, { isLoading: isSyncing }] = useSyncNowMutation();
+
+  const { data, isLoading, isFetching, isError, refetch } = useGetBolOrdersQuery({
     page,
-    limit: LIMIT,
+    limit,
   });
+
+  const handleSync = async () => {
+    try {
+      await syncNow().unwrap();
+      // Refetch data after a small delay to allow background job to save some
+      setTimeout(() => refetch(), 2000);
+    } catch (err) {
+      console.error("Sync failed", err);
+    }
+  };
 
   const orders = data?.orders || [];
   const total = data?.total || 0;
@@ -41,94 +60,101 @@ const Orders = () => {
     <div className="bg-white rounded-2xl p-5 card-shadow">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <div>
-          <h2 className="text-lg font-semibold text-gray-700">Orders</h2>
+          <h2 className="text-lg font-semibold text-gray-700">Bol Orders</h2>
           <p className="text-xs text-gray-400">{total} Bol.com order(s)</p>
         </div>
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          prefix={<FiSearch className="text-gray-400 mr-1" />}
-          placeholder="Search"
-          className="h-10 rounded-lg w-full sm:w-72"
-        />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            prefix={<FiSearch className="text-gray-400 mr-1" />}
+            placeholder="Search"
+            className="h-10 rounded-lg flex-1 sm:w-72"
+          />
+          <button 
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="h-10 px-4 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm shadow-sm transition-all whitespace-nowrap disabled:opacity-50"
+          >
+            <FiRefreshCw className={isSyncing ? "animate-spin text-blue-600" : "text-gray-500"} />
+            Sync Now
+          </button>
+        </div>
       </div>
 
-      {isLoading || isFetching ? (
-        <div className="py-20 flex justify-center">
-          <Spin tip="Loading orders..." />
+      {isFetching || credsLoading ? (
+        <div className="flex flex-col gap-2 mt-4">
+          <div className="hidden xl:flex bg-[#f9fafc] text-transparent text-xs font-semibold px-4 py-2 border-b border-gray-100 uppercase tracking-wide animate-pulse">
+            <span className="w-[30%]"><div className="h-3 bg-gray-200 rounded w-16"></div></span>
+            <span className="w-[25%]"><div className="h-3 bg-gray-200 rounded w-20"></div></span>
+            <span className="w-[25%] pl-2"><div className="h-3 bg-gray-200 rounded w-24"></div></span>
+            <span className="w-[20%] text-right pr-4 flex justify-end"><div className="h-3 bg-gray-200 rounded w-28"></div></span>
+          </div>
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 h-28 flex flex-col xl:flex-row items-start xl:items-center animate-pulse gap-4">
+              <div className="w-full xl:w-[30%] flex flex-col gap-2">
+                <div className="h-4 bg-gray-100 rounded w-3/4"></div>
+                <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+              </div>
+              <div className="hidden xl:flex w-[25%] flex-col gap-2">
+                <div className="h-3 bg-gray-100 rounded w-2/3"></div>
+                <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+              </div>
+              <div className="hidden xl:flex w-[25%] pl-2 flex-col gap-2">
+                <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                <div className="h-3 bg-gray-100 rounded w-1/3"></div>
+              </div>
+              <div className="w-full xl:w-[20%] flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-2 pr-4">
+                <div className="h-7 bg-gray-100 rounded-full w-24"></div>
+                <div className="h-4 bg-gray-100 rounded w-16"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : isError || isNotConnected ? (
+        <div className="flex flex-col justify-center items-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 my-4 mx-2">
+          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+            <LuUnplug size={32} />
+          </div>
+          <h3 className="text-gray-800 text-lg font-semibold mb-2">Bol.com Not Connected</h3>
+          <p className="text-gray-500 text-sm mb-6 max-w-md text-center">
+            We couldn't load your orders. This usually happens when your API keys are missing or invalid. Please connect your Bol.com account to continue.
+          </p>
+          <button 
+            onClick={() => openSettings("connection")}
+            className="bg-brand text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-brand/90 transition-colors shadow-sm"
+          >
+            Connect Bol.com API
+          </button>
         </div>
       ) : rows.length === 0 ? (
         <div className="py-16">
-          <Empty
-            description={
-              isError
-                ? "Couldn't reach the server. Is the backend running?"
-                : "No orders yet. Use Sync on the Dashboard to pull orders from Bol.com."
-            }
-          />
+          <Empty description="No orders yet. Use Sync on the Dashboard to pull orders from Bol.com." />
         </div>
       ) : (
-        <div className="overflow-x-auto thin-scrollbar">
-          <table className="w-full min-w-[860px] text-sm">
-            <thead>
-              <tr className="text-left text-xs text-gray-400 bg-[#f9fafc] [&>th]:font-medium">
-                <th className="py-3 px-2">Order ID</th>
-                <th className="py-3 px-2">Product</th>
-                <th className="py-3 px-2">Items</th>
-                <th className="py-3 px-2">Revenue</th>
-                <th className="py-3 px-2">Net Income</th>
-                <th className="py-3 px-2">Order Time</th>
-                <th className="py-3 px-2">Status</th>
-                <th className="py-3 px-2">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((o) => {
-                const m = meta(o.status);
-                return (
-                  <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50/60">
-                    <td className="py-3 px-2 text-gray-500">{o.orderId}</td>
-                    <td className="py-3 px-2 text-gray-700 line-clamp-1 max-w-[200px]">
-                      {o.productTitle}
-                    </td>
-                    <td className="py-3 px-2 text-gray-500">{o.itemCount}</td>
-                    <td className="py-3 px-2 text-gray-700">€{o.totalRevenue}</td>
-                    <td
-                      className={`py-3 px-2 font-medium ${
-                        o.totalNetIncome >= 0 ? "text-green-600" : "text-red-500"
-                      }`}
-                    >
-                      €{o.totalNetIncome}
-                    </td>
-                    <td className="py-3 px-2 text-gray-500">
-                      {(o.orderPlacedDateTime || "").slice(0, 16).replace("T", " ")}
-                    </td>
-                    <td className="py-3 px-2">
-                      <span
-                        className="inline-block text-[11px] font-semibold px-3 py-1 rounded-full"
-                        style={{ color: m.color, backgroundColor: m.bg }}
-                      >
-                        {m.label}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2">
-                      <button
-                        onClick={() => setSelected(o)}
-                        className="bg-brand text-white text-xs px-5 py-1.5 rounded-full"
-                      >
-                        Open
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="flex flex-col gap-2 mt-4">
+          <div className="hidden xl:flex bg-[#f9fafc] text-gray-500 text-xs font-semibold px-4 py-2 border-b border-gray-100 uppercase tracking-wide">
+            <span className="w-[30%]">Details</span>
+            <span className="w-[25%]">Address</span>
+            <span className="w-[25%] pl-2">Shipping Info</span>
+            <span className="w-[20%] text-right pr-4">Status & Actions</span>
+          </div>
+          {rows.map((o) => (
+            <OrderCard key={o.id} order={o} onClick={() => setSelected(o)} />
+          ))}
         </div>
       )}
 
       {rows.length > 0 && (
-        <Pagination current={page} total={totalPages} onChange={setPage} />
+        <Pagination 
+          current={page} 
+          total={totalPages} 
+          onChange={setPage} 
+          pageSize={limit}
+          onPageSizeChange={setLimit}
+          totalItems={total}
+          pageSizeOptions={[24, 50, 100, 200]}
+        />
       )}
 
       {/* Order detail */}
@@ -181,6 +207,36 @@ const Orders = () => {
                 </div>
               ))}
             </div>
+
+            {/* Customer & Shipping Details */}
+            {selected.shipmentDetails && (
+              <>
+                <p className="text-xs font-semibold text-gray-500 mt-4 mb-2">Customer & Shipping Info</p>
+                <div className="bg-[#f7f8fc] rounded-xl px-4 py-3 text-xs text-gray-700 space-y-1">
+                  <p><span className="font-semibold text-gray-500">Name:</span> {selected.shipmentDetails.salutation === "MALE" ? "Mr." : selected.shipmentDetails.salutation === "FEMALE" ? "Ms." : ""} {selected.shipmentDetails.firstName} {selected.shipmentDetails.surname}</p>
+                  {selected.shipmentDetails.company && <p><span className="font-semibold text-gray-500">Company:</span> {selected.shipmentDetails.company}</p>}
+                  {selected.shipmentDetails.email && <p><span className="font-semibold text-gray-500">Email:</span> {selected.shipmentDetails.email}</p>}
+                  <p><span className="font-semibold text-gray-500">Address:</span> {selected.shipmentDetails.streetName} {selected.shipmentDetails.houseNumber} {selected.shipmentDetails.houseNumberExtension || ""}</p>
+                  <p><span className="font-semibold text-gray-500">Location:</span> {selected.shipmentDetails.zipCode}, {selected.shipmentDetails.city}, {selected.shipmentDetails.countryCode}</p>
+                  {selected.shipmentDetails.extraAddressInformation && <p><span className="font-semibold text-gray-500">Extra:</span> {selected.shipmentDetails.extraAddressInformation}</p>}
+                </div>
+              </>
+            )}
+            
+            {/* Billing Details (if different or notable) */}
+            {selected.billingDetails && (
+              <>
+                <p className="text-xs font-semibold text-gray-500 mt-4 mb-2">Billing Info</p>
+                <div className="bg-[#f7f8fc] rounded-xl px-4 py-3 text-xs text-gray-700 space-y-1">
+                  <p><span className="font-semibold text-gray-500">Name:</span> {selected.billingDetails.salutation === "MALE" ? "Mr." : selected.billingDetails.salutation === "FEMALE" ? "Ms." : ""} {selected.billingDetails.firstName} {selected.billingDetails.surname}</p>
+                  {selected.billingDetails.company && <p><span className="font-semibold text-gray-500">Company:</span> {selected.billingDetails.company}</p>}
+                  {selected.billingDetails.vatNumber && <p><span className="font-semibold text-gray-500">VAT Number:</span> {selected.billingDetails.vatNumber}</p>}
+                  <p><span className="font-semibold text-gray-500">Address:</span> {selected.billingDetails.streetName} {selected.billingDetails.houseNumber} {selected.billingDetails.houseNumberExtension || ""}</p>
+                  <p><span className="font-semibold text-gray-500">Location:</span> {selected.billingDetails.zipCode}, {selected.billingDetails.city}, {selected.billingDetails.countryCode}</p>
+                </div>
+              </>
+            )}
+
           </div>
         )}
       </Modal>

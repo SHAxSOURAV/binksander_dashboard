@@ -20,6 +20,16 @@ const analyticsApis = baseApis.injectEndpoints({
       query: () => ({ url: "/analytics/sync-now", method: "POST" }),
       invalidatesTags: ["Analytics"],
     }),
+
+    // POST /bol/orders/{order_id}/ship
+    shipBolOrder: builder.mutation({
+      query: ({ orderId, data }) => ({
+        url: `/bol/orders/${orderId}/ship`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Analytics"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -28,6 +38,7 @@ export const {
   useGetDashboardQuery,
   useGetBolOrdersQuery,
   useSyncNowMutation,
+  useShipBolOrderMutation,
 } = analyticsApis;
 
 export default analyticsApis;

@@ -6,6 +6,9 @@ import { FiSearch, FiFilter } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import Pagination from "../../components/shared/Pagination";
 import BolProductImage from "./BolProductImage";
+import { useUI } from "../../Provider/ContextProvider";
+import { LuUnplug } from "react-icons/lu";
+import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 
 const BolListing = () => {
   const [view, setView] = useState("grid");
@@ -17,6 +20,10 @@ const BolListing = () => {
   const [filters, setFilters] = useState({});
   const [activeFilters, setActiveFilters] = useState({});
   const [filterOpen, setFilterOpen] = useState(false);
+  const { openSettings } = useUI();
+
+  const { data: bolCreds, isLoading: credsLoading } = useGetBolCredentialsQuery();
+  const isNotConnected = !credsLoading && (!bolCreds || !bolCreds.is_secret_set);
 
   // Debounce search and reset pagination
   useEffect(() => {
@@ -108,13 +115,48 @@ const BolListing = () => {
 
         {/* List View */}
         <div className="overflow-x-auto thin-scrollbar">
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <Spin size="large" />
-            </div>
-          ) : isError ? (
-            <div className="flex justify-center items-center h-64 text-red-500">
-              Failed to load offers from Bol.com. Ensure your API keys are valid.
+          {isFetching || credsLoading ? (
+            view === "grid" ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {[...Array(10)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-100 p-3.5 h-[280px] flex flex-col">
+                    <div className="bg-gray-100 rounded-xl h-40 w-full mb-4 animate-pulse"></div>
+                    <div className="h-4 bg-gray-100 rounded w-3/4 mb-2 animate-pulse"></div>
+                    <div className="h-3 bg-gray-100 rounded w-1/2 mb-4 animate-pulse"></div>
+                    <div className="h-5 bg-gray-100 rounded w-1/3 mt-auto animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 bg-white border border-gray-50 rounded-xl p-3 animate-pulse">
+                    <div className="w-10 h-10 bg-gray-100 rounded"></div>
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="h-4 bg-gray-100 rounded w-1/3"></div>
+                      <div className="h-3 bg-gray-100 rounded w-1/4"></div>
+                    </div>
+                    <div className="w-16 h-5 bg-gray-100 rounded"></div>
+                    <div className="w-20 h-6 bg-gray-100 rounded-full"></div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : isError || isNotConnected ? (
+            <div className="flex flex-col justify-center items-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 my-4 mx-2">
+              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+                <LuUnplug size={32} />
+              </div>
+              <h3 className="text-gray-800 text-lg font-semibold mb-2">Bol.com Not Connected</h3>
+              <p className="text-gray-500 text-sm mb-6 max-w-md text-center">
+                We couldn't load your offers. This usually happens when your API keys are missing or invalid. Please connect your Bol.com account to continue.
+              </p>
+              <button 
+                onClick={() => openSettings("connection")}
+                className="bg-brand text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-brand/90 transition-colors shadow-sm"
+              >
+                Connect Bol.com API
+              </button>
             </div>
           ) : offers.length === 0 ? (
             <div className="py-20">
