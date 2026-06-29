@@ -10,16 +10,17 @@ import Logo from "../../../components/shared/Logo";
 import { useUI } from "../../../Provider/ContextProvider";
 
 const menuItems = [
-  { name: "Dashboard", link: "/", icon: <MdOutlineDashboard size={20} />, end: true },
-  { name: "Products", link: "/products", icon: <MdOutlineInventory2 size={20} /> },
-  { name: "Orders", link: "/orders", icon: <MdOutlineShoppingCart size={20} /> },
+  { name: "Overview", link: "/", icon: <MdOutlineDashboard size={20} />, end: true },
+  { name: "Inventory Catalog", link: "/products", icon: <MdOutlineInventory2 size={20} /> },
+  { name: "Bol.com Offers", link: "/bol-listings", icon: <MdOutlineInventory2 size={20} /> },
+  { name: "Sales & Orders", link: "/orders", icon: <MdOutlineShoppingCart size={20} /> },
   {
-    name: "Amazon Operations",
+    name: "Amazon Sourcing",
     link: "/amazon-operations",
     icon: <TbBrandAmazon size={20} />,
   },
   {
-    name: "Rimco Operations",
+    name: "Rimco Logistics",
     link: "/rimco-operations",
     icon: <LuTruck size={20} />,
   },

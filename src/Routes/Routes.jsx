@@ -15,6 +15,7 @@ import Products from "../Pages/products/Products";
 import Orders from "../Pages/orders/Orders";
 import AmazonOperations from "../Pages/amazonOperations/AmazonOperations";
 import RimcoOperations from "../Pages/rimcoOperations/RimcoOperations";
+import BolListing from "../Pages/bolListing/BolListing";
 
 const router = createBrowserRouter([
   {
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardHome /> },
       { path: "/products", element: <Products /> },
+      { path: "/bol-listings", element: <BolListing /> },
       { path: "/orders", element: <Orders /> },
       { path: "/amazon-operations", element: <AmazonOperations /> },
       { path: "/rimco-operations", element: <RimcoOperations /> },

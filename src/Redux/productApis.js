@@ -43,9 +43,9 @@ const productApis = baseApis.injectEndpoints({
     // GET /spreadsheet/scrape-items?page&limit&search  → { status, total, data: [...] }
     // Live-scrapes Amazon for display data; `search` filters server-side via the cache.
     getProducts: builder.query({
-      query: ({ 
-        page = 1, 
-        limit = 50, 
+      query: ({
+        page = 1,
+        limit = 50,
         search = "",
         filter_status,
         filter_stock,
@@ -70,11 +70,11 @@ const productApis = baseApis.injectEndpoints({
         if (filter_min_purchase) params.set("filter_min_purchase", filter_min_purchase);
         if (filter_max_purchase) params.set("filter_max_purchase", filter_max_purchase);
         if (filter_is_valid_amazon !== undefined && filter_is_valid_amazon !== "") {
-            params.set("filter_is_valid_amazon", filter_is_valid_amazon);
+          params.set("filter_is_valid_amazon", filter_is_valid_amazon);
         }
         if (filter_min_rating) params.set("filter_min_rating", filter_min_rating);
         if (filter_max_rating) params.set("filter_max_rating", filter_max_rating);
-        
+
         return `/spreadsheet/scrape-items?${params.toString()}`;
       },
       transformResponse: (res, _meta, arg) => ({
@@ -221,6 +221,34 @@ const productApis = baseApis.injectEndpoints({
       query: (draftId) => `/bol/drafts/${draftId}`,
       providesTags: (result, error, id) => [{ type: "Drafts", id }],
     }),
+
+    // GET /bol/offers
+    getBolOffers: builder.query({
+      query: (paramsObj = {}) => {
+        const { page = 1, limit = 50, search = "", ...filters } = paramsObj;
+        const params = new URLSearchParams();
+        if (page) params.append("page", page);
+        if (limit) params.append("limit", limit);
+        if (search) params.append("search", search);
+        
+        // Append all active filters
+        Object.entries(filters).forEach(([key, val]) => {
+          if (val !== undefined && val !== null && val !== "") {
+            params.append(key, val);
+          }
+        });
+        
+        return `/bol/offers?${params.toString()}`;
+      },
+      providesTags: ["BolOffers"],
+    }),
+
+    // GET /bol/product-image/{ean}
+    getBolProductImage: builder.query({
+      query: (ean) => `/bol/product-image/${ean}`,
+      // 1 hour cache time for images
+      keepUnusedDataFor: 3600,
+    }),
   }),
   overrideExisting: false,
 });
@@ -240,6 +268,8 @@ export const {
   useUpdateDraftMutation,
   useGetDraftsQuery,
   useGetDraftQuery,
+  useGetBolOffersQuery,
+  useGetBolProductImageQuery,
 } = productApis;
 
 export default productApis;
