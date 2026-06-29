@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Input, Spin, Empty, Modal } from "antd";
-import { FiSearch, FiRefreshCw } from "react-icons/fi";
+import { FiSearch } from "react-icons/fi";
+import { LuRefreshCw, LuUnplug } from "react-icons/lu";
 import Pagination from "../../components/shared/Pagination";
 import { useGetBolOrdersQuery, useSyncNowMutation } from "../../Redux/analyticsApis";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import OrderCard from "./OrderCard";
 import { useUI } from "../../Provider/ContextProvider";
-import { LuUnplug } from "react-icons/lu";
 
 const STATUS_META = {
   OPEN: { label: "Open", color: "#D97706", bg: "#FFF7E6" },
@@ -74,10 +74,10 @@ const Orders = () => {
           <button 
             onClick={handleSync}
             disabled={isSyncing}
-            className="h-10 px-4 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm shadow-sm transition-all whitespace-nowrap disabled:opacity-50"
+            title="Sync Orders"
+            className="w-10 h-10 flex-shrink-0 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50 transition-colors"
           >
-            <FiRefreshCw className={isSyncing ? "animate-spin text-blue-600" : "text-gray-500"} />
-            Sync Now
+            <LuRefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
           </button>
         </div>
       </div>

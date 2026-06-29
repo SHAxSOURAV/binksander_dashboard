@@ -84,6 +84,7 @@ const productApis = baseApis.injectEndpoints({
         items: (res?.data || []).map(mapItem),
       }),
       providesTags: ["Products"],
+      keepUnusedDataFor: 300, // 5 minutes cache
     }),
 
     getFiltersMeta: builder.query({
@@ -241,6 +242,7 @@ const productApis = baseApis.injectEndpoints({
         return `/bol/offers?${params.toString()}`;
       },
       providesTags: ["BolOffers"],
+      keepUnusedDataFor: 300, // 5 minutes cache
     }),
 
     // GET /bol/product-image/{ean}
@@ -248,6 +250,100 @@ const productApis = baseApis.injectEndpoints({
       query: (ean) => `/bol/product-image/${ean}`,
       // 1 hour cache time for images
       keepUnusedDataFor: 3600,
+    }),
+
+    // PUT /bol/offers/{offerId}/status
+    updateBolOfferStatus: builder.mutation({
+      query: ({ offerId, onHoldByRetailer }) => ({
+        url: `/bol/offers/${offerId}/status`,
+        method: "PUT",
+        body: { onHoldByRetailer },
+      }),
+      async onQueryStarted({ offerId, onHoldByRetailer }, { dispatch, queryFulfilled, getState }) {
+        const patches = [];
+        const queries = getState().productApis?.queries || {};
+        Object.keys(queries).forEach((key) => {
+          if (key.startsWith('getBolOffers(')) {
+             const originalArgs = queries[key].originalArgs;
+             patches.push(
+               dispatch(
+                 productApis.util.updateQueryData('getBolOffers', originalArgs, (draft) => {
+                   if (draft?.data) {
+                     const offer = draft.data.find(o => o.offerId === offerId);
+                     if (offer) offer.onHoldByRetailer = onHoldByRetailer;
+                   }
+                 })
+               )
+             );
+          }
+        });
+        try { await queryFulfilled; } catch { patches.forEach(p => p.undo()); }
+      },
+    }),
+
+    // PUT /bol/offers/{offerId}/stock
+    updateBolOfferStock: builder.mutation({
+      query: ({ offerId, amount }) => ({
+        url: `/bol/offers/${offerId}/stock`,
+        method: "PUT",
+        body: { amount },
+      }),
+      async onQueryStarted({ offerId, amount }, { dispatch, queryFulfilled, getState }) {
+        const patches = [];
+        const queries = getState().productApis?.queries || {};
+        Object.keys(queries).forEach((key) => {
+          if (key.startsWith('getBolOffers(')) {
+             const originalArgs = queries[key].originalArgs;
+             patches.push(
+               dispatch(
+                 productApis.util.updateQueryData('getBolOffers', originalArgs, (draft) => {
+                   if (draft?.data) {
+                     const offer = draft.data.find(o => o.offerId === offerId);
+                     if (offer) {
+                       if (!offer.stock) offer.stock = {};
+                       offer.stock.amount = amount;
+                     }
+                   }
+                 })
+               )
+             );
+          }
+        });
+        try { await queryFulfilled; } catch { patches.forEach(p => p.undo()); }
+      },
+    }),
+
+    // DELETE /bol/offers/{offerId}
+    deleteBolOffer: builder.mutation({
+      query: (offerId) => ({
+        url: `/bol/offers/${offerId}`,
+        method: "DELETE",
+      }),
+      async onQueryStarted(offerId, { dispatch, queryFulfilled, getState }) {
+        const patches = [];
+        const queries = getState().productApis?.queries || {};
+        Object.keys(queries).forEach((key) => {
+          if (key.startsWith('getBolOffers(')) {
+             const originalArgs = queries[key].originalArgs;
+             patches.push(
+               dispatch(
+                 productApis.util.updateQueryData('getBolOffers', originalArgs, (draft) => {
+                   if (draft?.data) {
+                     draft.data = draft.data.filter(o => o.offerId !== offerId);
+                   }
+                 })
+               )
+             );
+          }
+        });
+        try { await queryFulfilled; } catch { patches.forEach(p => p.undo()); }
+      },
+    }),
+
+    // GET /amazon/gtin-to-asin/{ean}
+    getGtinToAsin: builder.query({
+      query: (ean) => `/amazon/gtin-to-asin/${ean}?country=NL`,
+      providesTags: ["Products"],
     }),
   }),
   overrideExisting: false,
@@ -270,6 +366,10 @@ export const {
   useGetDraftQuery,
   useGetBolOffersQuery,
   useGetBolProductImageQuery,
+  useGetGtinToAsinQuery,
+  useUpdateBolOfferStatusMutation,
+  useUpdateBolOfferStockMutation,
+  useDeleteBolOfferMutation,
 } = productApis;
 
 export default productApis;

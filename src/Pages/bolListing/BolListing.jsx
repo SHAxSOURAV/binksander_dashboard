@@ -6,6 +6,8 @@ import { FiSearch, FiFilter } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import Pagination from "../../components/shared/Pagination";
 import BolProductImage from "./BolProductImage";
+import OfferDetailsModal from "./components/OfferDetailsModal";
+import OfferActionMenu from "./components/OfferActionMenu";
 import { useUI } from "../../Provider/ContextProvider";
 import { LuUnplug } from "react-icons/lu";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
@@ -20,6 +22,7 @@ const BolListing = () => {
   const [filters, setFilters] = useState({});
   const [activeFilters, setActiveFilters] = useState({});
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState(null);
   const { openSettings } = useUI();
 
   const { data: bolCreds, isLoading: credsLoading } = useGetBolCredentialsQuery();
@@ -171,7 +174,8 @@ const BolListing = () => {
               {offers.map((offer, index) => (
                 <div
                   key={offer.offerId}
-                  className="text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full"
+                  onClick={() => setSelectedOffer(offer)}
+                  className="cursor-pointer text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full"
                 >
                   <div className="bg-[#f8f9fc] rounded-xl h-40 flex items-center justify-center mb-4 overflow-hidden relative group-hover:bg-[#f0f2f8] transition-colors w-full">
                     <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 items-end z-10">
@@ -187,6 +191,9 @@ const BolListing = () => {
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-white/90 backdrop-blur-md text-gray-700 border border-gray-100">
                         Stock: {offer.stock?.amount || 0}
                       </span>
+                      <div className="mt-1">
+                        <OfferActionMenu offer={offer} />
+                      </div>
                     </div>
                     <BolProductImage 
                       ean={offer.ean} 
@@ -227,13 +234,15 @@ const BolListing = () => {
                   <th className="py-3 px-2">Stock</th>
                   <th className="py-3 px-2">Condition</th>
                   <th className="py-3 px-2">Status</th>
+                  <th className="py-3 px-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {offers.map((offer, index) => (
                   <tr 
                     key={offer.offerId} 
-                    className="border-b border-gray-50 hover:bg-gray-50/60"
+                    onClick={() => setSelectedOffer(offer)}
+                    className="border-b border-gray-50 hover:bg-gray-50/60 cursor-pointer"
                   >
                     <td className="py-3 px-2 text-gray-500">
                       {(page - 1) * limit + index + 1}
@@ -262,10 +271,15 @@ const BolListing = () => {
                     </td>
                     <td className="py-3 px-2">
                       {offer.onHoldByRetailer ? (
-                         <Tag color="warning" className="border-0">ON HOLD</Tag>
+                         <Tag color="warning" className="border-0 m-0">ON HOLD</Tag>
                       ) : (
-                         <Tag color="processing" className="border-0">LIVE</Tag>
+                         <Tag color="processing" className="border-0 m-0">LIVE</Tag>
                       )}
+                    </td>
+                    <td className="py-3 px-2 text-right">
+                      <div className="flex justify-end pr-2">
+                        <OfferActionMenu offer={offer} />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -366,6 +380,11 @@ const BolListing = () => {
           </div>
         </div>
       </Drawer>
+
+      <OfferDetailsModal 
+        offer={selectedOffer} 
+        onClose={() => setSelectedOffer(null)} 
+      />
     </div>
   );
 };
