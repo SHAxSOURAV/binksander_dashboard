@@ -18,6 +18,7 @@ import {
   useCreateDraftFromAmazonMutation,
 } from "../../Redux/productApis";
 import toast from "react-hot-toast";
+import OfferActionMenu from "../bolListing/components/OfferActionMenu";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -406,26 +407,26 @@ const Products = () => {
                         </p>
                       )}
                       {columns.publishAction && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (p.publishStatus === 'published') {
-                              toast("This product is already live on Bol.com.");
-                            } else if (p.publishStatus === 'processing') {
-                              toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
-                            } else {
-                              setSelected(p); // Open details modal to start publish flow
-                            }
-                          }}
-                          className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${p.publishStatus === 'published'
-                              ? 'bg-green-50 text-green-600 border border-green-200 cursor-not-allowed'
-                              : p.publishStatus === 'processing'
+                        p.publishStatus === 'published' ? (
+                          <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (p.publishStatus === 'processing') {
+                                toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
+                              } else {
+                                setSelected(p); // Open details modal to start publish flow
+                              }
+                            }}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${p.publishStatus === 'processing'
                                 ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
                                 : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
-                            }`}
-                        >
-                          {p.publishStatus === 'published' ? 'Published' : p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
-                        </button>
+                              }`}
+                          >
+                            {p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
+                          </button>
+                        )
                       )}
                     </div>
                   )}
@@ -585,26 +586,27 @@ const Products = () => {
                       </span>
                     </td>}
                     {columns.publishAction && <td className="py-3 px-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (p.publishStatus === 'published') {
-                            toast("This product is already live on Bol.com.");
-                          } else if (p.publishStatus === 'processing') {
-                            toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
-                          } else {
-                            setSelected(p);
-                          }
-                        }}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${p.publishStatus === 'published'
-                            ? 'bg-green-50 text-green-600 border border-green-200 cursor-not-allowed'
-                            : p.publishStatus === 'processing'
-                              ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
-                              : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
-                          }`}
-                      >
-                        {p.publishStatus === 'published' ? 'Published' : p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
-                      </button>
+                      {p.publishStatus === 'published' ? (
+                        <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (p.publishStatus === 'processing') {
+                              toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
+                            } else {
+                              setSelected(p); // Open details modal to start publish flow
+                            }
+                          }}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${
+                            p.publishStatus === 'processing'
+                                ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
+                                : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
+                            }`}
+                        >
+                          {p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
+                        </button>
+                      )}
                     </td>}
                     {columns.action && <td className="py-3 px-2">
                       <button
