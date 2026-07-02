@@ -59,7 +59,7 @@ const SettingsModal = () => {
   );
   const { data: connected, isLoading: loadingSheets } =
     useGetConnectedSheetsQuery(undefined, { skip: !settingsOpen });
-  const { data: bolCreds } = useGetBolCredentialsQuery(undefined, {
+  const { data: bolCreds = [] } = useGetBolCredentialsQuery(undefined, {
     skip: !settingsOpen,
   });
   const { data: amazonCreds } = useGetAmazonCredentialsQuery(undefined, {
@@ -195,17 +195,20 @@ const SettingsModal = () => {
   const onSaveBol = async (values) => {
     try {
       await saveBolCredentials({
+        account_id: values.account_id,
+        account_name: values.account_name,
         client_id: values.client_id,
         client_secret: values.client_secret,
       }).unwrap();
       toast.success("Bol.com credentials saved");
       setBolEditOpen(false);
+      bolForm.resetFields();
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to save Bol credentials");
     }
   };
 
-  const handleDeleteBol = () => {
+  const handleDeleteBol = (accountId) => {
     Modal.confirm({
       title: "Are you sure?",
       content: "Do you really want to delete your Bol.com credentials? This action cannot be undone.",
@@ -214,7 +217,7 @@ const SettingsModal = () => {
       cancelText: "Cancel",
       onOk: async () => {
         try {
-          await deleteBolCredentials().unwrap();
+          await deleteBolCredentials(accountId).unwrap();
           toast.success("Bol.com credentials deleted");
         } catch (err) {
           toast.error(err?.data?.detail || "Failed to delete Bol credentials");
@@ -258,6 +261,7 @@ const SettingsModal = () => {
 
   const loginWithGoogle = useGoogleLogin({
     flow: "auth-code",
+    prompt: "consent",
     onSuccess: async (codeResponse) => {
       console.log("Got OAuth code:", codeResponse.code);
       try {
@@ -330,12 +334,17 @@ const SettingsModal = () => {
       onCancel={() => setSettingsOpen(false)}
       footer={null}
       centered
-      width={760}
-      title={<span className="text-lg font-bold">Settings</span>}
+      width={800}
+      title={<span className="text-xl font-bold text-gray-800 tracking-tight">Settings</span>}
+      className="settings-modal-premium"
+      styles={{
+        content: { padding: '24px 32px', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)' },
+        header: { marginBottom: '16px' }
+      }}
     >
-      <div className="flex flex-col sm:flex-row gap-6 font-poppins mt-4 min-h-[360px]">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-8 font-poppins mt-2 min-h-[400px]">
         {/* Tabs */}
-        <div className="sm:w-48 flex sm:flex-col gap-1 flex-wrap">
+        <div className="sm:w-56 flex sm:flex-col gap-2 flex-wrap mb-4 sm:mb-0">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -343,30 +352,33 @@ const SettingsModal = () => {
                 setSettingsTab(t.key);
                 setShowChangePassword(false);
               }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                 settingsTab === t.key
-                  ? "bg-primary text-white"
-                  : "text-gray-500 hover:bg-gray-50"
+                  ? "bg-gradient-to-r from-brand/10 to-brand/5 text-brand shadow-sm border border-brand/20"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 border border-transparent"
               }`}
             >
-              {t.icon} {t.label}
+              <span className={`${settingsTab === t.key ? 'text-brand' : 'text-gray-400'}`}>
+                {t.icon}
+              </span>
+              {t.label}
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 border-l border-gray-100 sm:pl-6">
+        <div className="flex-1 min-w-0 sm:border-l sm:border-gray-100 sm:pl-8">
           {/* Account */}
           {settingsTab === "account" && (
-            <div>
-              <h3 className="text-base font-bold">Your Account</h3>
-              <p className="text-xs text-gray-400 mb-5">
-                Manage your account information.
+            <div className="animate-fade-in">
+              <h3 className="text-lg font-bold text-gray-800">Your Account</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Manage your personal information and preferences.
               </p>
               {loadingProfile && !account.email ? (
-                <Spin />
+                <div className="flex justify-center py-10"><Spin /></div>
               ) : (
-                <>
+                <div className="space-y-4">
                   {/* Avatar */}
                   <div className="flex items-center gap-4 mb-4">
                     <div className="relative">
@@ -403,9 +415,9 @@ const SettingsModal = () => {
                   </div>
 
                   {/* Full name */}
-                  <div className="flex items-center justify-between bg-[#f7f8fc] rounded-xl px-4 py-3 mb-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400 mb-0.5">Full Name</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-100 rounded-2xl px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex-1 min-w-0 mb-3 sm:mb-0">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Full Name</p>
                       {editingName ? (
                         <div className="flex items-center gap-2">
                           <Input
@@ -437,49 +449,50 @@ const SettingsModal = () => {
                       )}
                     </div>
                     {!editingName && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] font-bold text-brand bg-brand/10 px-3 py-1.5 rounded-full capitalize">
+                          {account.role || "seller"}
+                        </span>
                         <button
                           onClick={() => {
                             setNameDraft(account.full_name || "");
                             setEditingName(true);
                           }}
                           title="Edit name"
-                          className="text-gray-400 hover:text-brand"
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors"
                         >
-                          <FiEdit2 size={15} />
+                          <FiEdit2 size={14} />
                         </button>
-                        <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full capitalize">
-                          {account.role || "seller"}
-                        </span>
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center justify-between bg-[#f7f8fc] rounded-xl px-4 py-3">
+                  
+                  <div className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
                     <div>
-                      <p className="text-xs text-gray-400">Email</p>
-                      <p className="text-sm font-medium">{account.email || "—"}</p>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Email</p>
+                      <p className="text-base font-medium text-gray-800">{account.email || "—"}</p>
                     </div>
-                    <span className="button-color w-9 h-9 rounded-lg flex items-center justify-center">
-                      <FiLock size={14} />
+                    <span className="bg-gray-50 text-gray-400 w-10 h-10 rounded-full flex items-center justify-center shadow-inner">
+                      <FiLock size={16} />
                     </span>
                   </div>
-                </>
+                </div>
               )}
             </div>
           )}
 
           {/* Connection */}
           {settingsTab === "connection" && (
-            <div>
-              <h3 className="text-base font-bold">Connection</h3>
-              <p className="text-xs text-gray-400 mb-5">
-                Manage your inventory &amp; Bol.com API connection.
+            <div className="animate-fade-in">
+              <h3 className="text-lg font-bold text-gray-800">Integrations</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Manage your inventory sources and Bol.com connection.
               </p>
 
               {/* Inventory sheets */}
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-500">
-                  Inventory (Google Spreadsheet)
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-bold text-gray-700">
+                  Inventory Source
                 </p>
               </div>
 
@@ -597,82 +610,122 @@ const SettingsModal = () => {
               )}
 
               {/* Add Spreadsheet Buttons */}
-              <div className="flex gap-3 mb-5">
-                <button
-                  onClick={() => setPublicLinkModalOpen(true)}
-                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50"
-                >
-                  Add Public Link
-                </button>
+              <div className="flex flex-col sm:flex-row gap-3 mb-8">
                 <button
                   onClick={() => loginWithGoogle()}
-                  className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium py-2 rounded-lg hover:bg-blue-100 flex items-center justify-center gap-2"
+                  className="flex-1 bg-white text-gray-700 border border-gray-200 text-sm font-semibold py-3 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm flex items-center justify-center gap-2"
                 >
+                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
                   Connect with Google
+                </button>
+                <button
+                  onClick={() => setPublicLinkModalOpen(true)}
+                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-sm font-medium py-3 rounded-xl hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center"
+                >
+                  Add Public Link
                 </button>
               </div>
 
               {/* Bol.com credentials */}
-              <p className="text-xs font-semibold text-gray-500 mb-2">
-                Bol.com API
-              </p>
-              {!bolEditOpen ? (
-                <div className="rounded-2xl border border-gray-100 bg-white p-4">
-                  <div className="flex items-start gap-3">
-                    <span
-                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bol-logo text-sm"
-                      style={{ backgroundColor: "#1B17E014", color: "#1B17E0" }}
-                    >
-                      bol.
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          API Credentials
-                        </p>
-                        {bolCreds?.is_secret_set ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                            <FiCheckCircle size={11} /> Connected
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                            <FiXCircle size={11} /> Not Set
-                          </span>
-                        )}
+              <div className="flex items-center justify-between mb-3 pt-4 border-t border-gray-100">
+                <p className="text-sm font-bold text-gray-700">
+                  Bol.com API Accounts
+                </p>
+                {!bolEditOpen && (
+                  <button
+                    onClick={() => {
+                      bolForm.resetFields();
+                      setBolEditOpen(true);
+                    }}
+                    className="text-sm font-semibold text-brand bg-brand/10 hover:bg-brand/20 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    + Add Account
+                  </button>
+                )}
+              </div>
+              
+              <div className="space-y-3 mb-4">
+                  {bolCreds.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-400 bg-gray-50/50">
+                      No Bol accounts connected.
+                    </div>
+                  ) : (
+                    bolCreds.map((cred) => (
+                      <div key={cred.account_id} className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all group">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-4">
+                            <span
+                              className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bol-logo text-sm font-bold shadow-inner"
+                              style={{ backgroundColor: "#1B17E010", color: "#1B17E0" }}
+                            >
+                              bol.
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-base font-bold text-gray-800 truncate">
+                                  {cred.account_name}
+                                </p>
+                                {cred.is_secret_set ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    <FiCheckCircle size={10} /> Active
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    <FiXCircle size={10} /> Incomplete
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400">
+                                Client ID: <span className="font-mono text-gray-500">{cred.client_id || "—"}</span>
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => {
+                                bolForm.setFieldsValue({
+                                  account_id: cred.account_id,
+                                  account_name: cred.account_name,
+                                  client_id: cred.client_id,
+                                });
+                                setBolEditOpen(true);
+                              }}
+                              className="text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-lg transition-colors"
+                            >
+                              Update
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBol(cred.account_id)}
+                              disabled={deletingCreds}
+                              className="text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 px-4 py-2 rounded-lg transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        Client ID:{" "}
-                        <span className="text-gray-600">
-                          {bolCreds?.client_id || "—"}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {bolCreds?.is_secret_set && (
-                        <button
-                          onClick={handleDeleteBol}
-                          disabled={deletingCreds}
-                          className="text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg"
-                        >
-                          Delete
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setBolEditOpen(true)}
-                        className="text-xs font-medium text-brand border border-brand/30 hover:bg-[#f0f0fd] px-3 py-2 rounded-lg"
-                      >
-                        {bolCreds?.is_secret_set ? "Update" : "Set up"}
-                      </button>
-                    </div>
-                  </div>
+                    ))
+                  )}
                 </div>
-              ) : (
+
+              {bolEditOpen && (
                 <Form
                   form={bolForm}
                   layout="vertical"
                   onFinish={onSaveBol}
                   className="rounded-2xl border border-gray-100 bg-white p-4"
                 >
+                  <Form.Item name="account_id" hidden>
+                    <Input />
+                  </Form.Item>
+                  <Form.Item
+                    name="account_name"
+                    label="Account Name"
+                    rules={[{ required: true, message: "Required" }]}
+                    className="mb-3"
+                  >
+                    <Input className="h-10 rounded-lg" placeholder="e.g. Main Account" />
+                  </Form.Item>
                   <Form.Item
                     name="client_id"
                     label="Client ID"
@@ -695,7 +748,10 @@ const SettingsModal = () => {
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => setBolEditOpen(false)}
+                      onClick={() => {
+                        setBolEditOpen(false);
+                        bolForm.resetFields();
+                      }}
                       className="h-9 px-4 rounded-lg border border-gray-200 text-sm text-gray-600"
                     >
                       Cancel
@@ -712,23 +768,27 @@ const SettingsModal = () => {
               )}
 
               {/* Amazon.nl fulfillment account */}
-              <p className="text-xs font-semibold text-gray-500 mb-2 mt-5">
-                amazon.nl (Fulfillment)
-              </p>
+              <div className="pt-8 pb-2">
+                <p className="text-sm font-bold text-gray-700">
+                  Amazon Fulfillment <span className="text-xs font-normal text-gray-400 ml-1">(Dropshipping)</span>
+                </p>
+              </div>
+              
               {!amazonEditOpen ? (
-                <div className="rounded-2xl border border-gray-100 bg-white p-4">
-                  <div className="flex items-start gap-3">
-                    <span
-                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: "#FF990014", color: "#FF9900" }}
-                    >
-                      <TbBrandAmazon size={18} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          Buying Account
-                        </p>
+                <div className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <span
+                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner"
+                        style={{ backgroundColor: "#FF990010", color: "#FF9900" }}
+                      >
+                        <TbBrandAmazon size={24} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-base font-bold text-gray-800 truncate">
+                            Buying Account
+                          </p>
                         {amazonCreds?.is_secret_set ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
                             <FiCheckCircle size={11} /> Connected
@@ -746,9 +806,10 @@ const SettingsModal = () => {
                         </span>
                       </p>
                     </div>
-                    <button
-                      onClick={() => setAmazonEditOpen(true)}
-                      className="text-xs font-medium text-brand border border-brand/30 hover:bg-[#f0f0fd] px-3 py-2 rounded-lg flex-shrink-0"
+                  </div>
+                  <button
+                    onClick={() => setAmazonEditOpen(true)}
+                    className="text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-lg transition-colors flex-shrink-0"
                     >
                       {amazonCreds?.is_secret_set ? "Update" : "Set up"}
                     </button>
@@ -804,14 +865,22 @@ const SettingsModal = () => {
               )}
 
               {/* Register Bol order webhook */}
-              <button
-                onClick={onRegisterWebhook}
-                disabled={registering}
-                className="w-full mt-4 flex items-center justify-center gap-2 bg-[#f0f0fd] text-brand text-sm font-semibold rounded-xl px-4 py-3 hover:bg-[#e6e6fb] disabled:opacity-60"
-              >
-                <FiLink2 size={14} />
-                {registering ? "Registering..." : "Register Bol Order Webhook"}
-              </button>
+              <div className="mt-8 pt-6 border-t border-gray-100">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800">Bol.com Order Webhook</h4>
+                    <p className="text-xs text-gray-500 mt-1 max-w-sm">Registers your backend to receive instant real-time order notifications directly from Bol.com.</p>
+                  </div>
+                  <button
+                    onClick={onRegisterWebhook}
+                    disabled={registering}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-brand hover:border-brand/30 shadow-sm text-sm font-semibold rounded-xl px-5 py-2.5 transition-all disabled:opacity-60 whitespace-nowrap"
+                  >
+                    <FiLink2 size={16} />
+                    {registering ? "Registering..." : "Sync Webhook"}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -924,7 +993,14 @@ const SettingsModal = () => {
     >
       <div className="py-4 max-h-[400px] overflow-y-auto">
         {fetchingUserSheets ? (
-          <div className="flex justify-center py-4"><Spin /></div>
+          <div className="space-y-3 animate-pulse py-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="w-full p-4 border border-gray-100 rounded-xl bg-gray-50 flex items-center gap-3">
+                <div className="w-5 h-5 rounded bg-gray-200"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+              </div>
+            ))}
+          </div>
         ) : oauthSheetsList.length === 0 ? (
           <p className="text-sm text-gray-500">No spreadsheets found.</p>
         ) : (
@@ -955,7 +1031,14 @@ const SettingsModal = () => {
       <div className="py-4">
         <p className="text-sm text-gray-500 mb-4">Select the specific tab to import from the spreadsheet.</p>
         {fetchingTabs ? (
-          <div className="flex justify-center py-4"><Spin /></div>
+          <div className="space-y-3 animate-pulse py-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="w-full p-4 border border-gray-100 rounded-xl bg-gray-50 flex items-center justify-between">
+                <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                <div className="w-4 h-4 rounded bg-gray-200"></div>
+              </div>
+            ))}
+          </div>
         ) : tabsList.length === 0 ? (
           <p className="text-sm text-gray-500">No tabs found.</p>
         ) : (

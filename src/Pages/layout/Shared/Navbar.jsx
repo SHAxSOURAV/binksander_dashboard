@@ -1,17 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Popover, Input } from "antd";
+import { Popover, Input, Select } from "antd";
 import {  FiSearch, FiSettings, FiLogOut } from "react-icons/fi";
 import { HiMenuAlt2 } from "react-icons/hi";
 import { useUI } from "../../../Provider/ContextProvider";
 import { getUser } from "../../../utils/session";
 import { useGetProfileQuery } from "../../../Redux/profileApis";
+import { useGetBolCredentialsQuery } from "../../../Redux/connectionApis";
+import { useDispatch } from "react-redux";
+import { baseApis } from "../../../Redux/main/baseApis";
 
 const AVATAR = "/Deafult Profile/profile.webp";
 
 const Navbar = ({ onMenuClick }) => {
-  const { openSettings, setLogoutOpen } = useUI();
+  const { openSettings, setLogoutOpen, activeBolAccountId, setActiveBolAccountId } = useUI();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -19,6 +23,21 @@ const Navbar = ({ onMenuClick }) => {
   const { data: profile } = useGetProfileQuery();
   const user = profile || getUser();
   const avatarSrc = user?.profile_picture || AVATAR;
+
+  const { data: bolAccounts = [] } = useGetBolCredentialsQuery();
+
+  useEffect(() => {
+    if (bolAccounts.length > 0) {
+      if (!activeBolAccountId || !bolAccounts.find(a => a.account_id === activeBolAccountId)) {
+        setActiveBolAccountId(bolAccounts[0].account_id);
+      }
+    }
+  }, [bolAccounts, activeBolAccountId, setActiveBolAccountId]);
+
+  const handleAccountChange = (val) => {
+    setActiveBolAccountId(val);
+    dispatch(baseApis.util.invalidateTags(["Products", "BolOffers", "Analytics", "Orders", "Fulfillment", "Drafts"]));
+  };
 
   // Run a product search → land on the Products page with the term in the URL.
   const submitSearch = () => {
@@ -89,6 +108,16 @@ const Navbar = ({ onMenuClick }) => {
 
       {/* Right */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {bolAccounts.length > 0 && (
+          <Select
+            value={activeBolAccountId}
+            onChange={handleAccountChange}
+            options={bolAccounts.map((a) => ({ label: a.account_name, value: a.account_id }))}
+            className="w-32 sm:w-48"
+            placeholder="Select Account"
+            popupMatchSelectWidth={false}
+          />
+        )}
         {searchOpen && (
           <Input
             allowClear
