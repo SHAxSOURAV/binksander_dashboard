@@ -10,6 +10,10 @@ const rawBaseQuery = fetchBaseQuery({
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
     }
+    const accountId = localStorage.getItem("activeBolAccountId");
+    if (accountId) {
+      headers.set("X-Bol-Account-ID", accountId);
+    }
     return headers;
   },
 });

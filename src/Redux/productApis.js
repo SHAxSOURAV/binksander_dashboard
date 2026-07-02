@@ -34,6 +34,7 @@ const mapItem = (it, i) => ({
   isValidAmazon: !!it.is_valid_amazon,
   lastUpdated: "",
   published: false,
+  publishStatus: it.publish_status || "unpublished",
   description: it["Product notes"] || "",
   scrapePending: !!it.scrape_pending,
 });
@@ -57,25 +58,29 @@ const productApis = baseApis.injectEndpoints({
         filter_max_purchase,
         filter_is_valid_amazon,
         filter_min_rating,
-        filter_max_rating
+        filter_max_rating,
+        sortBy,
+        sortOrder
       } = {}) => {
-        const params = new URLSearchParams({ page, limit });
-        if (search?.trim()) params.set("search", search.trim());
-        if (filter_status?.trim()) params.set("filter_status", filter_status.trim());
-        if (filter_stock?.trim()) params.set("filter_stock", filter_stock.trim());
-        if (filter_category?.trim()) params.set("filter_category", filter_category.trim());
-        if (filter_delivery?.trim()) params.set("filter_delivery", filter_delivery.trim());
-        if (filter_min_price) params.set("filter_min_price", filter_min_price);
-        if (filter_max_price) params.set("filter_max_price", filter_max_price);
-        if (filter_min_purchase) params.set("filter_min_purchase", filter_min_purchase);
-        if (filter_max_purchase) params.set("filter_max_purchase", filter_max_purchase);
-        if (filter_is_valid_amazon !== undefined && filter_is_valid_amazon !== "") {
-          params.set("filter_is_valid_amazon", filter_is_valid_amazon);
-        }
-        if (filter_min_rating) params.set("filter_min_rating", filter_min_rating);
-        if (filter_max_rating) params.set("filter_max_rating", filter_max_rating);
-
-        return `/spreadsheet/scrape-items?${params.toString()}`;
+        const query = new URLSearchParams();
+        query.append("page", page);
+        query.append("limit", limit);
+        if (search) query.append("search", search);
+        if (filter_status) query.append("filter_status", filter_status);
+        if (filter_stock) query.append("filter_stock", filter_stock);
+        if (filter_category) query.append("filter_category", filter_category);
+        if (filter_delivery) query.append("filter_delivery", filter_delivery);
+        if (filter_min_price) query.append("filter_min_price", filter_min_price);
+        if (filter_max_price) query.append("filter_max_price", filter_max_price);
+        if (filter_min_purchase) query.append("filter_min_purchase", filter_min_purchase);
+        if (filter_max_purchase) query.append("filter_max_purchase", filter_max_purchase);
+        if (filter_is_valid_amazon !== undefined) query.append("filter_is_valid_amazon", filter_is_valid_amazon);
+        if (filter_min_rating) query.append("filter_min_rating", filter_min_rating);
+        if (filter_max_rating) query.append("filter_max_rating", filter_max_rating);
+        if (sortBy) query.append("sort_by", sortBy);
+        if (sortOrder) query.append("sort_order", sortOrder);
+        
+        return `/spreadsheet/scrape-items?${query.toString()}`;
       },
       transformResponse: (res, _meta, arg) => ({
         page: arg?.page || 1,
@@ -194,9 +199,10 @@ const productApis = baseApis.injectEndpoints({
 
     // POST /bol/drafts/{id}/publish
     publishDraft: builder.mutation({
-      query: (draftId) => ({
+      query: ({ draftId, bolAccountId }) => ({
         url: `/bol/drafts/${draftId}/publish`,
         method: "POST",
+        headers: bolAccountId ? { "X-Bol-Account-Id": bolAccountId } : {},
       }),
       invalidatesTags: ["Drafts", "Products"],
     }),
@@ -226,11 +232,12 @@ const productApis = baseApis.injectEndpoints({
     // GET /bol/offers
     getBolOffers: builder.query({
       query: (paramsObj = {}) => {
-        const { page = 1, limit = 50, search = "", ...filters } = paramsObj;
+        const { page = 1, limit = 50, search = "", refresh = false, ...filters } = paramsObj;
         const params = new URLSearchParams();
         if (page) params.append("page", page);
         if (limit) params.append("limit", limit);
         if (search) params.append("search", search);
+        if (refresh) params.append("refresh", "true");
         
         // Append all active filters
         Object.entries(filters).forEach(([key, val]) => {

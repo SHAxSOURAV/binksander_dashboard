@@ -34,13 +34,13 @@ const connectionApis = baseApis.injectEndpoints({
       invalidatesTags: ["Connection", "BolOffers", "Analytics"],
     }),
 
-    // DELETE /users/bol-credentials
+    // DELETE /users/bol-credentials/{account_id}
     deleteBolCredentials: builder.mutation({
-      query: () => ({
-        url: "/users/bol-credentials",
+      query: (accountId) => ({
+        url: `/users/bol-credentials/${accountId}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["Connection", "BolOffers", "Analytics"],
+      invalidatesTags: ["Connection", "BolOffers", "Analytics", "Orders", "Products"],
     }),
 
     // GET /users/amazon-credentials → { email, is_secret_set, has_totp } (404 if none)
@@ -100,7 +100,7 @@ const connectionApis = baseApis.injectEndpoints({
       }),
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
 export const {

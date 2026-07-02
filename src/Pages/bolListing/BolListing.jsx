@@ -11,22 +11,23 @@ import OfferActionMenu from "./components/OfferActionMenu";
 import { useUI } from "../../Provider/ContextProvider";
 import { LuUnplug } from "react-icons/lu";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
-
 const BolListing = () => {
   const [view, setView] = useState("grid");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(20);
+  const [sort, setSort] = useState(null);
   
   const [filters, setFilters] = useState({});
   const [activeFilters, setActiveFilters] = useState({});
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState(null);
-  const { openSettings } = useUI();
+  const { openSettings, activeBolAccountId } = useUI();
 
-  const { data: bolCreds, isLoading: credsLoading } = useGetBolCredentialsQuery();
-  const isNotConnected = !credsLoading && (!bolCreds || !bolCreds.is_secret_set);
+  const { data: bolCreds = [], isLoading: credsLoading } = useGetBolCredentialsQuery();
+  const activeCred = bolCreds.find(c => c.account_id === activeBolAccountId);
+  const isNotConnected = !credsLoading && (!activeCred || !activeCred.is_secret_set);
 
   // Debounce search and reset pagination
   useEffect(() => {
@@ -49,6 +50,7 @@ const BolListing = () => {
     page: page,
     limit: limit,
     search: debouncedSearch,
+    sort: sort,
     ...activeFilters
   });
 
@@ -73,8 +75,24 @@ const BolListing = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             prefix={<FiSearch className="text-gray-400 mr-1" />}
-            placeholder="Search by EAN..."
+            placeholder="Search by Title or EAN..."
             className="h-10 rounded-lg w-full sm:w-64"
+          />
+          <Select
+            placeholder="Sort by..."
+            value={sort}
+            onChange={(val) => { setSort(val); setPage(1); }}
+            allowClear
+            className="w-44"
+            style={{ height: '40px' }}
+            options={[
+              { value: "price_asc", label: "Price: Low to High" },
+              { value: "price_desc", label: "Price: High to Low" },
+              { value: "stock_desc", label: "Stock: High to Low" },
+              { value: "stock_asc", label: "Stock: Low to High" },
+              { value: "title_asc", label: "Title: A to Z" },
+              { value: "title_desc", label: "Title: Z to A" },
+            ]}
           />
           <button
             onClick={refetch}

@@ -11,7 +11,7 @@ import {
   useSyncFulfillmentMutation,
 } from "../../Redux/fulfillmentApis";
 
-const LIMIT = 50;
+const LIMIT = 20;
 
 const AmazonOperations = () => {
   const [search, setSearch] = useState("");
