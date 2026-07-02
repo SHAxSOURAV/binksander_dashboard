@@ -20,12 +20,13 @@ const meta = (s) =>
 const Orders = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(20);
   const [selected, setSelected] = useState(null);
-  const { openSettings } = useUI();
+  const { openSettings, activeBolAccountId } = useUI();
 
-  const { data: bolCreds, isLoading: credsLoading } = useGetBolCredentialsQuery();
-  const isNotConnected = !credsLoading && (!bolCreds || !bolCreds.is_secret_set);
+  const { data: bolCreds = [], isLoading: credsLoading } = useGetBolCredentialsQuery();
+  const activeCred = bolCreds.find(c => c.account_id === activeBolAccountId);
+  const isNotConnected = !credsLoading && (!activeCred || !activeCred.is_secret_set);
 
   const [syncNow, { isLoading: isSyncing }] = useSyncNowMutation();
 

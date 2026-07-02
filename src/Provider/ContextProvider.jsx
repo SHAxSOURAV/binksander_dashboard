@@ -8,6 +8,16 @@ export const UIProvider = ({ children }) => {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
 
+  const [activeBolAccountId, setActiveBolAccountIdState] = useState(() => {
+    return localStorage.getItem("activeBolAccountId") || null;
+  });
+
+  const setActiveBolAccountId = (id) => {
+    setActiveBolAccountIdState(id);
+    if (id) localStorage.setItem("activeBolAccountId", id);
+    else localStorage.removeItem("activeBolAccountId");
+  };
+
   const openSettings = (tab = "account") => {
     setSettingsTab(tab);
     setSettingsOpen(true);
@@ -25,6 +35,8 @@ export const UIProvider = ({ children }) => {
         setLogoutOpen,
         supportOpen,
         setSupportOpen,
+        activeBolAccountId,
+        setActiveBolAccountId,
       }}
     >
       {children}
