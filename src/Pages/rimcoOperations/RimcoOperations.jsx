@@ -6,7 +6,7 @@ import Pagination from "../../components/shared/Pagination";
 import { statusMeta } from "../../utils/fulfillmentStatus";
 import { useGetFulfillmentOrdersQuery } from "../../Redux/fulfillmentApis";
 
-const LIMIT = 50;
+const LIMIT = 20;
 
 // Rimco = the delivery/logistics view of fulfilled orders (post-purchase phase).
 const DELIVERY_STATUSES = ["purchasing", "purchased", "shipped", "completed"];

@@ -21,14 +21,15 @@ const Field = ({ label, children, required }) => (
 );
 
 const DraftEditModal = ({ draftId, onClose }) => {
-  const { setSettingsOpen, setSettingsTab } = useUI();
+  const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
+  const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
 
   const { data: draftRes, isFetching: loadingDraft } = useGetDraftQuery(draftId, {
     skip: !draftId,
   });
   const draft = draftRes?.data;
 
-  const { data: bolCreds } = useGetBolCredentialsQuery();
+  const { data: bolCreds = [] } = useGetBolCredentialsQuery();
 
   const [updateDraft, { isLoading: updating }] = useUpdateDraftMutation();
   const [publishDraft, { isLoading: publishing }] = usePublishDraftMutation();
@@ -43,8 +44,10 @@ const DraftEditModal = ({ draftId, onClose }) => {
     reference: "",
     description: "",
     attributes: {},
-    photos: []
+    photos: [],
+    schedule_at: null,
   });
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
 
   useEffect(() => {
     if (draft) {
@@ -62,6 +65,12 @@ const DraftEditModal = ({ draftId, onClose }) => {
       });
     }
   }, [draft]);
+
+  useEffect(() => {
+    if (activeBolAccountId && !selectedAccount) {
+      setSelectedAccount(activeBolAccountId);
+    }
+  }, [activeBolAccountId]);
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -83,7 +92,8 @@ const DraftEditModal = ({ draftId, onClose }) => {
 
   const handlePublish = async () => {
     // 1. Check if Bol credentials exist
-    const hasCreds = bolCreds?.client_id && bolCreds?.is_secret_set;
+    const activeCred = bolCreds.find(c => c.account_id === selectedAccount);
+    const hasCreds = activeCred?.client_id && activeCred?.is_secret_set;
     if (!hasCreds) {
       toast.error("You must connect your Bol.com credentials first! Opening settings...");
       onClose();
@@ -96,13 +106,35 @@ const DraftEditModal = ({ draftId, onClose }) => {
     const saved = await handleSave();
     if (!saved) return;
 
-    // 3. Publish
+    // 3. Publish or Schedule
     try {
-      await publishDraft(draftId).unwrap();
-      toast.success("Draft published to Bol.com successfully!");
-      onClose();
+      if (scheduleEnabled && form.schedule_at) {
+        const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || localStorage.getItem("token") || "";
+        const res = await fetch("http://127.0.0.1:8002/api/v1/bol/drafts/bulk-publish", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            draft_ids: [draftId],
+            account_id: selectedAccount,
+            condition: form.condition,
+            delivery_code: form.delivery_code,
+            schedule_at: form.schedule_at.toISOString()
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to schedule");
+        toast.success("Draft successfully scheduled for publishing!");
+        onClose();
+      } else {
+        await publishDraft({ draftId, bolAccountId: selectedAccount }).unwrap();
+        toast.success("Draft published to Bol.com successfully!");
+        onClose();
+      }
     } catch (err) {
-      toast.error(err?.data?.detail || "Failed to publish to Bol.com");
+      toast.error(err?.message || err?.data?.detail || "Failed to publish to Bol.com");
     }
   };
 
@@ -151,6 +183,21 @@ const DraftEditModal = ({ draftId, onClose }) => {
                           className="rounded-lg text-[14px] text-gray-800"
                         />
                       </Field>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="Publish To Account" required>
+                          <Select
+                            value={selectedAccount}
+                            onChange={(val) => setSelectedAccount(val)}
+                            placeholder="Select Bol.com Account"
+                            className="w-full h-10 draft-select"
+                            options={bolCreds.map(c => ({
+                              value: c.account_id,
+                              label: c.account_name || c.client_id.substring(0,8) + '...'
+                            }))}
+                          />
+                        </Field>
+                      </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                         <Field label="EAN Number" required>
@@ -160,6 +207,29 @@ const DraftEditModal = ({ draftId, onClose }) => {
                             className="rounded-lg h-10 text-[14px] text-gray-800"
                           />
                         </Field>
+                        
+                        <div className="flex flex-col justify-end">
+                            <div className="flex items-center justify-between mb-3">
+                                <label className="text-[13px] font-semibold text-gray-700">Schedule Publishing</label>
+                                <Button 
+                                    type={scheduleEnabled ? "primary" : "default"} 
+                                    size="small" 
+                                    onClick={() => setScheduleEnabled(!scheduleEnabled)}
+                                >
+                                    {scheduleEnabled ? "Enabled" : "Off"}
+                                </Button>
+                            </div>
+                            {scheduleEnabled && (
+                                <Field label="Publish Date & Time (Europe/Amsterdam)">
+                                    <DatePicker 
+                                    showTime 
+                                    className="w-full h-9" 
+                                    onChange={(v) => handleChange("schedule_at", v?.toDate() || null)}
+                                    />
+                                </Field>
+                            )}
+                        </div>
+
                         <Field label="Internal Reference (ASIN)">
                           <Input
                             value={form.reference}
@@ -298,7 +368,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
                 loading={publishing || updating}
                 className="h-10 px-6 rounded-lg font-semibold bg-brand shadow-sm hover:opacity-90 transition-opacity"
               >
-                Publish to Bol.com
+                {scheduleEnabled ? "Schedule Publish" : "Publish to Bol.com"}
               </Button>
             </div>
           </div>

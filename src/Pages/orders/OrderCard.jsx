@@ -167,6 +167,17 @@ const OrderCard = ({ order, onClick }) => {
             <div className="flex items-center gap-6">
               <span className="text-sm text-gray-700">{item.quantity || 1}</span>
               <span className="text-sm font-semibold text-gray-800">€{item.offerPrice ?? item.unitPrice ?? "—"}</span>
+              {item.amazonUrl && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(item.amazonUrl, "_blank");
+                  }}
+                  className="bg-[#f90] hover:bg-[#e88a00] text-white text-xs font-semibold py-1.5 px-3 rounded shadow-sm transition-colors"
+                >
+                  Buy from Amazon
+                </button>
+              )}
               <FiMoreVertical className="text-gray-400 cursor-pointer hover:text-gray-600" onClick={(e) => e.stopPropagation()} />
             </div>
           </div>

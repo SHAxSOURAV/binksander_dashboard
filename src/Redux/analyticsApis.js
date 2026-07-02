@@ -13,6 +13,7 @@ const analyticsApis = baseApis.injectEndpoints({
       query: ({ page = 1, limit = 50 } = {}) =>
         `/analytics/orders?page=${page}&limit=${limit}`,
       providesTags: ["Analytics"],
+      keepUnusedDataFor: 300, // 5 minutes cache
     }),
 
     // POST /analytics/sync-now → kicks off a background Bol order sync
