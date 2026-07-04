@@ -37,6 +37,9 @@ const mapItem = (it, i) => ({
   publishStatus: it.publish_status || "unpublished",
   description: it["Product notes"] || "",
   scrapePending: !!it.scrape_pending,
+  bol_offer_id: it.bol_offer_id || "",
+  bol_on_hold: !!it.bol_on_hold,
+  bol_stock: it.bol_stock || 0,
 });
 
 const productApis = baseApis.injectEndpoints({

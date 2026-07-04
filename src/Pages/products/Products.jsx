@@ -408,7 +408,12 @@ const Products = () => {
                       )}
                       {columns.publishAction && (
                         p.publishStatus === 'published' ? (
-                          <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
+                              Published
+                            </span>
+                            <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                          </div>
                         ) : (
                           <button
                             onClick={(e) => {
@@ -587,7 +592,12 @@ const Products = () => {
                     </td>}
                     {columns.publishAction && <td className="py-3 px-2">
                       {p.publishStatus === 'published' ? (
-                        <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
+                            Published
+                          </span>
+                          <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                        </div>
                       ) : (
                         <button
                           onClick={(e) => {
