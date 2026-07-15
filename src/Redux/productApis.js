@@ -40,6 +40,8 @@ const mapItem = (it, i) => ({
   bol_offer_id: it.bol_offer_id || "",
   bol_on_hold: !!it.bol_on_hold,
   bol_stock: it.bol_stock || 0,
+  pending_process_id: it.pending_process_id || "",
+  pending_action: it.pending_action || "",
 });
 
 const productApis = baseApis.injectEndpoints({
@@ -147,7 +149,7 @@ const productApis = baseApis.injectEndpoints({
 
     // Get connected spreadsheet info
     getConnection: builder.query({
-      query: () => "/spreadsheet/connection",
+      query: () => "/spreadsheet/connected",
       providesTags: ["Connection"],
     }),
 
@@ -196,6 +198,16 @@ const productApis = baseApis.injectEndpoints({
         url: "/bol/drafts/from-amazon",
         method: "POST",
         body: data,
+      }),
+      invalidatesTags: ["Drafts"],
+    }),
+
+    // POST /bol/drafts/{id}/translate-images
+    translateDraftImages: builder.mutation({
+      query: ({ draftId, bolAccountId }) => ({
+        url: `/bol/drafts/${draftId}/translate-images`,
+        method: "POST",
+        headers: bolAccountId ? { "X-Bol-Account-Id": bolAccountId } : {},
       }),
       invalidatesTags: ["Drafts"],
     }),
@@ -339,7 +351,10 @@ const productApis = baseApis.injectEndpoints({
                dispatch(
                  productApis.util.updateQueryData('getBolOffers', originalArgs, (draft) => {
                    if (draft?.data) {
-                     draft.data = draft.data.filter(o => o.offerId !== offerId);
+                     const offer = draft.data.find(o => o.offerId === offerId);
+                     if (offer) {
+                       offer.pending_action = "DELETING";
+                     }
                    }
                  })
                )
@@ -354,6 +369,11 @@ const productApis = baseApis.injectEndpoints({
     getGtinToAsin: builder.query({
       query: (ean) => `/amazon/gtin-to-asin/${ean}?country=NL`,
       providesTags: ["Products"],
+    }),
+
+    // GET /bol/process-status/{processId}
+    getBolProcessStatus: builder.query({
+      query: (processId) => `/bol/process-status/${processId}`,
     }),
   }),
   overrideExisting: false,
@@ -370,6 +390,7 @@ export const {
   useImportOauthMutation,
   useResyncInventoryMutation,
   useCreateDraftFromAmazonMutation,
+  useTranslateDraftImagesMutation,
   usePublishDraftMutation,
   useUpdateDraftMutation,
   useGetDraftsQuery,
@@ -380,6 +401,7 @@ export const {
   useUpdateBolOfferStatusMutation,
   useUpdateBolOfferStockMutation,
   useDeleteBolOfferMutation,
+  useGetBolProcessStatusQuery,
 } = productApis;
 
 export default productApis;

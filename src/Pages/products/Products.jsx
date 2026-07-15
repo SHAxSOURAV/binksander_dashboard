@@ -10,15 +10,30 @@ import ConnectInventoryModal from "../../components/products/ConnectInventoryMod
 import DraftEditModal from "../../components/products/DraftEditModal";
 import BulkPublishModal from "../../components/products/BulkPublishModal";
 import Pagination from "../../components/shared/Pagination";
-import {
+import { useDispatch } from "react-redux";
+import productApis, { 
   useGetProductsQuery,
   useGetFiltersMetaQuery,
-  useResyncInventoryMutation,
   useGetConnectionQuery,
+  useResyncInventoryMutation,
   useCreateDraftFromAmazonMutation,
+  useGetBolProcessStatusQuery,
 } from "../../Redux/productApis";
 import toast from "react-hot-toast";
 import OfferActionMenu from "../bolListing/components/OfferActionMenu";
+
+const ProcessPoller = ({ processId }) => {
+  const dispatch = useDispatch();
+  const { data: processStatus } = useGetBolProcessStatusQuery(processId, { pollingInterval: 10000 });
+  
+  useEffect(() => {
+    if (processStatus?.data?.status === 'SUCCESS' || processStatus?.data?.status === 'FAILURE') {
+      dispatch(productApis.util.invalidateTags(['Products']));
+    }
+  }, [processStatus, dispatch]);
+  
+  return null;
+};
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -75,6 +90,8 @@ const Products = () => {
     localStorage.setItem("products:pageSize", String(size));
   };
 
+  const [pollingInterval, setPollingInterval] = useState(0);
+
   const { data, isLoading, isFetching, isError } = useGetProductsQuery({
     page,
     limit,
@@ -82,7 +99,18 @@ const Products = () => {
     sortBy,
     sortOrder,
     ...activeFilters
+  }, {
+    pollingInterval
   });
+
+  useEffect(() => {
+    if (data?.items?.some(p => p.publishStatus === 'processing')) {
+      setPollingInterval(10000);
+    } else {
+      setPollingInterval(0);
+    }
+  }, [data]);
+
   const { data: filtersMeta } = useGetFiltersMetaQuery();
   const { data: connectionData } = useGetConnectionQuery();
   const [resync, { isLoading: isResyncing }] = useResyncInventoryMutation();
@@ -659,8 +687,8 @@ const Products = () => {
       <ConnectInventoryModal
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
+        selectedProducts={selectedProducts}
       />
-
       {bulkPublishOpen && (
         <BulkPublishModal
           products={selectedProducts}
@@ -668,6 +696,10 @@ const Products = () => {
           onClearSelection={() => setSelectedProducts([])}
         />
       )}
+
+      {Array.from(new Set(products.filter(p => p.publishStatus === 'processing' && p.pending_process_id).map(p => p.pending_process_id))).map(pid => (
+        <ProcessPoller key={pid} processId={pid} />
+      ))}
 
       {/* Sticky Bulk Action Bar */}
       {selectedProducts.length > 0 && (
