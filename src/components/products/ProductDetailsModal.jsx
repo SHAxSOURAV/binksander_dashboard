@@ -9,6 +9,7 @@ import {
   useScrapeAsinQuery,
   useSyncAsinMutation,
   useUpdateDraftMutation,
+  useTranslateDraftImagesMutation,
 } from "../../Redux/productApis";
 
 // Parse a price that may use a comma as the decimal separator (e.g. "19,53")
@@ -33,6 +34,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
   const [publishDraft, { isLoading: publishing }] = usePublishDraftMutation();
   const [syncAsin, { isLoading: isSyncing }] = useSyncAsinMutation();
   const [updateDraft] = useUpdateDraftMutation();
+  const [translateImages, { isLoading: translating }] = useTranslateDraftImagesMutation();
 
   // Live-scrape the full Amazon product (all photos, description) for this ASIN.
   const { data: details, isFetching: loadingDetails } = useScrapeAsinQuery(
@@ -113,6 +115,14 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
       if (useSheetTitle) {
         await updateDraft({ id: draftId, title: view.title }).unwrap();
       }
+
+      // Translate images
+      try {
+        await translateImages({ draftId }).unwrap();
+      } catch (err) {
+        console.error("Translation error", err);
+        toast.error("Image translation failed. Proceeding with original images.");
+      }
       
       toast.success("Draft created successfully");
       onClose();
@@ -124,7 +134,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
     }
   };
 
-  const busy = drafting || publishing;
+  const busy = drafting || publishing || translating;
 
   return (
     <Modal open={open} onCancel={onClose} footer={null} centered width={960} className="product-modal">
@@ -374,7 +384,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
                    disabled={busy}
                    className="w-full h-11 rounded-lg bg-brand text-white font-semibold text-[13px] shadow-[0_4px_12px_rgba(79,70,229,0.2)] hover:shadow-[0_6px_16px_rgba(79,70,229,0.3)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-none"
                  >
-                   {busy ? "Publishing to Bol.com..." : "Publish to Bol.com"}
+                   {busy ? (translating ? "Translating Images..." : "Publishing to Bol.com...") : "Publish to Bol.com"}
                  </button>
               </div>
            </div>

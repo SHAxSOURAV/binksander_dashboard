@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Modal, Input, Select, Button, Spin, InputNumber, Tabs } from "antd";
+import { Modal, Input, Select, Button, Spin, InputNumber, Tabs, Image } from "antd";
 import toast from "react-hot-toast";
 import {
   useGetDraftQuery,
@@ -23,6 +23,7 @@ const Field = ({ label, children, required }) => (
 const DraftEditModal = ({ draftId, onClose }) => {
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
+  const [selectedPhotos, setSelectedPhotos] = useState([]);
 
   const { data: draftRes, isFetching: loadingDraft } = useGetDraftQuery(draftId, {
     skip: !draftId,
@@ -63,6 +64,11 @@ const DraftEditModal = ({ draftId, onClose }) => {
         attributes: draft.attributes || {},
         photos: draft.photos || [],
       });
+      if (draft.photos?.length > 0) {
+        setSelectedPhotos(draft.photos.map((_, i) => i));
+      } else {
+        setSelectedPhotos([]);
+      }
     }
   }, [draft]);
 
@@ -76,11 +82,21 @@ const DraftEditModal = ({ draftId, onClose }) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const togglePhotoSelection = (index) => {
+    setSelectedPhotos((prev) =>
+      prev.includes(index)
+        ? prev.filter((i) => i !== index)
+        : [...prev, index]
+    );
+  };
+
   const handleSave = async () => {
     try {
+      const photosToSave = form.photos.filter((_, i) => selectedPhotos.includes(i));
       await updateDraft({
         id: draftId,
         ...form,
+        photos: photosToSave,
       }).unwrap();
       toast.success("Draft updated successfully");
       return true;
@@ -91,7 +107,6 @@ const DraftEditModal = ({ draftId, onClose }) => {
   };
 
   const handlePublish = async () => {
-    // 1. Check if Bol credentials exist
     const activeCred = bolCreds.find(c => c.account_id === selectedAccount);
     const hasCreds = activeCred?.client_id && activeCred?.is_secret_set;
     if (!hasCreds) {
@@ -102,11 +117,9 @@ const DraftEditModal = ({ draftId, onClose }) => {
       return;
     }
 
-    // 2. Save the current form data first
     const saved = await handleSave();
     if (!saved) return;
 
-    // 3. Publish or Schedule
     try {
       if (scheduleEnabled && form.schedule_at) {
         const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || localStorage.getItem("token") || "";
@@ -150,7 +163,6 @@ const DraftEditModal = ({ draftId, onClose }) => {
       className="draft-modal"
     >
       <div className="font-poppins pt-1 pb-1">
-        {/* Header */}
         <div className="flex items-start justify-between border-b border-gray-100 pb-3 mb-2">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">Final Review & Publish</h2>
@@ -336,11 +348,20 @@ const DraftEditModal = ({ draftId, onClose }) => {
                   label: 'Media Gallery',
                   children: (
                     <div className="py-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-[13px] text-gray-500 font-medium">Select images to include in the Bol.com listing.</span>
+                      </div>
                       {form.photos?.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                           {form.photos.map((src, i) => (
-                            <div key={i} className="aspect-square bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm flex items-center justify-center p-2">
-                               <img src={src} alt={`Product ${i+1}`} className="w-full h-full object-contain" />
+                            <div key={i} className="relative aspect-square bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm flex items-center justify-center p-2 group">
+                               <Image src={src} alt={`Product ${i+1}`} className="w-full h-full object-contain" />
+                               <div className={`absolute inset-0 transition-all duration-200 pointer-events-none ${selectedPhotos.includes(i) ? 'bg-transparent' : 'bg-black/40'}`}></div>
+                               <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer z-10 ${selectedPhotos.includes(i) ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/80 border-gray-300 text-transparent group-hover:bg-white'}`} onClick={(e) => { e.stopPropagation(); togglePhotoSelection(i); }}>
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                   <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                 </svg>
+                               </div>
                             </div>
                           ))}
                         </div>

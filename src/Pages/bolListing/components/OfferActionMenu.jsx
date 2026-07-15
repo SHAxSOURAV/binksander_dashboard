@@ -1,15 +1,31 @@
 import React, { useState } from 'react';
 import { Dropdown, Menu, Modal, InputNumber, message } from 'antd';
-import { FiMoreVertical, FiEdit2, FiPauseCircle, FiPlayCircle, FiTrash2 } from 'react-icons/fi';
-import { 
+import { FiMoreVertical, FiEdit2, FiPauseCircle, FiPlayCircle, FiTrash2, FiLoader } from 'react-icons/fi';
+import { useDispatch } from 'react-redux';
+import productApis, { 
   useUpdateBolOfferStatusMutation, 
   useUpdateBolOfferStockMutation, 
-  useDeleteBolOfferMutation 
+  useDeleteBolOfferMutation,
+  useGetBolProcessStatusQuery
 } from '../../../Redux/productApis';
 
 const OfferActionMenu = ({ offer }) => {
+  const dispatch = useDispatch();
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [newStock, setNewStock] = useState(offer.stock?.amount || 0);
+
+  const { data: processStatus } = useGetBolProcessStatusQuery(offer.pending_process_id, {
+    skip: !offer.pending_process_id || offer.pending_action !== 'DELETING',
+    pollingInterval: 10000,
+  });
+
+  React.useEffect(() => {
+    if (processStatus?.data?.status === 'SUCCESS' || processStatus?.data?.status === 'FAILURE') {
+      dispatch(productApis.util.invalidateTags(['BolOffers']));
+    }
+  }, [processStatus, dispatch]);
+
+  const isDeleting = offer.pending_action === 'DELETING' || processStatus?.data?.status === 'PENDING';
 
   const [updateStatus, { isLoading: isStatusLoading }] = useUpdateBolOfferStatusMutation();
   const [updateStock, { isLoading: isStockLoading }] = useUpdateBolOfferStockMutation();
@@ -85,6 +101,15 @@ const OfferActionMenu = ({ offer }) => {
       </Menu.Item>
     </Menu>
   );
+
+  if (isDeleting) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded border border-gray-100">
+        <FiLoader className="animate-spin" />
+        Deleting...
+      </div>
+    );
+  }
 
   return (
     <>
