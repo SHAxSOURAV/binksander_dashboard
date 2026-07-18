@@ -212,6 +212,17 @@ const productApis = baseApis.injectEndpoints({
       invalidatesTags: ["Drafts"],
     }),
 
+    // POST /bol/drafts/{id}/translate-image
+    translateSingleImage: builder.mutation({
+      query: ({ draftId, bolAccountId, photoIndex }) => ({
+        url: `/bol/drafts/${draftId}/translate-image`,
+        method: "POST",
+        headers: bolAccountId ? { "X-Bol-Account-Id": bolAccountId } : {},
+        body: { photo_index: photoIndex }
+      }),
+      // Do NOT invalidate "Drafts" here so we don't reset DraftEditModal's unsaved form state.
+    }),
+
     // POST /bol/drafts/{id}/publish
     publishDraft: builder.mutation({
       query: ({ draftId, bolAccountId }) => ({
@@ -391,6 +402,7 @@ export const {
   useResyncInventoryMutation,
   useCreateDraftFromAmazonMutation,
   useTranslateDraftImagesMutation,
+  useTranslateSingleImageMutation,
   usePublishDraftMutation,
   useUpdateDraftMutation,
   useGetDraftsQuery,
