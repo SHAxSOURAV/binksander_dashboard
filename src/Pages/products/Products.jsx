@@ -124,7 +124,7 @@ const Products = () => {
   const products = data?.items || [];
   const total = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
-  const loading = isLoading || isFetching;
+  const loading = isLoading || (isFetching && !data);
 
   const handleResync = async () => {
     try {

@@ -355,7 +355,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                           {form.photos.map((src, i) => (
                             <div key={i} className="relative aspect-square bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm flex items-center justify-center p-2 group">
-                               <Image src={src} alt={`Product ${i+1}`} className="w-full h-full object-contain" />
+                               <Image src={src} alt={`Product ${i+1}`} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                                <div className={`absolute inset-0 transition-all duration-200 pointer-events-none ${selectedPhotos.includes(i) ? 'bg-transparent' : 'bg-black/40'}`}></div>
                                <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer z-10 ${selectedPhotos.includes(i) ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/80 border-gray-300 text-transparent group-hover:bg-white'}`} onClick={(e) => { e.stopPropagation(); togglePhotoSelection(i); }}>
                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
