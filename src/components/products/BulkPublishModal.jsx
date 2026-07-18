@@ -6,6 +6,7 @@ import {
 } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
 import { useCreateDraftFromAmazonMutation } from "../../Redux/productApis";
+import { url as API_URL } from "../../Redux/main/server";
 
 const Field = ({ label, children, required }) => (
   <div className="flex flex-col gap-1">
@@ -104,7 +105,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
 
       // 2. Call Bulk Publish Endpoint
       const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || localStorage.getItem("token") || "";
-      const res = await fetch("http://127.0.0.1:8002/bol/drafts/bulk-publish", {
+      const res = await fetch(`${API_URL}/bol/drafts/bulk-publish`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
