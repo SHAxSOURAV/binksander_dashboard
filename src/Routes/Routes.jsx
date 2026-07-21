@@ -16,6 +16,8 @@ import Orders from "../Pages/orders/Orders";
 import AmazonOperations from "../Pages/amazonOperations/AmazonOperations";
 import RimcoOperations from "../Pages/rimcoOperations/RimcoOperations";
 import BolListing from "../Pages/bolListing/BolListing";
+import AmazonAffiliateAccounts from "../Pages/amazonAffiliateAccounts/AmazonAffiliateAccounts";
+import AmazonLookup from "../Pages/amazonLookup/AmazonLookup";
 
 const router = createBrowserRouter([
   {
@@ -33,6 +35,8 @@ const router = createBrowserRouter([
       { path: "/orders", element: <Orders /> },
       { path: "/amazon-operations", element: <AmazonOperations /> },
       { path: "/rimco-operations", element: <RimcoOperations /> },
+      { path: "/amazon-affiliates", element: <AmazonAffiliateAccounts /> },
+      { path: "/amazon-lookup", element: <AmazonLookup /> },
     ],
   },
   { path: "/login", element: <Login /> },
