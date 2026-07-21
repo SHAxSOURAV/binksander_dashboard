@@ -20,6 +20,16 @@ const menuItems = [
     icon: <TbBrandAmazon size={20} />,
   },
   {
+    name: "Amazon Lookup",
+    link: "/amazon-lookup",
+    icon: <TbBrandAmazon size={20} />,
+  },
+  {
+    name: "Affiliate Config",
+    link: "/amazon-affiliates",
+    icon: <TbBrandAmazon size={20} />,
+  },
+  {
     name: "Rimco Logistics",
     link: "/rimco-operations",
     icon: <LuTruck size={20} />,
