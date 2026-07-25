@@ -37,12 +37,20 @@ const ProcessPoller = ({ processId }) => {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
+const DATE_FILTER_OPTIONS = [
+  { key: "today", label: "Today" },
+  { key: "tomorrow", label: "Tomorrow" },
+  { key: "last_7_days", label: "Last 7 Days" },
+  { key: "last_30_days", label: "Last 30 Days" },
+];
+
 const Products = () => {
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || "";
   const [view, setView] = useState("grid");
   const [search, setSearch] = useState(urlSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
+  const [syncDateRange, setSyncDateRange] = useState("today");
   const [page, setPage] = useState(1);
   // Remember the user's chosen page size across sessions.
   const [limit, setLimit] = useState(() => {
@@ -65,7 +73,7 @@ const Products = () => {
   const [columns, setColumns] = useState({
     serial: false, asin: false, ean: true, title: false, sheetTitle: true, category: true,
     purchasePrice: false, price: true, delivery: false,
-    sheetSource: false, ratings: false, stock: true, status: true, action: true, publishAction: true
+    sheetSource: false, ratings: false, stock: true, status: false, action: true, publishAction: true
   });
 
   // Adopt a search term coming from the URL (e.g. the global navbar search).
@@ -92,10 +100,14 @@ const Products = () => {
 
   const [pollingInterval, setPollingInterval] = useState(0);
 
+  const titleSource = (!columns.title && columns.sheetTitle) ? "sheet" : "amazon";
+
   const { data, isLoading, isFetching, isError } = useGetProductsQuery({
     page,
     limit,
     search: debouncedSearch,
+    sync_date_range: syncDateRange || undefined,
+    title_source: titleSource,
     sortBy,
     sortOrder,
     ...activeFilters
@@ -104,7 +116,11 @@ const Products = () => {
   });
 
   useEffect(() => {
-    if (data?.items?.some(p => p.publishStatus === 'processing')) {
+    const hasProcessing = data?.items?.some(p => p.publishStatus === 'processing');
+    const hasPendingScrape = data?.items?.some(p => p.scrapePending);
+    if (hasPendingScrape) {
+      setPollingInterval(4000);
+    } else if (hasProcessing) {
       setPollingInterval(10000);
     } else {
       setPollingInterval(0);
@@ -296,6 +312,27 @@ const Products = () => {
           </div>
         </div>
 
+        {/* Sync Date Range Filter Bar */}
+        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100">
+          <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Synced:</span>
+          {DATE_FILTER_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                setSyncDateRange(prev => (prev === opt.key ? "" : opt.key));
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-xs ${
+                syncDateRange === opt.key
+                  ? "bg-brand text-white shadow-sm font-semibold"
+                  : "bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* Connect inventory banner */}
         {total > 0 ? (
           <div className="w-full flex items-center bg-[#f7f9fd] border border-blue-50/50 rounded-xl px-5 py-4 mb-5 text-left">
@@ -384,9 +421,9 @@ const Products = () => {
                         {p.status}
                       </span>
                     )}
-                    {columns.stock && p.stock && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-white/90 backdrop-blur-md text-gray-700 border border-gray-100">
-                        {p.stock}
+                    {columns.stock && (p.bolStock != null || p.stock) && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-emerald-50 text-emerald-700 border border-emerald-200/60 backdrop-blur-md">
+                        {p.bolStock != null ? `${p.bolStock} in stock` : (p.stock?.toLowerCase() === 'yes' ? 'In Stock' : p.stock)}
                       </span>
                     )}
                   </div>
@@ -424,8 +461,8 @@ const Products = () => {
                     </div>
                   )}
                   {p.scrapePending ? (
-                    <p className="text-[11px] text-amber-500 mb-2 font-medium">
-                      Tap to load details
+                    <p className="text-[11px] text-brand mb-2 font-medium flex items-center gap-1.5 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand"></span> Auto-loading details…
                     </p>
                   ) : (
                     <div className="flex items-center justify-between mb-2">
@@ -612,7 +649,9 @@ const Products = () => {
                         <FaStar className="text-yellow-400" size={11} /> {p.rating || "—"}
                       </span>
                     </td>}
-                    {columns.stock && <td className="py-3 px-2 text-gray-500">{p.stock || "—"}</td>}
+                    {columns.stock && <td className="py-3 px-2 text-gray-700 font-medium">
+                      {p.bolStock != null ? `${p.bolStock} in stock` : (p.stock?.toLowerCase() === 'yes' ? 'In Stock' : (p.stock || "—"))}
+                    </td>}
                     {columns.status && <td className="py-3 px-2">
                       <span className={`px-2 py-1 rounded text-[10px] ${p.status?.toLowerCase() === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                         {p.status || "—"}
