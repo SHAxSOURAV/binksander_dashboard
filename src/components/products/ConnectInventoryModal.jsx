@@ -4,13 +4,13 @@ import toast from "react-hot-toast";
 import { FiLink2, FiSearch } from "react-icons/fi";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { FcGoogle } from "react-icons/fc";
+import { useGoogleLogin } from "@react-oauth/google";
 import {
   useSyncInventoryMutation,
   useImportOauthMutation,
 } from "../../Redux/productApis";
+import { useExchangeGoogleCodeMutation } from "../../Redux/connectionApis";
 import {
-  requestGoogleAccessToken,
-  listSpreadsheets,
   spreadsheetUrl,
 } from "../../utils/googleDrive";
 
@@ -19,6 +19,7 @@ const ConnectInventoryModal = ({ open, onClose }) => {
 
   // Google OAuth flow state
   const [token, setToken] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
   const [sheets, setSheets] = useState([]);
   const [loadingSheets, setLoadingSheets] = useState(false);
   const [search, setSearch] = useState("");
@@ -30,12 +31,14 @@ const ConnectInventoryModal = ({ open, onClose }) => {
   const [syncInventory, { isLoading: importingPublic }] =
     useSyncInventoryMutation();
   const [importOauth, { isLoading: importingOauth }] = useImportOauthMutation();
+  const [exchangeGoogleCode] = useExchangeGoogleCodeMutation();
 
   // Reset everything when the modal closes.
   useEffect(() => {
     if (!open) {
       setMode("google");
       setToken("");
+      setRefreshToken("");
       setSheets([]);
       setSearch("");
       setSheetUrl("");
@@ -43,28 +46,40 @@ const ConnectInventoryModal = ({ open, onClose }) => {
     }
   }, [open]);
 
-  const handleGoogleConnect = async () => {
-    setLoadingSheets(true);
-    try {
-      const accessToken = await requestGoogleAccessToken();
-      setToken(accessToken);
-      const files = await listSpreadsheets(accessToken);
-      setSheets(files);
-      if (files.length === 0) {
-        toast("No spreadsheets found in this Google account.", { icon: "📄" });
+  const loginWithGoogle = useGoogleLogin({
+    flow: "auth-code",
+    prompt: "consent",
+    onSuccess: async (codeResponse) => {
+      setLoadingSheets(true);
+      try {
+        const res = await exchangeGoogleCode({
+          code: codeResponse.code,
+          redirect_uri: "postmessage",
+        }).unwrap();
+        setToken(res.access_token);
+        setRefreshToken(res.refresh_token);
+        setSheets(res.sheets || []);
+        if (!res.sheets || res.sheets.length === 0) {
+          toast("No spreadsheets found in this Google account.", { icon: "📄" });
+        }
+      } catch (err) {
+        toast.error(err?.data?.detail || "Google sign-in failed");
+      } finally {
+        setLoadingSheets(false);
       }
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(err?.message || "Google sign-in failed");
-    } finally {
-      setLoadingSheets(false);
-    }
-  };
+    },
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+  });
 
   const handleSelectSheet = async (file) => {
     try {
       const res = await importOauth({
         spreadsheet_url: spreadsheetUrl(file.id),
         access_token: token,
+        refresh_token: refreshToken,
       }).unwrap();
       toast.success(res?.message || `Connected “${file.name}”.`);
       onClose();
@@ -133,7 +148,7 @@ const ConnectInventoryModal = ({ open, onClose }) => {
           (sheets.length === 0 ? (
             <div className="text-center py-4">
               <button
-                onClick={handleGoogleConnect}
+                onClick={() => loginWithGoogle()}
                 disabled={loadingSheets}
                 className="inline-flex items-center gap-3 h-11 px-6 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
               >

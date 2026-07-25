@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate } from "antd";
+import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate, Tooltip } from "antd";
 import { FiSearch, FiPlus, FiLink, FiFilter, FiEye, FiCopy } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import { FaStar } from "react-icons/fa";
@@ -50,7 +50,7 @@ const Products = () => {
   const [view, setView] = useState("grid");
   const [search, setSearch] = useState(urlSearch);
   const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
-  const [syncDateRange, setSyncDateRange] = useState("today");
+  const [syncDateRange, setSyncDateRange] = useState("");
   const [page, setPage] = useState(1);
   // Remember the user's chosen page size across sessions.
   const [limit, setLimit] = useState(() => {
@@ -73,7 +73,7 @@ const Products = () => {
   const [columns, setColumns] = useState({
     serial: false, asin: false, ean: true, title: false, sheetTitle: true, category: true,
     purchasePrice: false, price: true, delivery: false,
-    sheetSource: false, ratings: false, stock: true, status: false, action: true, publishAction: true
+    sheetSource: false, ratings: false, stock: true, status: false, action: true, publishAction: false
   });
 
   // Adopt a search term coming from the URL (e.g. the global navbar search).
@@ -479,6 +479,18 @@ const Products = () => {
                             </span>
                             <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
                           </div>
+                        ) : p.publishStatus === 'failed' ? (
+                          <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelected(p);
+                              }}
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                            >
+                              Failed
+                            </button>
+                          </Tooltip>
                         ) : (
                           <button
                             onClick={(e) => {
@@ -665,6 +677,18 @@ const Products = () => {
                           </span>
                           <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
                         </div>
+                      ) : p.publishStatus === 'failed' ? (
+                        <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelected(p);
+                            }}
+                            className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                          >
+                            Failed
+                          </button>
+                        </Tooltip>
                       ) : (
                         <button
                           onClick={(e) => {
