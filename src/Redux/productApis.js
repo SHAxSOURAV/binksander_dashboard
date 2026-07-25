@@ -36,6 +36,7 @@ const mapItem = (it, i) => ({
   syncedAt: it.synced_at || "",
   published: false,
   publishStatus: it.publish_status || "unpublished",
+  publishError: it.publish_error || "",
   description: it["Product notes"] || "",
   scrapePending: !!it.scrape_pending,
   bol_offer_id: it.bol_offer_id || "",
