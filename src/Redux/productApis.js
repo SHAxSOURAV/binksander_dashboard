@@ -17,8 +17,8 @@ const mapItem = (it, i) => ({
   brand: it.brand || "",
   category: it["Product category"] || it["Product notes"] || it.country || "—",
   subcategory: "",
-  amazonPrice: parsePrice(it.product_price),
-  price: parsePrice(it.PRICE) || parsePrice(it.product_price),
+  amazonPrice: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
+  price: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
   purchasePrice: parsePrice(it["Purchase price"]),
   deliveryTime: it["DELIVERY TIME"] || "",
   rating: parseFloat(it.product_star_rating) || 0,
@@ -33,6 +33,7 @@ const mapItem = (it, i) => ({
   sheetId: it.sheet_id || "",
   isValidAmazon: !!it.is_valid_amazon,
   lastUpdated: "",
+  syncedAt: it.synced_at || "",
   published: false,
   publishStatus: it.publish_status || "unpublished",
   description: it["Product notes"] || "",
@@ -53,6 +54,8 @@ const productApis = baseApis.injectEndpoints({
         page = 1,
         limit = 50,
         search = "",
+        sync_date_range,
+        title_source,
         filter_status,
         filter_stock,
         filter_category,
@@ -71,6 +74,8 @@ const productApis = baseApis.injectEndpoints({
         query.append("page", page);
         query.append("limit", limit);
         if (search) query.append("search", search);
+        if (sync_date_range) query.append("sync_date_range", sync_date_range);
+        if (title_source) query.append("title_source", title_source);
         if (filter_status) query.append("filter_status", filter_status);
         if (filter_stock) query.append("filter_stock", filter_stock);
         if (filter_category) query.append("filter_category", filter_category);

@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useGetBolOffersQuery } from "../../Redux/productApis";
-import { Empty, Spin, Tag, Input, Drawer, Select, Button, Slider, Rate } from "antd";
-import { LuRefreshCw } from "react-icons/lu";
-import { FiSearch, FiFilter } from "react-icons/fi";
+import { Empty, Spin, Tag, Input, Drawer, Select, Button, Slider, Rate, Popover, Checkbox } from "antd";
+import { LuRefreshCw, LuUnplug } from "react-icons/lu";
+import { FiSearch, FiFilter, FiEye, FiLink, FiCopy } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
+import toast from "react-hot-toast";
 import Pagination from "../../components/shared/Pagination";
 import BolProductImage from "./BolProductImage";
 import OfferDetailsModal from "./components/OfferDetailsModal";
 import OfferActionMenu from "./components/OfferActionMenu";
 import { useUI } from "../../Provider/ContextProvider";
-import { LuUnplug } from "react-icons/lu";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
+
 const BolListing = () => {
   const [view, setView] = useState("grid");
   const [page, setPage] = useState(1);
@@ -19,11 +20,17 @@ const BolListing = () => {
   const [limit, setLimit] = useState(20);
   const [sort, setSort] = useState(null);
   
+  const [filterBrand, setFilterBrand] = useState("");
   const [filters, setFilters] = useState({});
   const [activeFilters, setActiveFilters] = useState({});
   const [filterOpen, setFilterOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState(null);
   const { openSettings, activeBolAccountId } = useUI();
+
+  const [columns, setColumns] = useState({
+    ean: true, title: true, condition: true, price: true, stock: true, status: false, action: true
+  });
 
   const { data: bolCreds = [], isLoading: credsLoading } = useGetBolCredentialsQuery();
   const activeCred = bolCreds.find(c => c.account_id === activeBolAccountId);
@@ -50,11 +57,13 @@ const BolListing = () => {
     page: page,
     limit: limit,
     search: debouncedSearch,
+    filter_brand: filterBrand || undefined,
     sort: sort,
     ...activeFilters
   });
 
   const offers = data?.data || [];
+  const brands = data?.brands || [];
   const totalItems = data?.total_items || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
 
@@ -64,72 +73,149 @@ const BolListing = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl p-5 card-shadow">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-        <h2 className="text-lg font-semibold text-gray-700">
-          Bol.com Offers
-        </h2>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            prefix={<FiSearch className="text-gray-400 mr-1" />}
-            placeholder="Search by Title or EAN..."
-            className="h-10 rounded-lg w-full sm:w-64"
-          />
-          <Select
-            placeholder="Sort by..."
-            value={sort}
-            onChange={(val) => { setSort(val); setPage(1); }}
-            allowClear
-            className="w-44"
-            style={{ height: '40px' }}
-            options={[
-              { value: "price_asc", label: "Price: Low to High" },
-              { value: "price_desc", label: "Price: High to Low" },
-              { value: "stock_desc", label: "Stock: High to Low" },
-              { value: "stock_asc", label: "Stock: Low to High" },
-              { value: "title_asc", label: "Title: A to Z" },
-              { value: "title_desc", label: "Title: Z to A" },
-            ]}
-          />
-          <button
-            onClick={refetch}
-            title="Refresh from Bol.com"
-            className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50"
-          >
-            <LuRefreshCw size={16} className={isFetching ? "animate-spin" : ""} />
-          </button>
-          
-          <button
-            onClick={() => setFilterOpen(true)}
-            title="Filter offers"
-            className={`w-10 h-10 rounded-lg border flex items-center justify-center ${Object.keys(activeFilters).length ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:text-brand'}`}
-          >
-            <FiFilter size={16} />
-          </button>
-          
-          <div className="flex bg-gray-100 rounded-lg p-1">
+    <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
+      <div className="bg-white rounded-2xl p-5 card-shadow">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <h2 className="text-lg font-semibold text-gray-700">
+            {totalItems} Offers
+          </h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              prefix={<FiSearch className="text-gray-400 mr-1" />}
+              placeholder="Search by Title or EAN..."
+              className="h-10 rounded-lg w-full sm:w-64"
+            />
             <button
-              onClick={() => setView("grid")}
-              className={`w-8 h-8 rounded-md flex items-center justify-center ${
-                view === "grid" ? "bg-brand text-white" : "text-gray-400"
-              }`}
+              onClick={refetch}
+              title="Refresh from Bol.com"
+              className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50"
             >
-              <BsGrid size={15} />
+              <LuRefreshCw size={16} className={isFetching ? "animate-spin" : ""} />
             </button>
+
+            <Popover
+              content={
+                <div className="flex flex-col gap-2 p-2">
+                  {Object.keys(columns)
+                    .filter(col => col !== 'action')
+                    .map(col => (
+                      <Checkbox
+                        key={col}
+                        checked={columns[col]}
+                        onChange={e => setColumns(prev => ({ ...prev, [col]: e.target.checked }))}
+                      >
+                        {col.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                      </Checkbox>
+                    ))}
+                </div>
+              }
+              trigger="click"
+              open={viewOpen}
+              onOpenChange={setViewOpen}
+              placement="bottomRight"
+            >
+              <button
+                title="View columns"
+                className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand"
+              >
+                <FiEye size={16} />
+              </button>
+            </Popover>
+
             <button
-              onClick={() => setView("list")}
-              className={`w-8 h-8 rounded-md flex items-center justify-center ${
-                view === "list" ? "bg-brand text-white" : "text-gray-400"
-              }`}
+              onClick={() => setFilterOpen(true)}
+              title="Filter offers"
+              className={`w-10 h-10 rounded-lg border flex items-center justify-center ${Object.keys(activeFilters).length ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:text-brand'}`}
             >
-              <BsListUl size={16} />
+              <FiFilter size={16} />
             </button>
+
+            <Select
+              placeholder="Sort by..."
+              value={sort}
+              onChange={(val) => { setSort(val); setPage(1); }}
+              allowClear
+              className="w-44 h-10 custom-select"
+              options={[
+                { value: "price_asc", label: "Price: Low to High" },
+                { value: "price_desc", label: "Price: High to Low" },
+                { value: "stock_desc", label: "Stock: High to Low" },
+                { value: "stock_asc", label: "Stock: Low to High" },
+                { value: "title_asc", label: "Title: A to Z" },
+                { value: "title_desc", label: "Title: Z to A" },
+              ]}
+            />
+
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setView("grid")}
+                className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                  view === "grid" ? "bg-brand text-white" : "text-gray-400"
+                }`}
+              >
+                <BsGrid size={15} />
+              </button>
+              <button
+                onClick={() => setView("list")}
+                className={`w-8 h-8 rounded-md flex items-center justify-center ${
+                  view === "list" ? "bg-brand text-white" : "text-gray-400"
+                }`}
+              >
+                <BsListUl size={16} />
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+
+        {/* Dynamic Brand Filter Pill Bar */}
+        {brands.length > 0 && (
+          <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100">
+            <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Brand:</span>
+            <button
+              onClick={() => {
+                setFilterBrand("");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-xs ${
+                !filterBrand
+                  ? "bg-brand text-white shadow-sm font-semibold"
+                  : "bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
+              }`}
+            >
+              All
+            </button>
+            {brands.map((b) => (
+              <button
+                key={b}
+                onClick={() => {
+                  setFilterBrand(prev => (prev === b ? "" : b));
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-xs ${
+                  filterBrand === b
+                    ? "bg-brand text-white shadow-sm font-semibold"
+                    : "bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
+                }`}
+              >
+                {b}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Connected Integration Card Banner */}
+        <div className="flex items-center gap-3 p-3.5 bg-[#f8f9fc] rounded-xl border border-gray-100 mb-5 text-sm">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <FiLink size={16} />
+          </div>
+          <div>
+            <div className="font-semibold text-gray-800">Connected Retailer Account</div>
+            <div className="text-xs text-blue-600 font-medium">Bol.com Retailer API v11</div>
+          </div>
+        </div>
 
       {/* Main Content Area */}
       <div>
@@ -197,21 +283,27 @@ const BolListing = () => {
                 >
                   <div className="bg-[#f8f9fc] rounded-xl h-40 flex items-center justify-center mb-4 overflow-hidden relative group-hover:bg-[#f0f2f8] transition-colors w-full">
                     <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 items-end z-10">
-                      {offer.onHoldByRetailer ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-white/90 text-amber-600 border border-amber-100">
-                          ON HOLD
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-green-100/90 text-green-700">
-                          LIVE
+                      {columns.status && (
+                        offer.onHoldByRetailer ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-white/90 text-amber-600 border border-amber-100">
+                            ON HOLD
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-green-100/90 text-green-700">
+                            LIVE
+                          </span>
+                        )
+                      )}
+                      {columns.stock && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-emerald-50 text-emerald-700 border border-emerald-200/60 backdrop-blur-md">
+                          {offer.stock?.amount || 0} in stock
                         </span>
                       )}
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-white/90 backdrop-blur-md text-gray-700 border border-gray-100">
-                        Stock: {offer.stock?.amount || 0}
-                      </span>
-                      <div className="mt-1">
-                        <OfferActionMenu offer={offer} />
-                      </div>
+                      {columns.action && (
+                        <div className="mt-1" onClick={e => e.stopPropagation()}>
+                          <OfferActionMenu offer={offer} />
+                        </div>
+                      )}
                     </div>
                     <BolProductImage 
                       ean={offer.ean} 
@@ -220,23 +312,31 @@ const BolListing = () => {
                   </div>
                   
                   <div className="flex flex-col flex-grow w-full">
-                    <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-snug mb-1.5" title={offer.store?.productTitle || offer.unknownProductTitle}>
-                      {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
-                    </p>
-                    <div className="mb-2">
-                      <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium truncate max-w-full">
-                        {offer.condition?.category || "NEW"}
+                    {columns.title && (
+                      <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-snug mb-1.5" title={offer.store?.productTitle || offer.unknownProductTitle}>
+                        {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
+                      </p>
+                    )}
+                    {columns.condition && (
+                      <div className="mb-2">
+                        <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium truncate max-w-full">
+                          {offer.condition?.category || "NEW"}
+                        </span>
+                      </div>
+                    )}
+                    {columns.price && (
+                      <p className="text-base font-bold text-brand mb-2">
+                        {offer.pricing?.bundlePrices?.[0]?.unitPrice ? `€${offer.pricing.bundlePrices[0].unitPrice.toFixed(2)}` : "—"}
+                      </p>
+                    )}
+                  </div>
+                  {columns.ean && (
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50 w-full">
+                      <span className="text-[10px] text-gray-400 font-mono truncate bg-gray-50 px-1.5 py-0.5 rounded">
+                        EAN: {offer.ean}
                       </span>
                     </div>
-                    <p className="text-base font-bold text-brand mb-2">
-                      {offer.pricing?.bundlePrices?.[0]?.unitPrice ? `€${offer.pricing.bundlePrices[0].unitPrice.toFixed(2)}` : "—"}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50 w-full">
-                    <span className="text-[10px] text-gray-400 font-mono truncate bg-gray-50 px-1.5 py-0.5 rounded">
-                      EAN: {offer.ean}
-                    </span>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -246,13 +346,13 @@ const BolListing = () => {
               <thead>
                 <tr className="text-left text-xs text-gray-400 bg-[#f9fafc] [&>th]:font-medium">
                   <th className="py-3 px-2">#</th>
-                  <th className="py-3 px-2">Product</th>
-                  <th className="py-3 px-2">EAN</th>
-                  <th className="py-3 px-2">Price</th>
-                  <th className="py-3 px-2">Stock</th>
-                  <th className="py-3 px-2">Condition</th>
-                  <th className="py-3 px-2">Status</th>
-                  <th className="py-3 px-2 text-right">Actions</th>
+                  {columns.title && <th className="py-3 px-2">Product</th>}
+                  {columns.ean && <th className="py-3 px-2">EAN</th>}
+                  {columns.price && <th className="py-3 px-2">Price</th>}
+                  {columns.stock && <th className="py-3 px-2">Stock</th>}
+                  {columns.condition && <th className="py-3 px-2">Condition</th>}
+                  {columns.status && <th className="py-3 px-2">Status</th>}
+                  {columns.action && <th className="py-3 px-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -265,40 +365,54 @@ const BolListing = () => {
                     <td className="py-3 px-2 text-gray-500">
                       {(page - 1) * limit + index + 1}
                     </td>
-                    <td className="py-3 px-2 text-gray-700">
-                      <div className="flex items-center gap-2">
-                        <BolProductImage ean={offer.ean} className="w-8 h-8 rounded object-cover" />
-                        <span className="text-gray-700 line-clamp-1 max-w-[200px]" title={offer.store?.productTitle || offer.unknownProductTitle}>
-                          {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
+                    {columns.title && (
+                      <td className="py-3 px-2 text-gray-700">
+                        <div className="flex items-center gap-2">
+                          <BolProductImage ean={offer.ean} className="w-8 h-8 rounded object-cover" />
+                          <span className="text-gray-700 font-semibold line-clamp-1 max-w-[200px]" title={offer.store?.productTitle || offer.unknownProductTitle}>
+                            {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
+                          </span>
+                        </div>
+                      </td>
+                    )}
+                    {columns.ean && (
+                      <td className="py-3 px-2 text-gray-500 font-mono">
+                        {offer.ean}
+                      </td>
+                    )}
+                    {columns.price && (
+                      <td className="py-3 px-2 font-semibold text-brand">
+                        €{offer.pricing?.bundlePrices?.[0]?.unitPrice?.toFixed(2) || "—"}
+                      </td>
+                    )}
+                    {columns.stock && (
+                      <td className="py-3 px-2 text-gray-700 font-medium">
+                        {offer.stock?.amount || 0} in stock
+                      </td>
+                    )}
+                    {columns.condition && (
+                      <td className="py-3 px-2">
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-medium">
+                          {offer.condition?.category || "NEW"}
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-2 text-gray-500">
-                      {offer.ean}
-                    </td>
-                    <td className="py-3 px-2 font-semibold text-brand">
-                      €{offer.pricing?.bundlePrices?.[0]?.unitPrice?.toFixed(2) || "N/A"}
-                    </td>
-                    <td className="py-3 px-2">
-                      {offer.stock?.amount || 0}
-                    </td>
-                    <td className="py-3 px-2">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-medium">
-                        {offer.condition?.category || "NEW"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2">
-                      {offer.onHoldByRetailer ? (
-                         <Tag color="warning" className="border-0 m-0">ON HOLD</Tag>
-                      ) : (
-                         <Tag color="processing" className="border-0 m-0">LIVE</Tag>
-                      )}
-                    </td>
-                    <td className="py-3 px-2 text-right">
-                      <div className="flex justify-end pr-2">
-                        <OfferActionMenu offer={offer} />
-                      </div>
-                    </td>
+                      </td>
+                    )}
+                    {columns.status && (
+                      <td className="py-3 px-2">
+                        {offer.onHoldByRetailer ? (
+                           <Tag color="warning" className="border-0 m-0">ON HOLD</Tag>
+                        ) : (
+                           <Tag color="processing" className="border-0 m-0">LIVE</Tag>
+                        )}
+                      </td>
+                    )}
+                    {columns.action && (
+                      <td className="py-3 px-2 text-right" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-end pr-2">
+                          <OfferActionMenu offer={offer} />
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -403,6 +517,7 @@ const BolListing = () => {
         offer={selectedOffer} 
         onClose={() => setSelectedOffer(null)} 
       />
+    </div>
     </div>
   );
 };
