@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const AmazonAffiliateAccounts = () => {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     name: "",
     associate_tag: "",
-    region: "com",
+    region: "nl",
     app_id: "",
     client_secret: "",
   });
 
   const fetchAccounts = async () => {
     try {
-      const response = await fetch("http://localhost:8002/users/amazon-affiliate-accounts", {
+      const response = await fetch(`${API_BASE_URL}/users/amazon-affiliate-accounts`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -41,7 +43,7 @@ const AmazonAffiliateAccounts = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch("http://localhost:8002/users/amazon-affiliate-accounts", {
+      const response = await fetch(`${API_BASE_URL}/users/amazon-affiliate-accounts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -52,7 +54,7 @@ const AmazonAffiliateAccounts = () => {
 
       if (response.ok) {
         toast.success("Account added successfully");
-        setFormData({ name: "", associate_tag: "", region: "com", app_id: "", client_secret: "" });
+        setFormData({ name: "", associate_tag: "", region: "nl", app_id: "", client_secret: "" });
         fetchAccounts();
       } else {
         const errorData = await response.json();
@@ -66,7 +68,7 @@ const AmazonAffiliateAccounts = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this account?")) return;
     try {
-      const response = await fetch(`http://localhost:8002/users/amazon-affiliate-accounts/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/users/amazon-affiliate-accounts/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
