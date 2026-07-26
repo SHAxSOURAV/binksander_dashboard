@@ -199,6 +199,7 @@ const SettingsModal = () => {
         account_name: values.account_name,
         client_id: values.client_id,
         client_secret: values.client_secret,
+        boip_code: values.boip_code,
       }).unwrap();
       toast.success("Bol.com credentials saved");
       setBolEditOpen(false);
@@ -675,9 +676,14 @@ const SettingsModal = () => {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-400">
-                                Client ID: <span className="font-mono text-gray-500">{cred.client_id || "—"}</span>
-                              </p>
+                              <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
+                                <p>Client ID: <span className="font-mono text-gray-500">{cred.client_id || "—"}</span></p>
+                                {cred.boip_code && (
+                                  <p className="bg-brand/5 border border-brand/20 text-brand px-2 py-0.5 rounded font-mono text-[11px] font-semibold">
+                                    BOIP: {cred.boip_code}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
@@ -687,6 +693,7 @@ const SettingsModal = () => {
                                   account_id: cred.account_id,
                                   account_name: cred.account_name,
                                   client_id: cred.client_id,
+                                  boip_code: cred.boip_code,
                                 });
                                 setBolEditOpen(true);
                               }}
@@ -744,6 +751,14 @@ const SettingsModal = () => {
                       className="h-10 rounded-lg"
                       placeholder="Bol.com Client Secret"
                     />
+                  </Form.Item>
+                  <Form.Item
+                    name="boip_code"
+                    label="BOIP Brand Authorization Code"
+                    tooltip="Benelux Office for Intellectual Property reference code used for Bol.com brand authorization & duplicate checks."
+                    className="mb-3"
+                  >
+                    <Input className="h-10 rounded-lg font-mono" placeholder="e.g. PJS_J23DAPH3" />
                   </Form.Item>
                   <div className="flex justify-end gap-2">
                     <button

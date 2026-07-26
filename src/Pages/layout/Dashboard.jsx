@@ -6,6 +6,7 @@ import { UIProvider } from "../../Provider/ContextProvider";
 import SettingsModal from "../../components/settings/SettingsModal";
 import ConfirmLogout from "../../components/shared/ConfirmLogout";
 import ContactSupportModal from "../../components/support/ContactSupportModal";
+import ComponentErrorBoundary from "../../components/shared/ComponentErrorBoundary";
 import { useDispatch } from "react-redux";
 import { baseApis } from "../../Redux/main/baseApis";
 import { getToken } from "../../utils/session";
@@ -59,7 +60,9 @@ const Dashboard = () => {
         <div className="flex-1 flex flex-col min-w-0 px-3 sm:px-5 py-4">
           <Navbar onMenuClick={() => setMobileOpen(true)} />
           <main className="flex-1 overflow-y-auto thin-scrollbar pb-4">
-            <Outlet />
+            <ComponentErrorBoundary>
+              <Outlet />
+            </ComponentErrorBoundary>
           </main>
         </div>
 
