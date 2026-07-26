@@ -30,6 +30,12 @@ const menuItems = [
     icon: <TbBrandAmazon size={20} />,
   },
   {
+    name: "Amazon Return Dashboard",
+    link: "https://amazon-dashbaord.vercel.app",
+    icon: <TbBrandAmazon size={20} />,
+    isExternal: true,
+  },
+  {
     name: "Rimco Logistics",
     link: "/rimco-operations",
     icon: <LuTruck size={20} />,
@@ -50,24 +56,38 @@ const Sidebar = ({ onNavigate }) => {
         <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-300 px-4 mb-2">
           Menu
         </p>
-        {menuItems.map((item, index) => (
-          <NavLink
-            to={item.link}
-            key={index}
-            end={item.end}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? "text-white bg-brand shadow-[0_8px_20px_rgba(27,23,224,0.28)]"
-                  : "text-gray-500 hover:bg-[#f0f0fd] hover:text-brand"
-              }`
-            }
-          >
-            <span>{item.icon}</span>
-            <span>{item.name}</span>
-          </NavLink>
-        ))}
+        {menuItems.map((item, index) =>
+          item.isExternal ? (
+            <a
+              href={item.link}
+              key={index}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onNavigate}
+              className="group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium text-gray-500 hover:bg-[#f0f0fd] hover:text-brand transition-all duration-150"
+            >
+              <span>{item.icon}</span>
+              <span>{item.name}</span>
+            </a>
+          ) : (
+            <NavLink
+              to={item.link}
+              key={index}
+              end={item.end}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium transition-all duration-150 ${
+                  isActive
+                    ? "text-white bg-brand shadow-[0_8px_20px_rgba(27,23,224,0.28)]"
+                    : "text-gray-500 hover:bg-[#f0f0fd] hover:text-brand"
+                }`
+              }
+            >
+              <span>{item.icon}</span>
+              <span>{item.name}</span>
+            </NavLink>
+          )
+        )}
       </nav>
 
       {/* Footer card */}
