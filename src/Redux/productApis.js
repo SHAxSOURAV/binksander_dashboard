@@ -7,6 +7,16 @@ const parsePrice = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const parseStockQuantity = (it) => {
+  if (typeof it.stock_quantity === "number") return it.stock_quantity;
+  if (!it.STOCK) return null;
+  const str = String(it.STOCK).trim().toLowerCase();
+  if (str.includes("out of stock") || str.includes("unavailable") || str.includes("cant sell")) return 0;
+  const match = str.match(/\d+/);
+  if (match) return parseInt(match[0], 10);
+  return null;
+};
+
 // Map a backend scrape-items row into the shape the product UI expects.
 const mapItem = (it, i) => ({
   id: it.asin || `item-${i}`,
@@ -27,6 +37,9 @@ const mapItem = (it, i) => ({
   productUrl: it.product_url || "",
   ean: it.spreadsheet_ean || "",
   stock: it.STOCK || "",
+  stockQuantity: parseStockQuantity(it),
+  stockSellerName: it.stock_seller_name || "",
+  stockSyncedAt: it.stock_synced_at || "",
   status: it.STATUS || "",
   spreadsheetUrl: it.spreadsheet_url || "",
   spreadsheetTitle: it.spreadsheet_title || "",
@@ -229,6 +242,42 @@ const productApis = baseApis.injectEndpoints({
       // Do NOT invalidate "Drafts" here so we don't reset DraftEditModal's unsaved form state.
     }),
 
+    // POST /bol/drafts/{id}/revert-image
+    revertSingleImage: builder.mutation({
+      query: ({ draftId, bolAccountId, photoIndex }) => ({
+        url: `/bol/drafts/${draftId}/revert-image`,
+        method: "POST",
+        headers: bolAccountId ? { "X-Bol-Account-Id": bolAccountId } : {},
+        body: { photo_index: photoIndex }
+      }),
+    }),
+
+    // POST /spreadsheet/resync-stock
+    resyncStock: builder.mutation({
+      query: ({ asin, country = "NL" }) => ({
+        url: `/spreadsheet/resync-stock`,
+        method: "POST",
+        body: { asin, country }
+      }),
+      invalidatesTags: ["Products", "StockAlerts"],
+    }),
+
+    // GET /spreadsheet/low-stock-alerts
+    getLowStockAlerts: builder.query({
+      query: () => `/spreadsheet/low-stock-alerts`,
+      providesTags: ["StockAlerts"],
+    }),
+
+    // POST /spreadsheet/low-stock-alerts/dismiss
+    dismissLowStockAlert: builder.mutation({
+      query: ({ asin }) => ({
+        url: `/spreadsheet/low-stock-alerts/dismiss`,
+        method: "POST",
+        body: { asin }
+      }),
+      invalidatesTags: ["StockAlerts"],
+    }),
+
     // POST /bol/drafts/{id}/publish
     publishDraft: builder.mutation({
       query: ({ draftId, bolAccountId }) => ({
@@ -409,6 +458,10 @@ export const {
   useCreateDraftFromAmazonMutation,
   useTranslateDraftImagesMutation,
   useTranslateSingleImageMutation,
+  useRevertSingleImageMutation,
+  useResyncStockMutation,
+  useGetLowStockAlertsQuery,
+  useDismissLowStockAlertMutation,
   usePublishDraftMutation,
   useUpdateDraftMutation,
   useGetDraftsQuery,

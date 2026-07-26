@@ -6,6 +6,7 @@ import {
   useUpdateDraftMutation,
   usePublishDraftMutation,
   useTranslateSingleImageMutation,
+  useRevertSingleImageMutation,
 } from "../../Redux/productApis";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
@@ -26,6 +27,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
   const [selectedPhotos, setSelectedPhotos] = useState([]);
+  const [originalPhotos, setOriginalPhotos] = useState([]);
 
   const { data: draftRes, isFetching: loadingDraft } = useGetDraftQuery(draftId, {
     skip: !draftId,
@@ -37,6 +39,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
   const [updateDraft, { isLoading: updating }] = useUpdateDraftMutation();
   const [publishDraft, { isLoading: publishing }] = usePublishDraftMutation();
   const [translateSingleImage] = useTranslateSingleImageMutation();
+  const [revertSingleImage] = useRevertSingleImageMutation();
 
   const [form, setForm] = useState({
     title: "",
@@ -54,6 +57,14 @@ const DraftEditModal = ({ draftId, onClose }) => {
 
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [translatingIndex, setTranslatingIndex] = useState(null);
+  const [revertingIndex, setRevertingIndex] = useState(null);
+
+  const isPhotoTranslated = (index, url) => {
+    if (!url) return false;
+    if (originalPhotos[index] && originalPhotos[index] !== url) return true;
+    if (typeof url === 'string' && url.includes("translated-images")) return true;
+    return false;
+  };
 
   const handleTranslateImage = async (index, e) => {
     e.stopPropagation();
@@ -71,6 +82,15 @@ const DraftEditModal = ({ draftId, onClose }) => {
           newPhotos[index] = res.translated_url;
           return { ...prev, photos: newPhotos };
         });
+        if (res.original_photos) {
+          setOriginalPhotos(res.original_photos);
+        } else if (res.original_url) {
+          setOriginalPhotos(prev => {
+            const updated = [...prev];
+            updated[index] = res.original_url;
+            return updated;
+          });
+        }
         toast.success("Image translated successfully!");
       }
     } catch (err) {
@@ -79,6 +99,32 @@ const DraftEditModal = ({ draftId, onClose }) => {
       setTranslatingIndex(null);
     }
   };
+
+  const handleRevertImage = async (index, e) => {
+    e.stopPropagation();
+    setRevertingIndex(index);
+    try {
+      const res = await revertSingleImage({
+        draftId,
+        bolAccountId: selectedAccount,
+        photoIndex: index
+      }).unwrap();
+
+      if (res.success && res.reverted_url) {
+        setForm(prev => {
+          const newPhotos = [...prev.photos];
+          newPhotos[index] = res.reverted_url;
+          return { ...prev, photos: newPhotos };
+        });
+        toast.success("Image reverted to original!");
+      }
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to revert image.");
+    } finally {
+      setRevertingIndex(null);
+    }
+  };
+
   useEffect(() => {
     if (draft) {
       setForm({
@@ -93,6 +139,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
         attributes: draft.attributes || {},
         photos: draft.photos || [],
       });
+      setOriginalPhotos(draft.original_photos || draft.photos || []);
       if (draft.photos?.length > 0) {
         setSelectedPhotos(draft.photos.map((_, i) => i));
       } else {
@@ -383,31 +430,72 @@ const DraftEditModal = ({ draftId, onClose }) => {
                       {form.photos?.length > 0 ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                           {form.photos.map((src, i) => (
-                            <div key={i} className="relative aspect-square bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm flex items-center justify-center p-2 group">
-                               {translatingIndex === i ? (
-                                 <div className="absolute inset-0 bg-white/70 z-20 flex flex-col items-center justify-center">
+                            <div 
+                              key={i} 
+                              className={`relative aspect-square bg-white border rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center p-2 group ${selectedPhotos.includes(i) ? 'border-brand ring-2 ring-brand/10' : 'border-slate-200/80 hover:border-slate-300'}`}
+                            >
+                               {translatingIndex === i || revertingIndex === i ? (
+                                 <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
                                    <Spin size="small" />
-                                   <span className="text-[10px] text-brand font-semibold mt-2">Translating...</span>
+                                   <span className="text-[11px] text-brand font-semibold mt-2">
+                                     {revertingIndex === i ? "Reverting..." : "Translating..."}
+                                   </span>
                                  </div>
                                ) : null}
                                <Image src={src} alt={`Product ${i+1}`} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                               <div className={`absolute inset-0 transition-all duration-200 pointer-events-none ${selectedPhotos.includes(i) ? 'bg-transparent' : 'bg-black/40'}`}></div>
                                
-                               {/* Translate Button */}
-                               <div 
-                                 title="Translate to Dutch"
-                                 className="absolute top-2 left-2 px-2 py-1 bg-white/90 backdrop-blur-sm border border-gray-200 rounded text-[10px] font-bold text-gray-600 shadow-sm cursor-pointer z-10 hover:bg-brand hover:text-white hover:border-brand transition-all flex items-center gap-1 opacity-0 group-hover:opacity-100"
-                                 onClick={(e) => handleTranslateImage(i, e)}
-                               >
-                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
-                                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
-                                 </svg>
-                                 Translate
-                               </div>
+                               {/* Subtle hover backdrop overlay */}
+                               <div className={`absolute inset-0 transition-all duration-200 pointer-events-none ${selectedPhotos.includes(i) ? 'bg-transparent' : 'bg-slate-900/20 group-hover:bg-slate-900/10'}`}></div>
+                               
+                               {/* Top Left: Translated Badge / Translate Action */}
+                               {isPhotoTranslated(i, src) ? (
+                                 <>
+                                   <div className="absolute top-2.5 left-2.5 z-10">
+                                     <span className="px-2.5 py-0.5 bg-emerald-600/90 backdrop-blur-md text-white rounded-full text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border border-emerald-400/30">
+                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-white">
+                                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                       </svg>
+                                       Translated
+                                     </span>
+                                   </div>
+                                   
+                                   {/* Bottom Center: Undo Button on Hover */}
+                                   <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                                     <button
+                                       type="button"
+                                       title="Undo translation & revert to original photo"
+                                       onClick={(e) => handleRevertImage(i, e)}
+                                       className="px-2.5 py-1 bg-slate-900/85 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded-xl text-[10px] font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                                     >
+                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                       </svg>
+                                       Undo Translation
+                                     </button>
+                                   </div>
+                                 </>
+                               ) : (
+                                 <div className="absolute top-2.5 left-2.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                                   <button 
+                                     type="button"
+                                     title="Translate Image (Alibaba Qwen)"
+                                     onClick={(e) => handleTranslateImage(i, e)}
+                                     className="px-2.5 py-1 bg-white/95 hover:bg-brand hover:text-white backdrop-blur-md border border-slate-200/80 rounded-xl text-[10px] font-semibold text-slate-700 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                   >
+                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                       <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
+                                     </svg>
+                                     Translate
+                                   </button>
+                                 </div>
+                               )}
 
-                               {/* Selection Checkbox */}
-                               <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer z-10 ${selectedPhotos.includes(i) ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/80 border-gray-300 text-transparent group-hover:bg-white'}`} onClick={(e) => { e.stopPropagation(); togglePhotoSelection(i); }}>
-                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                               {/* Top Right: Selection Checkbox */}
+                               <div 
+                                 className={`absolute top-2.5 right-2.5 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer z-10 ${selectedPhotos.includes(i) ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/20' : 'bg-white/80 backdrop-blur-md border border-slate-300 text-transparent hover:bg-white hover:border-slate-400'}`} 
+                                 onClick={(e) => { e.stopPropagation(); togglePhotoSelection(i); }}
+                               >
+                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                                  </svg>
                                </div>

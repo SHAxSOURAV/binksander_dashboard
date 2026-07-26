@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Input } from "antd";
 import {
   FiSearch,
@@ -6,6 +7,8 @@ import {
   FiDollarSign,
   FiShoppingBag,
   FiCheckCircle,
+  FiAlertTriangle,
+  FiX,
 } from "react-icons/fi";
 import { LuRefreshCw } from "react-icons/lu";
 import toast from "react-hot-toast";
@@ -16,6 +19,11 @@ import {
   useGetBolOrdersQuery,
   useSyncNowMutation,
 } from "../../Redux/analyticsApis";
+import {
+  useGetLowStockAlertsQuery,
+  useDismissLowStockAlertMutation,
+  useResyncStockMutation,
+} from "../../Redux/productApis";
 
 const DashboardHome = () => {
   const [range, setRange] = useState("30d");
@@ -24,6 +32,24 @@ const DashboardHome = () => {
   const { data: dash, isFetching } = useGetDashboardQuery(range);
   const { data: ordersData } = useGetBolOrdersQuery({ page: 1, limit: 5 });
   const [syncNow, { isLoading: syncing }] = useSyncNowMutation();
+  const { data: alertsRes } = useGetLowStockAlertsQuery();
+  const [dismissAlert] = useDismissLowStockAlertMutation();
+  const [resyncStock] = useResyncStockMutation();
+  const [resyncingAsin, setResyncingAsin] = useState(null);
+
+  const lowStockAlerts = alertsRes?.alerts || [];
+
+  const handleResyncAlertStock = async (asin, country) => {
+    setResyncingAsin(asin);
+    try {
+      const res = await resyncStock({ asin, country: country || "NL" }).unwrap();
+      toast.success(res.message || "Stock resynced!");
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to resync stock");
+    } finally {
+      setResyncingAsin(null);
+    }
+  };
 
   const s = dash || {};
   const donut = {
@@ -155,6 +181,99 @@ const DashboardHome = () => {
           </div>
         </div>
       </div>
+
+      {/* Low Stock Alerts Banner at Bottom */}
+      {lowStockAlerts?.length > 0 && (
+        <div className="bg-white border border-amber-200/80 rounded-2xl p-5 card-shadow space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-600">
+                <FiAlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  Low Stock Alerts
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold shadow-sm">
+                    {lowStockAlerts.length} Item{lowStockAlerts.length > 1 ? 's' : ''}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">Products with stock quantity &le; 3 require immediate replenishment.</p>
+              </div>
+            </div>
+            <Link to="/products" className="text-xs font-bold text-brand hover:underline flex items-center gap-1">
+              View Inventory Catalog &rarr;
+            </Link>
+          </div>
+
+          {/* Aesthetic Vertical List View */}
+          <div className="bg-slate-50/50 rounded-xl border border-slate-200/70 overflow-hidden divide-y divide-slate-100">
+            {lowStockAlerts.map((alert) => (
+              <div key={alert.id || alert.asin} className="p-3 sm:px-4 flex items-center justify-between gap-4 hover:bg-white transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Thumbnail Image */}
+                  <div className="w-11 h-11 rounded-lg bg-white border border-slate-200/80 p-1 flex-shrink-0 flex items-center justify-center shadow-2xs">
+                    {alert.image ? (
+                      <img src={alert.image} alt={alert.product_title} className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-mono">ASIN</span>
+                    )}
+                  </div>
+
+                  {/* Title & ASIN */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-800 truncate" title={alert.product_title}>
+                      {alert.product_title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] font-mono text-slate-400">ASIN: {alert.asin}</span>
+                      {alert.country && (
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase">({alert.country})</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Price */}
+                <div className="text-right flex-shrink-0 min-w-[70px]">
+                  <p className="text-xs font-bold text-brand">
+                    {alert.price ? (String(alert.price).startsWith('€') ? alert.price : `€${alert.price}`) : '—'}
+                  </p>
+                </div>
+
+                {/* Stock Badge */}
+                <div className="flex-shrink-0">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 shadow-2xs ${alert.stock_quantity === 0 ? 'bg-red-50 text-red-600 border border-red-200/80' : 'bg-amber-50 text-amber-800 border border-amber-300'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${alert.stock_quantity === 0 ? 'bg-red-500' : 'bg-amber-500'}`}></span>
+                    {alert.stock_quantity === 0 ? 'Out of stock' : `Only ${alert.stock_quantity} left`}
+                  </span>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    type="button"
+                    title="Resync stock now"
+                    disabled={resyncingAsin === alert.asin}
+                    onClick={() => handleResyncAlertStock(alert.asin, alert.country)}
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-brand hover:text-white border border-slate-200 text-slate-600 text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <LuRefreshCw size={12} className={resyncingAsin === alert.asin ? 'animate-spin' : ''} />
+                    <span className="hidden sm:inline">Resync</span>
+                  </button>
+                  <button
+                    type="button"
+                    title="Dismiss alert"
+                    onClick={() => dismissAlert({ asin: alert.asin })}
+                    className="p-1.5 rounded-lg bg-white hover:bg-rose-50 hover:text-rose-600 border border-slate-200 text-slate-400 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <FiX size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
