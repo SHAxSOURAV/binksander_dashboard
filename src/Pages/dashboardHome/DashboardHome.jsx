@@ -36,8 +36,12 @@ const DashboardHome = () => {
   const [dismissAlert] = useDismissLowStockAlertMutation();
   const [resyncStock] = useResyncStockMutation();
   const [resyncingAsin, setResyncingAsin] = useState(null);
+  const [alertPage, setAlertPage] = useState(1);
+  const ALERT_PAGE_SIZE = 5;
 
   const lowStockAlerts = alertsRes?.alerts || [];
+  const totalAlertPages = Math.max(1, Math.ceil(lowStockAlerts.length / ALERT_PAGE_SIZE));
+  const paginatedAlerts = lowStockAlerts.slice((alertPage - 1) * ALERT_PAGE_SIZE, alertPage * ALERT_PAGE_SIZE);
 
   const handleResyncAlertStock = async (asin, country) => {
     setResyncingAsin(asin);
@@ -207,7 +211,7 @@ const DashboardHome = () => {
 
           {/* Aesthetic Vertical List View */}
           <div className="bg-slate-50/50 rounded-xl border border-slate-200/70 overflow-hidden divide-y divide-slate-100">
-            {lowStockAlerts.map((alert) => (
+            {paginatedAlerts.map((alert) => (
               <div key={alert.id || alert.asin} className="p-3 sm:px-4 flex items-center justify-between gap-4 hover:bg-white transition-colors">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {/* Thumbnail Image */}
@@ -272,6 +276,36 @@ const DashboardHome = () => {
               </div>
             ))}
           </div>
+
+          {/* Pagination Controls */}
+          {totalAlertPages > 1 && (
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing {(alertPage - 1) * ALERT_PAGE_SIZE + 1} - {Math.min(alertPage * ALERT_PAGE_SIZE, lowStockAlerts.length)} of {lowStockAlerts.length} items
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={alertPage === 1}
+                  onClick={() => setAlertPage(p => Math.max(1, p - 1))}
+                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                >
+                  Previous
+                </button>
+                <span className="text-slate-600 font-bold px-1">
+                  {alertPage} / {totalAlertPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={alertPage >= totalAlertPages}
+                  onClick={() => setAlertPage(p => Math.min(totalAlertPages, p + 1))}
+                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 font-semibold hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
