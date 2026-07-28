@@ -340,6 +340,12 @@ const productApis = baseApis.injectEndpoints({
       keepUnusedDataFor: 3600,
     }),
 
+    // GET /bol/product-assets/{ean}
+    getBolProductAssets: builder.query({
+      query: (ean) => `/bol/product-assets/${ean}`,
+      keepUnusedDataFor: 3600,
+    }),
+
     // PUT /bol/offers/{offerId}/status
     updateBolOfferStatus: builder.mutation({
       query: ({ offerId, onHoldByRetailer }) => ({
@@ -468,6 +474,7 @@ export const {
   useGetDraftQuery,
   useGetBolOffersQuery,
   useGetBolProductImageQuery,
+  useGetBolProductAssetsQuery,
   useGetGtinToAsinQuery,
   useUpdateBolOfferStatusMutation,
   useUpdateBolOfferStockMutation,

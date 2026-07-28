@@ -4,10 +4,15 @@ const fulfillmentApis = baseApis.injectEndpoints({
   endpoints: (builder) => ({
     // GET /fulfillment/orders?status=&page=&limit=
     getFulfillmentOrders: builder.query({
-      query: ({ page = 1, limit = 50, status } = {}) => {
+      query: ({ page = 1, limit = 50, status, accountId } = {}) => {
         const params = new URLSearchParams({ page, limit });
         if (status) params.set("status", status);
-        return `/fulfillment/orders?${params.toString()}`;
+        const headers = {};
+        if (accountId) headers["x-bol-account-id"] = accountId;
+        return {
+          url: `/fulfillment/orders?${params.toString()}`,
+          headers,
+        };
       },
       providesTags: ["Fulfillment"],
     }),
@@ -36,6 +41,12 @@ const fulfillmentApis = baseApis.injectEndpoints({
       invalidatesTags: ["Fulfillment"],
     }),
 
+    // POST /fulfillment/orders/{id}/complete
+    completeFulfillmentOrder: builder.mutation({
+      query: (id) => ({ url: `/fulfillment/orders/${id}/complete`, method: "POST" }),
+      invalidatesTags: ["Fulfillment"],
+    }),
+
     // POST /fulfillment/sync  → backfill open Bol orders now
     syncFulfillment: builder.mutation({
       query: () => ({ url: "/fulfillment/sync", method: "POST" }),
@@ -59,6 +70,7 @@ export const {
   useApproveFulfillmentMutation,
   useRejectFulfillmentMutation,
   useRetryFulfillmentMutation,
+  useCompleteFulfillmentOrderMutation,
   useSyncFulfillmentMutation,
   useRegisterBolWebhookMutation,
 } = fulfillmentApis;
