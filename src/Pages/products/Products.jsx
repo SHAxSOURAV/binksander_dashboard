@@ -80,6 +80,9 @@ const Products = () => {
     if (q === 1 || q === 2) {
       return 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300';
     }
+    if (q == null) {
+      return 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200';
+    }
     return 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/60';
   };
 
@@ -138,9 +141,13 @@ const Products = () => {
 
     const hasProcessing = data?.items?.some(p => p.publishStatus === 'processing');
     const hasPendingScrape = data?.items?.some(p => p.scrapePending);
+    const hasPendingStock = data?.items?.some(p => p.is_valid_amazon && p.stockQuantity == null);
     
     if (hasPendingScrape && scrapePollCount < 3) {
       setPollingInterval(4000);
+      setScrapePollCount(prev => prev + 1);
+    } else if (hasPendingStock && scrapePollCount < 5) {
+      setPollingInterval(3000);
       setScrapePollCount(prev => prev + 1);
     } else if (hasProcessing) {
       setPollingInterval(10000);
@@ -484,10 +491,8 @@ const Products = () => {
                             p.stockQuantity > 0 ? `${p.stockQuantity} in stock` : "Out of stock"
                           ) : p.bolStock != null ? (
                             `${p.bolStock} in stock`
-                          ) : p.stock?.toLowerCase() === "yes" ? (
-                            "In Stock"
                           ) : (
-                            p.stock || "Out of stock"
+                            "Checking stock..."
                           )}
                         </span>
                         <LuRefreshCw
@@ -747,10 +752,8 @@ const Products = () => {
                               p.stockQuantity > 0 ? `${p.stockQuantity} in stock` : "Out of stock"
                             ) : p.bolStock != null ? (
                               `${p.bolStock} in stock`
-                            ) : p.stock?.toLowerCase() === "yes" ? (
-                              "In Stock"
                             ) : (
-                              p.stock || "Out of stock"
+                              "Checking stock..."
                             )}
                           </span>
                           <LuRefreshCw
