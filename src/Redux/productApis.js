@@ -260,6 +260,38 @@ const productApis = baseApis.injectEndpoints({
         body: { asin, country }
       }),
       invalidatesTags: ["Products", "StockAlerts"],
+      async onQueryStarted({ asin }, { dispatch, queryFulfilled, getState }) {
+        try {
+          const { data: result } = await queryFulfilled;
+          if (result?.success && result?.data) {
+            const newStock = result.data.stock;
+            const sellerName = result.data.seller_name || "";
+            // Update every active getProducts cache entry to reflect the new stock
+            const queries = getState().adminApis?.queries || {};
+            Object.keys(queries).forEach((key) => {
+              if (key.startsWith("getProducts(")) {
+                const originalArgs = queries[key]?.originalArgs;
+                if (originalArgs) {
+                  dispatch(
+                    productApis.util.updateQueryData("getProducts", originalArgs, (draft) => {
+                      if (draft?.items) {
+                        const product = draft.items.find((p) => p.asin === asin);
+                        if (product) {
+                          product.stockQuantity = newStock != null ? newStock : product.stockQuantity;
+                          product.stock = newStock > 0 ? `${newStock} in stock` : "Out of stock";
+                          if (sellerName) product.stockSellerName = sellerName;
+                        }
+                      }
+                    })
+                  );
+                }
+              }
+            });
+          }
+        } catch {
+          // Mutation failed – invalidatesTags will still refetch
+        }
+      },
     }),
 
     // GET /spreadsheet/low-stock-alerts

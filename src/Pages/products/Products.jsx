@@ -143,10 +143,10 @@ const Products = () => {
     const hasPendingScrape = data?.items?.some(p => p.scrapePending);
     const hasPendingStock = data?.items?.some(p => p.is_valid_amazon && p.stockQuantity == null);
     
-    if (hasPendingScrape && scrapePollCount < 3) {
-      setPollingInterval(4000);
+    if (hasPendingScrape && scrapePollCount < 25) {
+      setPollingInterval(3000);
       setScrapePollCount(prev => prev + 1);
-    } else if (hasPendingStock && scrapePollCount < 5) {
+    } else if (hasPendingStock && scrapePollCount < 25) {
       setPollingInterval(3000);
       setScrapePollCount(prev => prev + 1);
     } else if (hasProcessing) {
@@ -520,7 +520,7 @@ const Products = () => {
                 <div className="flex flex-col flex-grow w-full">
                   {columns.title && (
                     <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-snug mb-1.5">
-                      {p.title}
+                      {p.title || p.spreadsheetTitle || p.asin || "Loading product..."}
                     </p>
                   )}
                   {columns.sheetTitle && p.spreadsheetTitle && (
