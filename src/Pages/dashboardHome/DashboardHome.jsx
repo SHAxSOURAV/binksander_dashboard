@@ -67,25 +67,25 @@ const DashboardHome = () => {
       label: "Total Revenue",
       value: `€${(s.total_revenue || 0).toLocaleString()}`,
       icon: <FiDollarSign size={20} />,
-      accent: "#1B17E0",
+      accent: "#111111",
     },
     {
       label: "Net Income",
       value: `€${(s.total_net_income || 0).toLocaleString()}`,
       icon: <FiTrendingUp size={20} />,
-      accent: "#16A34A",
+      accent: "#404040",
     },
     {
       label: "Total Order Request",
       value: (s.total_order_requests || 0).toLocaleString(),
       icon: <FiShoppingBag size={20} />,
-      accent: "#F59E0B",
+      accent: "#666666",
     },
     {
       label: "Total Completed Order",
       value: (s.total_completed_orders || 0).toLocaleString(),
       icon: <FiCheckCircle size={20} />,
-      accent: "#6C63FF",
+      accent: "#333333",
     },
   ];
 
@@ -110,7 +110,7 @@ const DashboardHome = () => {
       </div>
 
       {/* Track your order */}
-      <div className="bg-gradient-to-r from-[#1B17E0] to-[#4B45F0] rounded-2xl p-5 sm:p-6 text-white card-shadow">
+      <div className="bg-gradient-to-r from-[#111111] to-[#333333] rounded-2xl p-5 sm:p-6 text-white card-shadow">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <p className="text-sm font-semibold">Track Your Order</p>
@@ -129,7 +129,7 @@ const DashboardHome = () => {
             <button
               onClick={handleSync}
               disabled={syncing}
-              className="bg-white text-brand font-semibold px-5 rounded-xl text-sm hover:bg-white/90 whitespace-nowrap flex items-center gap-2 disabled:opacity-60"
+              className="bg-white text-gray-900 font-semibold px-5 rounded-xl text-sm hover:bg-white/90 whitespace-nowrap flex items-center gap-2 disabled:opacity-60"
             >
               <LuRefreshCw size={15} className={syncing ? "animate-spin" : ""} />
               Sync
@@ -150,9 +150,9 @@ const DashboardHome = () => {
             <p className="text-sm font-semibold mb-3 text-gray-700">
               Order Status {isFetching && <span className="text-xs text-gray-300">· updating…</span>}
             </p>
-            <Row label="Requests" value={donut.total} dot="#1B17E0" />
-            <Row label="Completed" value={donut.completed} dot="#16A34A" />
-            <Row label="Cancelled" value={donut.canceled} dot="#EF4444" />
+            <Row label="Requests" value={donut.total} dot="#111111" />
+            <Row label="Completed" value={donut.completed} dot="#555555" />
+            <Row label="Cancelled" value={donut.canceled} dot="#aaaaaa" />
           </div>
 
           {/* Recent Orders */}
@@ -204,7 +204,7 @@ const DashboardHome = () => {
                 <p className="text-xs text-slate-500">Products with stock quantity &le; 3 require immediate replenishment.</p>
               </div>
             </div>
-            <Link to="/products" className="text-xs font-bold text-brand hover:underline flex items-center gap-1">
+            <Link to="/products" className="text-xs font-bold text-gray-900 hover:underline flex items-center gap-1">
               View Inventory Catalog &rarr;
             </Link>
           </div>
@@ -239,7 +239,7 @@ const DashboardHome = () => {
 
                 {/* Price */}
                 <div className="text-right flex-shrink-0 min-w-[70px]">
-                  <p className="text-xs font-bold text-brand">
+                  <p className="text-xs font-bold text-gray-900">
                     {alert.price ? (String(alert.price).startsWith('€') ? alert.price : `€${alert.price}`) : '—'}
                   </p>
                 </div>
@@ -259,7 +259,7 @@ const DashboardHome = () => {
                     title="Resync stock now"
                     disabled={resyncingAsin === alert.asin}
                     onClick={() => handleResyncAlertStock(alert.asin, alert.country)}
-                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-brand hover:text-white border border-slate-200 text-slate-600 text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-gray-900 hover:text-white border border-slate-200 text-slate-600 text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
                   >
                     <LuRefreshCw size={12} className={resyncingAsin === alert.asin ? 'animate-spin' : ''} />
                     <span className="hidden sm:inline">Resync</span>

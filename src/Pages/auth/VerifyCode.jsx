@@ -99,7 +99,7 @@ const VerifyCode = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center font-poppins p-4 bg-[#f5f6fa]">
+    <div className="min-h-screen flex items-center justify-center font-poppins p-4 bg-[#f7f7f8]">
       <div className="w-full max-w-[420px] bg-white rounded-2xl card-shadow px-8 py-10">
         <div className="text-center mb-6">
           <Logo size="text-2xl" />
@@ -128,7 +128,7 @@ const VerifyCode = () => {
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 maxLength={1}
                 inputMode="numeric"
-                className="w-11 h-12 sm:w-12 sm:h-12 bg-[#f5f6fa] border border-gray-200 rounded-lg text-center text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-11 h-12 sm:w-12 sm:h-12 bg-[#f7f7f8] border border-gray-200 rounded-lg text-center text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-900"
               />
             ))}
           </div>

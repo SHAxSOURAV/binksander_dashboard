@@ -67,12 +67,12 @@ const OrderCard = ({ order, onClick }) => {
               {order.status === "OPEN" && <span className="w-3 h-1 bg-yellow-500 rounded-full" title="Open"></span>}
               {order.status === "CANCELLED" && <span className="w-3 h-1 bg-red-500 rounded-full" title="Cancelled"></span>}
             </span>
-            <div className="flex items-center gap-1 mt-1 text-sm text-blue-800 font-medium hover:underline">
+            <div className="flex items-center gap-1 mt-1 text-sm text-gray-800 font-medium hover:underline">
               {shipment.countryCode === "NL" && <span title="Netherlands">🇳🇱</span>}
               {shipment.countryCode === "BE" && <span title="Belgium">🇧🇪</span>}
               <span>{customerName}</span>
               <FiCopy 
-                className="cursor-pointer text-blue-500 hover:text-blue-700 ml-1" 
+                className="cursor-pointer text-gray-400 hover:text-gray-700 ml-1" 
                 onClick={(e) => handleCopy(customerName, e)}
               />
             </div>
@@ -86,7 +86,7 @@ const OrderCard = ({ order, onClick }) => {
             <span className="text-xs text-gray-500">{addressLine2}</span>
           </div>
           <FiCopy 
-            className="cursor-pointer text-blue-500 hover:text-blue-700 mt-1 ml-auto" 
+            className="cursor-pointer text-gray-400 hover:text-gray-700 mt-1 ml-auto" 
             onClick={(e) => handleCopy(`${addressLine1}, ${addressLine2}`, e)}
           />
         </div>
@@ -124,12 +124,12 @@ const OrderCard = ({ order, onClick }) => {
             <FiTruck className={isOpen ? "text-orange-500" : "text-green-500"} />
             <span>{isOpen ? "Delivery Deadline" : "Status"}</span>
           </div>
-          <span className={`px-3 py-1 text-xs border rounded font-medium text-center min-w-[120px] ${isOpen ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-green-200 text-green-700 bg-green-50'}`}>
+          <span className={`px-3 py-1 text-xs border rounded font-medium text-center min-w-[120px] ${isOpen ? 'border-gray-300 text-gray-700 bg-gray-50' : 'border-gray-300 text-gray-900 bg-gray-100'}`}>
             {order.status || "Processing"}
           </span>
           {isOpen && (
             <button 
-              className="flex items-center justify-center gap-1 text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-md mt-1 w-full shadow-sm transition-colors disabled:opacity-50" 
+              className="flex items-center justify-center gap-1 text-xs text-white bg-gray-900 hover:bg-black px-3 py-1.5 rounded-md mt-1 w-full shadow-sm transition-colors disabled:opacity-50" 
               onClick={handleShipOrder}
               disabled={isShipping}
             >
@@ -150,15 +150,15 @@ const OrderCard = ({ order, onClick }) => {
                 {item.productImage ? (
                   <img src={item.productImage} alt="Product" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="text-xs font-bold text-blue-800 opacity-30">bol</div>
+                  <div className="text-xs font-bold text-gray-800 opacity-30">bol</div>
                 )}
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-gray-800 line-clamp-1 cursor-pointer hover:text-blue-700 hover:underline">
+                <span className="text-sm font-semibold text-gray-800 line-clamp-1 cursor-pointer hover:text-gray-900 hover:underline">
                   {item.productTitle || item.product?.title || item.title || order.productTitle || "Product Name"}
                 </span>
                 <span className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
-                  <FiCopy className="cursor-pointer text-blue-400 hover:text-blue-600" onClick={(e) => handleCopy(item.ean || item.product?.ean, e)} />
+                  <FiCopy className="cursor-pointer text-gray-400 hover:text-gray-600" onClick={(e) => handleCopy(item.ean || item.product?.ean, e)} />
                   EAN: {item.ean || item.product?.ean} | Condition: {item.condition || "New"}
                 </span>
               </div>
@@ -173,7 +173,7 @@ const OrderCard = ({ order, onClick }) => {
                     e.stopPropagation();
                     window.open(item.amazonUrl, "_blank");
                   }}
-                  className="bg-[#f90] hover:bg-[#e88a00] text-white text-xs font-semibold py-1.5 px-3 rounded shadow-sm transition-colors"
+                  className="bg-gray-900 hover:bg-black text-white text-xs font-semibold py-1.5 px-3 rounded shadow-sm transition-colors"
                 >
                   Buy from Amazon
                 </button>

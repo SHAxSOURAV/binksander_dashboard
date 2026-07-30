@@ -9,9 +9,9 @@ import OrderCard from "./OrderCard";
 import { useUI } from "../../Provider/ContextProvider";
 
 const STATUS_META = {
-  OPEN: { label: "Open", color: "#D97706", bg: "#FFF7E6" },
-  SHIPPED: { label: "Shipped", color: "#16A34A", bg: "#E9F9F0" },
-  CANCELLED: { label: "Cancelled", color: "#DC2626", bg: "#FDECEC" },
+  OPEN: { label: "Open", color: "#525252", bg: "#f5f5f5" },
+  SHIPPED: { label: "Shipped", color: "#1a1a1a", bg: "#f0f0f0" },
+  CANCELLED: { label: "Cancelled", color: "#737373", bg: "#f5f5f5" },
   ALL: { label: "—", color: "#6B7280", bg: "#F3F4F6" },
 };
 const meta = (s) =>
@@ -76,7 +76,7 @@ const Orders = () => {
             onClick={handleSync}
             disabled={isSyncing}
             title="Sync Orders"
-            className="w-10 h-10 flex-shrink-0 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50 transition-colors"
+            className="w-10 h-10 flex-shrink-0 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 disabled:opacity-50 transition-colors"
           >
             <LuRefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
           </button>
@@ -123,7 +123,7 @@ const Orders = () => {
           </p>
           <button 
             onClick={() => openSettings("connection")}
-            className="bg-brand text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-brand/90 transition-colors shadow-sm"
+            className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-black transition-colors shadow-sm"
           >
             Connect Bol.com API
           </button>
@@ -169,7 +169,7 @@ const Orders = () => {
         {selected && (
           <div className="font-poppins pt-2">
             <div className="flex items-center justify-between pr-6 mb-1">
-              <h2 className="text-base font-bold text-brand">
+              <h2 className="text-base font-bold text-gray-900">
                 Order <span className="text-gray-700">{selected.orderId}</span>
               </h2>
               <span

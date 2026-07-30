@@ -106,7 +106,7 @@ const RimcoOperations = () => {
                     <td className="py-3 px-2">
                       <button
                         onClick={() => setSelected(o)}
-                        className="bg-brand text-white text-xs px-5 py-1.5 rounded-full"
+                        className="bg-gray-900 text-white text-xs px-5 py-1.5 rounded-full hover:bg-black transition"
                       >
                         Open
                       </button>

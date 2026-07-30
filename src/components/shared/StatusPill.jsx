@@ -1,15 +1,15 @@
-// Each status maps to a colour: dot + text + soft background.
+// Each status maps to a monochrome colour: dot + text + soft background.
 const STYLES = {
-  Pending: { color: "#D97706", bg: "#FFF7E6" },
-  Accepted: { color: "#16A34A", bg: "#E9F9F0" },
-  Delivered: { color: "#16A34A", bg: "#E9F9F0" },
-  Canceled: { color: "#DC2626", bg: "#FDECEC" },
-  Cancelled: { color: "#DC2626", bg: "#FDECEC" },
-  "Order Placed": { color: "#1B17E0", bg: "#EEEEFD" },
-  Picking: { color: "#7C3AED", bg: "#F3EEFE" },
-  Packing: { color: "#0891B2", bg: "#E5F7FB" },
-  "Out for Delivery": { color: "#EA580C", bg: "#FFF1E8" },
-  "In Transit": { color: "#2563EB", bg: "#EAF1FE" },
+  Pending: { color: "#525252", bg: "#f5f5f5" },
+  Accepted: { color: "#1a1a1a", bg: "#f0f0f0" },
+  Delivered: { color: "#1a1a1a", bg: "#f0f0f0" },
+  Canceled: { color: "#737373", bg: "#f5f5f5" },
+  Cancelled: { color: "#737373", bg: "#f5f5f5" },
+  "Order Placed": { color: "#111111", bg: "#ebebeb" },
+  Picking: { color: "#333333", bg: "#f0f0f0" },
+  Packing: { color: "#404040", bg: "#f0f0f0" },
+  "Out for Delivery": { color: "#333333", bg: "#ebebeb" },
+  "In Transit": { color: "#262626", bg: "#f0f0f0" },
 };
 
 const DEFAULT = { color: "#6B7280", bg: "#F3F4F6" };

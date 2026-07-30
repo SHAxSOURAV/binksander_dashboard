@@ -7,7 +7,6 @@ import {
 import { TbBrandAmazon } from "react-icons/tb";
 import { LuTruck } from "react-icons/lu";
 import Logo from "../../../components/shared/Logo";
-import { useUI } from "../../../Provider/ContextProvider";
 
 const menuItems = [
   { name: "Overview", link: "/", icon: <MdOutlineDashboard size={20} />, end: true },
@@ -43,7 +42,6 @@ const menuItems = [
 ];
 
 const Sidebar = ({ onNavigate }) => {
-  const { setSupportOpen } = useUI();
   return (
     <div className="h-full bg-white flex flex-col font-poppins">
       {/* Logo */}
@@ -64,7 +62,7 @@ const Sidebar = ({ onNavigate }) => {
               target="_blank"
               rel="noopener noreferrer"
               onClick={onNavigate}
-              className="group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium text-gray-500 hover:bg-[#f0f0fd] hover:text-brand transition-all duration-150"
+              className="group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-all duration-150"
             >
               <span>{item.icon}</span>
               <span>{item.name}</span>
@@ -77,8 +75,8 @@ const Sidebar = ({ onNavigate }) => {
               onClick={onNavigate}
               className={({ isActive }) =>
                 `group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium transition-all duration-150 ${isActive
-                  ? "text-white bg-brand shadow-[0_8px_20px_rgba(27,23,224,0.28)]"
-                  : "text-gray-500 hover:bg-[#f0f0fd] hover:text-brand"
+                  ? "text-white bg-gray-900 shadow-[0_8px_20px_rgba(0,0,0,0.15)]"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                 }`
               }
             >
@@ -89,22 +87,7 @@ const Sidebar = ({ onNavigate }) => {
         )}
       </nav>
 
-      {/* Footer card */}
-      <div className="m-4 rounded-2xl bg-gradient-to-br from-[#1B17E0] to-[#4B45F0] p-4 text-white">
-        <p className="text-sm font-semibold">Need help?</p>
-        <p className="text-[11px] text-white/70 mt-0.5 mb-3">
-          Check our docs &amp; support center
-        </p>
-        <button
-          onClick={() => {
-            onNavigate?.();
-            setSupportOpen(true);
-          }}
-          className="w-full bg-white/15 hover:bg-white/25 transition text-xs font-medium py-2 rounded-lg"
-        >
-          Contact Support
-        </button>
-      </div>
+
     </div>
   );
 };

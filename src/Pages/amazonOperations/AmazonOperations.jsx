@@ -80,7 +80,7 @@ const AmazonOperations = () => {
       {/* Header & Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-gray-800">Amazon Sourcing</h2>
+          <h2 className="text-lg font-semibold text-gray-700">Amazon Sourcing</h2>
           <p className="text-xs text-gray-400">
             Sourcing orders for dashboard-published products via Amazon — {total} order(s)
           </p>
@@ -91,16 +91,16 @@ const AmazonOperations = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             prefix={<FiSearch className="text-gray-400 mr-1" />}
-            placeholder="Search by Order ID, ASIN, or Customer"
-            className="h-10 rounded-xl w-full sm:w-64"
+            placeholder="Search"
+            className="h-10 rounded-lg w-full sm:w-64"
           />
           <button
             onClick={handleSync}
             disabled={syncing}
-            className="button-color h-10 px-4 rounded-xl text-sm font-semibold flex items-center gap-2 disabled:opacity-60 shadow-sm"
+            title="Sync from Bol.com"
+            className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50"
           >
-            <LuRefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-            Sync
+            <LuRefreshCw size={16} className={syncing ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
@@ -120,10 +120,10 @@ const AmazonOperations = () => {
                 setStatusFilter(tab.key);
                 setPage(1);
               }}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                 isActive
-                  ? "bg-brand text-white shadow-md shadow-brand/20"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  ? "bg-brand text-white shadow-sm"
+                  : "bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
               }`}
             >
               {tab.label}

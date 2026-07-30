@@ -35,7 +35,7 @@ const CreateNewPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center font-poppins p-4 bg-[#f5f6fa]">
+    <div className="min-h-screen flex items-center justify-center font-poppins p-4 bg-[#f7f7f8]">
       <div className="w-full max-w-[480px] bg-white rounded-2xl card-shadow px-8 py-10 sm:px-12">
         <div className="text-center mb-7">
           <Logo />

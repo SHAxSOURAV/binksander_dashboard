@@ -37,7 +37,7 @@ const Dashboard = () => {
 
   return (
     <UIProvider>
-      <div className="flex h-screen overflow-hidden bg-[#f5f6fa] font-poppins">
+      <div className="flex h-screen overflow-hidden bg-[#f7f7f8] font-poppins">
         {/* Sidebar — desktop */}
         <aside className="hidden lg:block w-[260px] flex-shrink-0 border-r border-gray-100">
           <Sidebar />

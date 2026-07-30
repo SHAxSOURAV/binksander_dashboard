@@ -42,7 +42,7 @@ const FulfillmentDetailModal = ({ open, onClose, order, source = "fulfillment" }
     <Modal open={open} onCancel={onClose} footer={null} centered width={620}>
       <div className="font-poppins pt-2">
         <div className="flex items-center justify-between mb-1 pr-6">
-          <h2 className="text-base font-bold text-brand">
+          <h2 className="text-base font-bold text-gray-900">
             Order <span className="text-gray-700">{order.bol_order_id}</span>
           </h2>
           <span

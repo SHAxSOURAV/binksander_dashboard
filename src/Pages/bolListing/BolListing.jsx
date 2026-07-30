@@ -260,7 +260,7 @@ const BolListing = () => {
               </p>
               <button 
                 onClick={() => openSettings("connection")}
-                className="bg-brand text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-brand/90 transition-colors shadow-sm"
+                className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-black transition-colors shadow-sm"
               >
                 Connect Bol.com API
               </button>

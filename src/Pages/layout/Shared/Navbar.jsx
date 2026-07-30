@@ -97,7 +97,7 @@ const Navbar = ({ onMenuClick }) => {
           <HiMenuAlt2 size={24} />
         </button>
         <div>
-          <h1 className="text-base sm:text-lg font-bold text-brand leading-tight">
+          <h1 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
             Hello, {user?.full_name?.split(" ")[0] || "Admin"}
           </h1>
           <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">
@@ -137,7 +137,7 @@ const Navbar = ({ onMenuClick }) => {
             else setSearchOpen(true);
           }}
           title="Search products"
-          className="w-10 h-10 rounded-full border border-gray-100 flex items-center justify-center text-gray-500 hover:text-brand hover:border-brand/30 transition"
+          className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:border-gray-400 transition"
         >
           <FiSearch size={18} />
         </button>

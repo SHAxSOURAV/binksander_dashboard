@@ -2,7 +2,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { Dropdown } from "antd";
 import { FiChevronDown } from "react-icons/fi";
 
-const COLORS = ["#6C63FF", "#FBBF24"];
+const COLORS = ["#333333", "#cccccc"];
 
 const ranges = [
   { key: "this_month", label: "This Month" },
@@ -38,7 +38,7 @@ const OrdersDonut = ({ data, range = "30d", onRangeChange }) => {
           }}
           trigger={["click"]}
         >
-          <button className="flex items-center gap-2 text-xs font-medium text-brand border border-brand/20 rounded-full px-4 py-1.5 hover:bg-[#f0f0fd]">
+          <button className="flex items-center gap-2 text-xs font-medium text-gray-900 border border-gray-300 rounded-full px-4 py-1.5 hover:bg-gray-100">
             {activeLabel} <FiChevronDown />
           </button>
         </Dropdown>
