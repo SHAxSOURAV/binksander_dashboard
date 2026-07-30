@@ -289,7 +289,7 @@ const Products = () => {
               content={
                 <div className="flex flex-col gap-2 p-2">
                   {Object.keys(columns)
-                    .filter(col => col !== 'serial' && col !== 'action')
+                    .filter(col => col !== 'serial' && col !== 'action' && col !== 'purchasePrice' && col !== 'status')
                     .map(col => (
                       <Checkbox
                         key={col}
@@ -390,9 +390,9 @@ const Products = () => {
 
         {/* Connect inventory banner */}
         {total > 0 ? (
-          <div className="w-full flex items-center bg-[#f7f9fd] border border-blue-50/50 rounded-xl px-5 py-4 mb-5 text-left">
+          <div className="w-full flex items-center bg-[#f9f9f9] border border-gray-200/50 rounded-xl px-5 py-4 mb-5 text-left">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-blue-100/50 flex items-center justify-center text-blue-500">
+              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
                 <FiLink size={18} />
               </div>
               <div>
@@ -403,7 +403,7 @@ const Products = () => {
                   href={connectionData?.spreadsheet_url || products[0]?.spreadsheetUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-blue-500 hover:underline"
+                  className="text-sm text-gray-600 hover:underline"
                 >
                   {connectionData?.spreadsheet_name || "Google Sheet"}
                 </a>
@@ -413,10 +413,10 @@ const Products = () => {
         ) : (
           <button
             onClick={() => setConnectOpen(true)}
-            className="w-full flex items-center justify-between bg-[#f0f0fd] rounded-xl px-5 py-3 mb-5 text-left border border-dashed border-brand/40 hover:bg-[#e8e8fd] transition-colors"
+            className="w-full flex items-center justify-between bg-[#f5f5f5] rounded-xl px-5 py-3 mb-5 text-left border border-dashed border-gray-400/40 hover:bg-[#eeeeee] transition-colors"
           >
             <div>
-              <p className="text-sm font-semibold text-brand">
+              <p className="text-sm font-semibold text-gray-900">
                 Connect Your Inventory
               </p>
               <p className="text-xs text-gray-500">

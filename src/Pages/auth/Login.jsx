@@ -40,7 +40,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center font-poppins p-4 bg-[#f5f6fa]">
+    <div className="min-h-screen flex items-center justify-center font-poppins p-4 bg-[#f7f7f8]">
       <div className="w-full max-w-[440px] bg-white rounded-2xl card-shadow px-8 py-10 sm:px-10">
         <div className="text-center mb-6">
           <Logo />
@@ -90,7 +90,7 @@ const Login = () => {
             </Form.Item>
             <Link
               to="/forget-password"
-              className="text-gray-500 hover:text-brand font-medium"
+              className="text-gray-500 hover:text-gray-900 font-medium"
             >
               Forget Password?
             </Link>
@@ -99,7 +99,7 @@ const Login = () => {
 
         <div className="text-center mt-6">
           <p className="text-xs text-gray-400">Don&apos;t Have An Account</p>
-          <Link to="/signup" className="text-brand font-semibold text-sm">
+          <Link to="/signup" className="text-gray-900 font-semibold text-sm">
             Signup
           </Link>
         </div>

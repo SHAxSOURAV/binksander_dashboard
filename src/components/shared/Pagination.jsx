@@ -45,7 +45,7 @@ const Pagination = ({
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="h-8 rounded-lg border border-gray-200 px-2 text-gray-600 focus:outline-none focus:border-brand cursor-pointer"
+            className="h-8 rounded-lg border border-gray-200 px-2 text-gray-600 focus:outline-none focus:border-gray-900 cursor-pointer"
           >
             {pageSizeOptions.map((opt) => (
               <option key={opt} value={opt}>
@@ -66,7 +66,7 @@ const Pagination = ({
       <div className="flex items-center justify-center gap-1.5 flex-wrap">
         <button
           onClick={() => current > 1 && onChange?.(current - 1)}
-          className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-brand disabled:opacity-40"
+          className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-900 disabled:opacity-40"
           disabled={current === 1}
         >
           <FiChevronLeft size={15} />
@@ -86,7 +86,7 @@ const Pagination = ({
               onClick={() => onChange?.(p)}
               className={`min-w-8 h-8 px-2 rounded-full text-sm font-medium transition ${
                 p === current
-                  ? "bg-brand text-white"
+                  ? "bg-gray-900 text-white"
                   : "text-gray-500 hover:bg-gray-100"
               }`}
             >
@@ -97,7 +97,7 @@ const Pagination = ({
 
         <button
           onClick={() => current < total && onChange?.(current + 1)}
-          className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-brand disabled:opacity-40"
+          className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-900 disabled:opacity-40"
           disabled={current === total}
         >
           <FiChevronRight size={15} />
