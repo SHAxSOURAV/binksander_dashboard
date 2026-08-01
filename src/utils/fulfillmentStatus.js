@@ -52,4 +52,5 @@ export const canApprove = (s) =>
   ["awaiting_approval", "purchase_failed", "needs_login"].includes(s);
 export const canRetry = (s) =>
   ["mapping_failed", "purchase_failed", "needs_login"].includes(s);
-export const isTerminal = (s) => ["completed", "canceled"].includes(s);
+export const isTerminal = (s) =>
+  ["completed", "canceled", "shipped", "deleted"].includes((s || "").toLowerCase());

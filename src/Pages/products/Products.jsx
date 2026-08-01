@@ -87,7 +87,7 @@ const Products = () => {
   };
 
   const [columns, setColumns] = useState({
-    serial: false, asin: false, ean: true, title: false, sheetTitle: true, category: true,
+    serial: false, asin: false, ean: true, title: false, sheetTitle: true, category: true, brand: true,
     purchasePrice: false, price: true, delivery: false,
     sheetSource: false, ratings: false, stock: true, status: false, action: true, publishAction: false
   });
@@ -388,6 +388,37 @@ const Products = () => {
           ))}
         </div>
 
+        {/* Brand Filter Bar */}
+        {filtersMeta?.brands?.length > 0 && (
+          <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100">
+            <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Brands:</span>
+            {filtersMeta.brands.map((brand) => (
+              <button
+                key={brand}
+                onClick={() => {
+                  const isActive = activeFilters.filter_brand === brand;
+                  const newFilters = { ...activeFilters };
+                  if (isActive) {
+                    delete newFilters.filter_brand;
+                  } else {
+                    newFilters.filter_brand = brand;
+                  }
+                  setActiveFilters(newFilters);
+                  setFilters(newFilters); // sync drawer filters
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-xs ${
+                  activeFilters.filter_brand === brand
+                    ? "bg-blue-500 text-white shadow-sm font-semibold"
+                    : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100"
+                }`}
+              >
+                {brand}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Connect inventory banner */}
         {total > 0 ? (
           <div className="w-full flex items-center bg-[#f9f9f9] border border-gray-200/50 rounded-xl px-5 py-4 mb-5 text-left">
@@ -446,9 +477,11 @@ const Products = () => {
               description={
                 isError
                   ? "Couldn't reach the server. Is the backend running?"
-                  : debouncedSearch
-                    ? `No products match “${debouncedSearch}”.`
-                    : "No products yet. Connect your inventory to import."
+                  : debouncedSearch || Object.keys(activeFilters).length > 0
+                    ? `No products match your filters or search.`
+                    : data?.has_any_items
+                      ? "All your imported products are in the Needs Review queue."
+                      : "No products yet. Connect your inventory to import."
               }
             />
           </div>
@@ -532,6 +565,13 @@ const Products = () => {
                     <div className="mb-2">
                       <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium truncate max-w-full">
                         {p.category}
+                      </span>
+                    </div>
+                  )}
+                  {columns.brand && p.product_brand && (
+                    <div className="mb-2">
+                      <span className="inline-flex px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold truncate max-w-full">
+                        {p.product_brand}
                       </span>
                     </div>
                   )}
@@ -654,6 +694,7 @@ const Products = () => {
                   {columns.title && <th className="py-3 px-2">Products name</th>}
                   {columns.sheetTitle && <th className="py-3 px-2">Sheet Name</th>}
                   {columns.category && <th className="py-3 px-2">Category</th>}
+                  {columns.brand && <th className="py-3 px-2">Brand</th>}
                   {columns.purchasePrice && <th className="py-3 px-2">Purchase Price</th>}
                   {columns.price && <th className="py-3 px-2">Price</th>}
                   {columns.delivery && <th className="py-3 px-2">Delivery</th>}
@@ -711,6 +752,13 @@ const Products = () => {
                       <span className="line-clamp-2">{p.spreadsheetTitle || "—"}</span>
                     </td>}
                     {columns.category && <td className="py-3 px-2 text-gray-500">{p.category}</td>}
+                    {columns.brand && <td className="py-3 px-2 text-gray-500">
+                      {p.product_brand ? (
+                        <span className="inline-flex px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold">
+                          {p.product_brand}
+                        </span>
+                      ) : "—"}
+                    </td>}
                     {columns.purchasePrice && <td className="py-3 px-2 text-gray-700">
                       {p.purchasePrice ? `€${p.purchasePrice}` : "—"}
                     </td>}
