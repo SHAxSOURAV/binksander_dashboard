@@ -24,7 +24,8 @@ const mapItem = (it, i) => ({
   // Items whose live scrape failed come back without a title; show the ASIN
   // as a stand-in and flag them so the card can render a "syncing" state.
   title: it.product_title || (it.asin ? `ASIN ${it.asin}` : "Syncing…"),
-  brand: it.brand || "",
+  brand: it.brand || it.product_brand || "",
+  product_brand: it.product_brand || it.brand || "",
   category: it["Product category"] || it["Product notes"] || it.country || "—",
   subcategory: "",
   amazonPrice: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
@@ -74,6 +75,7 @@ const productApis = baseApis.injectEndpoints({
         filter_stock,
         filter_category,
         filter_delivery,
+        filter_brand,
         filter_min_price,
         filter_max_price,
         filter_min_purchase,
@@ -94,6 +96,7 @@ const productApis = baseApis.injectEndpoints({
         if (filter_stock) query.append("filter_stock", filter_stock);
         if (filter_category) query.append("filter_category", filter_category);
         if (filter_delivery) query.append("filter_delivery", filter_delivery);
+        if (filter_brand) query.append("filter_brand", filter_brand);
         if (filter_min_price) query.append("filter_min_price", filter_min_price);
         if (filter_max_price) query.append("filter_max_price", filter_max_price);
         if (filter_min_purchase) query.append("filter_min_purchase", filter_min_purchase);
@@ -110,6 +113,7 @@ const productApis = baseApis.injectEndpoints({
         page: arg?.page || 1,
         limit: arg?.limit || 50,
         total: res?.total || 0,
+        has_any_items: res?.has_any_items || false,
         items: (res?.data || []).map(mapItem),
       }),
       providesTags: ["Products"],
@@ -126,6 +130,34 @@ const productApis = baseApis.injectEndpoints({
       query: ({ page = 1, limit = 50 } = {}) =>
         `/spreadsheet/items?page=${page}&limit=${limit}`,
       providesTags: ["Products"],
+    }),
+
+    // GET /spreadsheet/needs-review?page&limit&filter_brand
+    getNeedsReviewItems: builder.query({
+      query: ({ page = 1, limit = 50, filter_brand } = {}) => {
+        let url = `/spreadsheet/needs-review?page=${page}&limit=${limit}`;
+        if (filter_brand) {
+          url += `&filter_brand=${encodeURIComponent(filter_brand)}`;
+        }
+        return url;
+      },
+      providesTags: ["Products"],
+    }),
+
+    revalidateItem: builder.mutation({
+      query: (itemId) => ({
+        url: `/spreadsheet/revalidate-item/${itemId}`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
+    revalidateAll: builder.mutation({
+      query: () => ({
+        url: "/spreadsheet/revalidate-all",
+        method: "POST",
+      }),
+      invalidatesTags: ["Products"],
     }),
 
     // GET /spreadsheet/scrape-asin?asin&country  → full Amazon product details
@@ -488,6 +520,9 @@ export const {
   useGetProductsQuery,
   useGetFiltersMetaQuery,
   useGetRawItemsQuery,
+  useGetNeedsReviewItemsQuery,
+  useRevalidateItemMutation,
+  useRevalidateAllMutation,
   useScrapeAsinQuery,
   useSyncInventoryMutation,
   useSyncAsinMutation,

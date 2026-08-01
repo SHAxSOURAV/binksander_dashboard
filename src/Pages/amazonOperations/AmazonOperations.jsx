@@ -4,6 +4,7 @@ import { FiSearch, FiExternalLink, FiCheckCircle } from "react-icons/fi";
 import { LuRefreshCw } from "react-icons/lu";
 import toast from "react-hot-toast";
 import FulfillmentDetailModal from "../../components/operations/FulfillmentDetailModal";
+import CreatePurchaseOrderModal from "../../components/operations/CreatePurchaseOrderModal";
 import Pagination from "../../components/shared/Pagination";
 import { useUI } from "../../Provider/ContextProvider";
 import {
@@ -19,6 +20,7 @@ const AmazonOperations = () => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
+  const [poOrder, setPoOrder] = useState(null);
   const [statusFilter, setStatusFilter] = useState("pending");
   const [visitedBuyNow, setVisitedBuyNow] = useState({});
 
@@ -31,7 +33,10 @@ const AmazonOperations = () => {
   const [sync, { isLoading: syncing }] = useSyncFulfillmentMutation();
   const [completeOrder, { isLoading: completing }] = useCompleteFulfillmentOrderMutation();
 
-  const orders = data?.orders || [];
+  const rawOrders = data?.orders || [];
+  const orders = [...rawOrders].sort(
+    (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  );
   const total = data?.total || 0;
   const totalPages = Math.max(1, data?.total_pages || 1);
 
@@ -56,12 +61,11 @@ const AmazonOperations = () => {
 
   const handleBuyNow = (order) => {
     const url = order.amazon_url || (order.asin ? `https://www.amazon.nl/dp/${order.asin}` : null);
-    if (!url) {
-      toast.error("No Amazon supplier link available for this item.");
-      return;
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
     setVisitedBuyNow((prev) => ({ ...prev, [order.id]: true }));
-    window.open(url, "_blank", "noopener,noreferrer");
+    setPoOrder(order);
   };
 
   const handleMarkComplete = async (orderId) => {
@@ -259,6 +263,13 @@ const AmazonOperations = () => {
         open={!!selected}
         order={selected}
         onClose={() => setSelected(null)}
+      />
+
+      <CreatePurchaseOrderModal
+        open={!!poOrder}
+        order={poOrder}
+        onClose={() => setPoOrder(null)}
+        onComplete={handleMarkComplete}
       />
     </div>
   );
