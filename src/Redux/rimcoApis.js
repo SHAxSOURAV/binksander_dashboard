@@ -6,7 +6,9 @@ export const rimcoApis = baseApis.injectEndpoints({
     getLiveRimcoOrders: builder.query({
       query: ({ page = 1, limit = 50, status, search } = {}) => {
         const params = new URLSearchParams({ page, limit });
-        if (status) params.set("status", status);
+        if (status && status !== "all" && status !== "undefined" && status !== "null") {
+          params.set("status", status);
+        }
         if (search) params.set("search", search);
         return `/rimco/orders?${params.toString()}`;
       },
