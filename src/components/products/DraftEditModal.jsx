@@ -23,6 +23,16 @@ const Field = ({ label, children, required }) => (
   </div>
 );
 
+const calcSellingPrice = (val) => {
+  if (val == null || val === "" || isNaN(val)) return 39.95;
+  const num = parseFloat(String(val).replace(/[^\d.,]/g, "").replace(",", "."));
+  if (!Number.isFinite(num) || num <= 0) return 39.95;
+  const intPart = Math.floor(num);
+  const frac = num - intPart;
+  const rounded = (frac <= 0.95 + 1e-9) ? intPart + 0.95 : (intPart + 1) + 0.95;
+  return Math.max(39.95, Math.round(rounded * 100) / 100);
+};
+
 const DraftEditModal = ({ draftId, onClose }) => {
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
@@ -127,10 +137,13 @@ const DraftEditModal = ({ draftId, onClose }) => {
 
   useEffect(() => {
     if (draft) {
+      const rawPrice = draft.bol_price || draft.estimated_price || "";
+      const roundedPrice = calcSellingPrice(rawPrice);
+
       setForm({
         title: draft.title || "",
         ean: draft.ean || "",
-        bol_price: draft.bol_price || draft.estimated_price || "",
+        bol_price: roundedPrice,
         stock_amount: draft.stock_amount ?? 10,
         condition: draft.condition || "NEW",
         delivery_code: draft.delivery_code || "24uurs-23",

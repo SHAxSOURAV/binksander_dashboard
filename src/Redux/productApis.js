@@ -76,6 +76,8 @@ const productApis = baseApis.injectEndpoints({
         filter_category,
         filter_delivery,
         filter_brand,
+        filter_return_rate,
+        multiplier = 2.5,
         filter_min_price,
         filter_max_price,
         filter_min_purchase,
@@ -97,6 +99,8 @@ const productApis = baseApis.injectEndpoints({
         if (filter_category) query.append("filter_category", filter_category);
         if (filter_delivery) query.append("filter_delivery", filter_delivery);
         if (filter_brand) query.append("filter_brand", filter_brand);
+        if (filter_return_rate) query.append("filter_return_rate", filter_return_rate);
+        if (multiplier) query.append("multiplier", multiplier);
         if (filter_min_price) query.append("filter_min_price", filter_min_price);
         if (filter_max_price) query.append("filter_max_price", filter_max_price);
         if (filter_min_purchase) query.append("filter_min_purchase", filter_min_purchase);
@@ -511,6 +515,11 @@ const productApis = baseApis.injectEndpoints({
     getBolProcessStatus: builder.query({
       query: (processId) => `/bol/process-status/${processId}`,
     }),
+
+    // GET /products/{asin}/live-delivery
+    getLiveDelivery: builder.query({
+      query: (asin) => `/products/${asin}/live-delivery`,
+    }),
   }),
   overrideExisting: false,
 });
@@ -547,6 +556,7 @@ export const {
   useUpdateBolOfferStockMutation,
   useDeleteBolOfferMutation,
   useGetBolProcessStatusQuery,
+  useGetLiveDeliveryQuery,
 } = productApis;
 
 export default productApis;

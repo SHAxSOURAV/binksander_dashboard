@@ -10,7 +10,18 @@ import {
   useSyncAsinMutation,
   useUpdateDraftMutation,
   useTranslateDraftImagesMutation,
+  useGetLiveDeliveryQuery,
 } from "../../Redux/productApis";
+
+// Helper for .95 rounding rule with €39.95 floor price
+const calcSellingPrice = (purchasePrice, mult = 2.5) => {
+  if (purchasePrice == null || purchasePrice <= 0) return 39.95;
+  const raw = purchasePrice * mult;
+  const intPart = Math.floor(raw);
+  const frac = raw - intPart;
+  const rounded = (frac <= 0.95 + 1e-9) ? intPart + 0.95 : (intPart + 1) + 0.95;
+  return Math.max(39.95, Math.round(rounded * 100) / 100);
+};
 
 // Parse a price that may use a comma as the decimal separator (e.g. "19,53")
 // into a JS number. Returns null when it can't be parsed.
@@ -41,6 +52,11 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
     { skip: !open || !product?.asin },
   );
 
+  // Live delivery details in Dutch
+  const { data: liveDeliveryRes } = useGetLiveDeliveryQuery(product?.asin, {
+    skip: !open || !product?.asin,
+  });
+
   // Merge scraped detail over the list-row data; scrape wins when present.
   const view = useMemo(() => {
     const photos =
@@ -53,6 +69,8 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
     const sheetTitle = product?.spreadsheetTitle || amazonTitle;
     const finalTitle = useSheetTitle ? sheetTitle : amazonTitle;
 
+    const calculatedPrice = calcSellingPrice(amazonNum, 2.5);
+
     return {
       amazonTitle,
       sheetTitle,
@@ -60,7 +78,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
       brand: details?.brand || product?.brand || "",
       description: details?.description || product?.description || "",
       amazonPrice: formatPrice(amazonNum),
-      price: amazonNum == null ? "" : formatPrice(amazonNum * 2.5),
+      price: formatPrice(calculatedPrice),
       originalPrice: details?.originalPrice || "",
       rating: details?.rating || product?.rating || "",
       reviews: details?.reviews || product?.reviews || 0,
@@ -68,15 +86,15 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
       category: product?.category || "",
       mainImage: details?.mainImage || product?.image || "",
       photos,
-      delivery: details?.delivery || "",
+      delivery: liveDeliveryRes?.live_delivery_dutch || details?.delivery || "Bezorging Vrijdag, 8 Augustus",
       isPrime: details?.isPrime || false,
       isAmazonChoice: details?.isAmazonChoice || false,
       isBestSeller: details?.isBestSeller || false,
       specs: details?.specs || {},
       features: details?.features || [],
-      returnPolicy: details?.returnPolicy || "",
+      returnPolicy: details?.returnPolicy || "Standaard Retourbeleid",
     };
-  }, [details, product, useSheetTitle]);
+  }, [details, product, useSheetTitle, liveDeliveryRes]);
 
   // Editable "Your Price"; defaults to the 2.5x markup and resets when the
   // computed value changes (new product / scrape result).
