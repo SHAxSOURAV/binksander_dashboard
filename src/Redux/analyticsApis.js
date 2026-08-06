@@ -2,9 +2,31 @@ import { baseApis } from "./main/baseApis";
 
 const analyticsApis = baseApis.injectEndpoints({
   endpoints: (builder) => ({
-    // GET /analytics/dashboard?range=this_month|30d|90d|all
+    // GET /analytics/dashboard?range=7d|14d|30d|90d|365d
     getDashboard: builder.query({
       query: (range = "30d") => `/analytics/dashboard?range=${range}`,
+      providesTags: ["Analytics"],
+    }),
+
+    // GET /analytics/kpis?range=7d|14d|30d|90d|365d
+    getKpis: builder.query({
+      query: (range = "30d") => `/analytics/kpis?range=${range}`,
+      providesTags: ["Analytics"],
+    }),
+
+    // GET /analytics/performance
+    getPerformance: builder.query({
+      query: () => `/analytics/performance`,
+      providesTags: ["Analytics"],
+    }),
+
+    // GET /analytics/sales-analysis?range=&category=
+    getSalesAnalysis: builder.query({
+      query: ({ range = "30d", category = "" } = {}) => {
+        let url = `/analytics/sales-analysis?range=${range}`;
+        if (category) url += `&category=${encodeURIComponent(category)}`;
+        return url;
+      },
       providesTags: ["Analytics"],
     }),
 
@@ -37,6 +59,9 @@ const analyticsApis = baseApis.injectEndpoints({
 
 export const {
   useGetDashboardQuery,
+  useGetKpisQuery,
+  useGetPerformanceQuery,
+  useGetSalesAnalysisQuery,
   useGetBolOrdersQuery,
   useSyncNowMutation,
   useShipBolOrderMutation,

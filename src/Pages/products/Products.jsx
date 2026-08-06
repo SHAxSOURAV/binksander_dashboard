@@ -388,34 +388,54 @@ const Products = () => {
           ))}
         </div>
 
-        {/* Brand Filter Bar */}
-        {filtersMeta?.brands?.length > 0 && (
-          <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100">
-            <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Brands:</span>
-            {filtersMeta.brands.map((brand) => (
-              <button
-                key={brand}
-                onClick={() => {
-                  const isActive = activeFilters.filter_brand === brand;
-                  const newFilters = { ...activeFilters };
-                  if (isActive) {
-                    delete newFilters.filter_brand;
-                  } else {
-                    newFilters.filter_brand = brand;
-                  }
-                  setActiveFilters(newFilters);
-                  setFilters(newFilters); // sync drawer filters
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-xs ${
-                  activeFilters.filter_brand === brand
-                    ? "bg-blue-500 text-white shadow-sm font-semibold"
-                    : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100"
-                }`}
-              >
-                {brand}
-              </button>
-            ))}
+        {/* Active Filter Chips (if any filter is selected) */}
+        {Object.keys(activeFilters).length > 0 && (
+          <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100 flex-wrap">
+            <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Active Filters:</span>
+            {activeFilters.filter_brand && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">
+                Brand: {activeFilters.filter_brand}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_brand;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {activeFilters.filter_category && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
+                Category: {activeFilters.filter_category}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_category;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setActiveFilters({});
+                setFilters({});
+                setPage(1);
+              }}
+              className="text-xs text-red-600 hover:underline font-semibold ml-2"
+            >
+              Clear All Filters
+            </button>
           </div>
         )}
 
@@ -957,6 +977,20 @@ const Products = () => {
             />
           </div>
           <div>
+            <label className="text-xs font-semibold text-gray-600 mb-2 block">Publish Status</label>
+            <Select
+              className="w-full"
+              allowClear
+              placeholder="e.g. Online"
+              value={filters.filter_status}
+              onChange={v => setFilters({ ...filters, filter_status: v })}
+              options={[
+                { label: "Online (Published on Bol)", value: "Online" },
+                { label: "Offline (Draft / Unpublished)", value: "Offline" },
+              ]}
+            />
+          </div>
+          <div>
             <label className="text-xs font-semibold text-gray-600 mb-2 block">Stock</label>
             <Select
               className="w-full"
@@ -964,7 +998,22 @@ const Products = () => {
               placeholder="Select Stock Status"
               value={filters.filter_stock}
               onChange={v => setFilters({ ...filters, filter_stock: v })}
-              options={(filtersMeta?.stocks || ["In Stock", "Low Stock (≤3)", "Out of Stock"]).map(s => ({ label: s, value: s }))}
+              options={["In Stock", "Low Stock (≤3)", "Out of Stock"].map(s => ({ label: s, value: s }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-2 block">Brand</label>
+            <Select
+              className="w-full"
+              allowClear
+              showSearch
+              placeholder="Search or select brand..."
+              value={filters.filter_brand}
+              onChange={v => setFilters({ ...filters, filter_brand: v })}
+              options={(filtersMeta?.brands || []).map(b => ({ label: b, value: b }))}
+              filterOption={(input, option) =>
+                (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+              }
             />
           </div>
           <div>
@@ -973,10 +1022,10 @@ const Products = () => {
               className="w-full"
               allowClear
               showSearch
-              placeholder="e.g. Projector"
+              placeholder="e.g. Electronics"
               value={filters.filter_category}
               onChange={v => setFilters({ ...filters, filter_category: v })}
-              options={(filtersMeta?.categories || []).map(s => ({ label: s, value: s }))}
+              options={(filtersMeta?.categories || ["General", "Electronics", "Home & Kitchen", "Fashion", "Sports"]).map(s => ({ label: s, value: s }))}
             />
           </div>
           <div>
@@ -984,10 +1033,49 @@ const Products = () => {
             <Select
               className="w-full"
               allowClear
-              placeholder="e.g. 3-5 days"
+              placeholder="Select Delivery Timeframe"
               value={filters.filter_delivery}
               onChange={v => setFilters({ ...filters, filter_delivery: v })}
-              options={(filtersMeta?.delivery_times || []).map(s => ({ label: s, value: s }))}
+              options={[
+                "1-2 days",
+                "2-3 days",
+                "3-5 days",
+                "5-8 days",
+                "8-14 days"
+              ].map(s => ({ label: s, value: s }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-2 block">Return Rate Threshold</label>
+            <Select
+              className="w-full"
+              allowClear
+              placeholder="Filter by Return Rate"
+              value={filters.filter_return_rate}
+              onChange={v => setFilters({ ...filters, filter_return_rate: v })}
+              options={[
+                { label: "All Return Rates", value: "All" },
+                { label: "Low Return Rate (< 5%)", value: "< 5%" },
+                { label: "Medium Return Rate (5 - 10%)", value: "5 - 10%" },
+                { label: "High Return Rate (> 10%)", value: "> 10%" },
+              ]}
+            />
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-semibold text-gray-600">Price Multiplier (Central Setting)</label>
+              <span className="text-[10px] text-blue-600 font-bold">.95 Rounding + €39.95 Floor</span>
+            </div>
+            <Select
+              className="w-full"
+              value={filters.multiplier || 2.5}
+              onChange={v => setFilters({ ...filters, multiplier: v })}
+              options={[
+                { label: "x2.0 Multiplier", value: 2.0 },
+                { label: "x2.5 Multiplier (Default)", value: 2.5 },
+                { label: "x2.6 Multiplier", value: 2.6 },
+                { label: "x3.0 Multiplier", value: 3.0 },
+              ]}
             />
           </div>
           <div>
