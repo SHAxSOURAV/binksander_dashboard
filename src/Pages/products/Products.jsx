@@ -15,7 +15,7 @@ import productApis, {
   useGetProductsQuery,
   useGetFiltersMetaQuery,
   useGetConnectionQuery,
-  useResyncInventoryMutation,
+  useSyncConnectedSheetMutation,
   useResyncStockMutation,
   useCreateDraftFromAmazonMutation,
   useGetBolProcessStatusQuery,
@@ -162,7 +162,6 @@ const Products = () => {
 
   const { data: filtersMeta } = useGetFiltersMetaQuery();
   const { data: connectionData } = useGetConnectionQuery();
-  const [resync, { isLoading: isResyncing }] = useResyncInventoryMutation();
   const [resyncStock] = useResyncStockMutation();
   const [resyncingStockAsin, setResyncingStockAsin] = useState(null);
 
@@ -196,12 +195,18 @@ const Products = () => {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const loading = isLoading || (isFetching && !data);
 
+  const [syncConnectedSheet, { isLoading: isSyncingSheet }] = useSyncConnectedSheetMutation();
+
   const handleResync = async () => {
     try {
-      const res = await resync().unwrap();
-      toast.success(res?.message || "Inventory synced");
+      const res = await syncConnectedSheet().unwrap();
+      if (res?.new_count > 0) {
+        toast.success(res.message || `Spreadsheet synced! (${res.new_count} new product(s) added)`);
+      } else {
+        toast.success(res?.message || "Spreadsheet synced! No new products found.");
+      }
     } catch (err) {
-      toast.error(err?.data?.detail || "Nothing connected to sync yet");
+      toast.error(err?.data?.detail || "Error syncing spreadsheet.");
     }
   };
 
@@ -278,11 +283,11 @@ const Products = () => {
 
             <button
               onClick={handleResync}
-              disabled={isResyncing}
+              disabled={isSyncingSheet}
               title="Sync from spreadsheet"
               className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50"
             >
-              <LuRefreshCw size={16} className={isResyncing ? "animate-spin" : ""} />
+              <LuRefreshCw size={16} className={isSyncingSheet ? "animate-spin" : ""} />
             </button>
 
             <Popover
