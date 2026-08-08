@@ -29,7 +29,13 @@ const mapItem = (it, i) => ({
   category: it["Product category"] || it["Product notes"] || it.country || "—",
   subcategory: "",
   amazonPrice: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
-  price: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
+  price: (() => {
+    const rawP = parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]);
+    if (!rawP || rawP <= 0) return 39.95;
+    const baseP = rawP * 2.5;
+    const roundedP = Math.floor(baseP / 10) * 10 + 9.95;
+    return Math.max(29.95, Math.round(roundedP * 100) / 100);
+  })(),
   purchasePrice: parsePrice(it["Purchase price"]),
   deliveryTime: it["DELIVERY TIME"] || "",
   rating: parseFloat(it.product_star_rating) || 0,
@@ -160,6 +166,31 @@ const productApis = baseApis.injectEndpoints({
       query: () => ({
         url: "/spreadsheet/revalidate-all",
         method: "POST",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
+    syncConnectedSheet: builder.mutation({
+      query: () => ({
+        url: "/spreadsheet/sync-connected-sheet",
+        method: "POST",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
+    forcePassItem: builder.mutation({
+      query: (itemId) => ({
+        url: `/spreadsheet/force-pass/${itemId}`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
+    forcePassBulk: builder.mutation({
+      query: (itemIds) => ({
+        url: "/spreadsheet/force-pass-bulk",
+        method: "POST",
+        body: { item_ids: itemIds },
       }),
       invalidatesTags: ["Products"],
     }),
@@ -516,9 +547,9 @@ const productApis = baseApis.injectEndpoints({
       query: (processId) => `/bol/process-status/${processId}`,
     }),
 
-    // GET /products/{asin}/live-delivery
+    // GET /spreadsheet/products/{asin}/live-delivery
     getLiveDelivery: builder.query({
-      query: (asin) => `/products/${asin}/live-delivery`,
+      query: (asin) => `/spreadsheet/products/${asin}/live-delivery`,
     }),
   }),
   overrideExisting: false,
@@ -532,6 +563,9 @@ export const {
   useGetNeedsReviewItemsQuery,
   useRevalidateItemMutation,
   useRevalidateAllMutation,
+  useSyncConnectedSheetMutation,
+  useForcePassItemMutation,
+  useForcePassBulkMutation,
   useScrapeAsinQuery,
   useSyncInventoryMutation,
   useSyncAsinMutation,

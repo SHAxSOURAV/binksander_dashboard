@@ -15,12 +15,10 @@ import {
 
 // Helper for .95 rounding rule with €39.95 floor price
 const calcSellingPrice = (purchasePrice, mult = 2.5) => {
-  if (purchasePrice == null || purchasePrice <= 0) return 39.95;
-  const raw = purchasePrice * mult;
-  const intPart = Math.floor(raw);
-  const frac = raw - intPart;
-  const rounded = (frac <= 0.95 + 1e-9) ? intPart + 0.95 : (intPart + 1) + 0.95;
-  return Math.max(39.95, Math.round(rounded * 100) / 100);
+  if (purchasePrice == null || purchasePrice <= 0 || isNaN(purchasePrice)) return 39.95;
+  const basePrice = purchasePrice * mult;
+  const rounded = Math.floor(basePrice / 10) * 10 + 9.95;
+  return Math.max(29.95, Math.round(rounded * 100) / 100);
 };
 
 // Parse a price that may use a comma as the decimal separator (e.g. "19,53")
@@ -37,6 +35,70 @@ const parsePrice = (val) => {
 
 // Format a number as a price string using a "." decimal separator.
 const formatPrice = (num) => (num == null ? "" : num.toFixed(2));
+
+const calculateDeliveryDays = (deliveryStr) => {
+  if (!deliveryStr || typeof deliveryStr !== "string") return "3-5 Days";
+
+  const monthMap = {
+    januari: 0, january: 0, jan: 0,
+    februari: 1, february: 1, feb: 1,
+    maart: 2, march: 2, mar: 2,
+    april: 3, apr: 3,
+    mei: 4, may: 4,
+    juni: 5, june: 5, jun: 5,
+    juli: 6, july: 6, jul: 6,
+    augustus: 7, august: 7, aug: 7,
+    september: 8, sep: 8, sept: 8,
+    oktober: 9, october: 9, okt: 9, oct: 9,
+    november: 10, nov: 10,
+    december: 11, dec: 11
+  };
+
+  const match1 = deliveryStr.match(/(\d{1,2})\s+([a-zA-Z]{3,10})/);
+  const match2 = deliveryStr.match(/([a-zA-Z]{3,10})\s+(\d{1,2})/);
+
+  let day = null;
+  let monthStr = null;
+
+  if (match1) {
+    day = parseInt(match1[1], 10);
+    monthStr = match1[2].toLowerCase();
+  } else if (match2) {
+    day = parseInt(match2[2], 10);
+    monthStr = match2[1].toLowerCase();
+  }
+
+  if (day && monthStr && monthMap[monthStr] !== undefined) {
+    const now = new Date();
+    const targetMonth = monthMap[monthStr];
+    let targetYear = now.getFullYear();
+
+    if (targetMonth < now.getMonth() - 1) {
+      targetYear += 1;
+    }
+
+    const targetDate = new Date(targetYear, targetMonth, day);
+    const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diffTime = targetDate.getTime() - todayZero.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays > 1) {
+      return `${diffDays} Days`;
+    } else if (diffDays === 1) {
+      return "1 Day";
+    } else if (diffDays === 0) {
+      return "Same Day";
+    }
+  }
+
+  const daysMatch = deliveryStr.match(/(\d+)\s*(?:dagen|days|d)/i);
+  if (daysMatch) {
+    return `${daysMatch[1]} Days`;
+  }
+
+  return "3-5 Days";
+};
 
 const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
   const [activeImage, setActiveImage] = useState("");
@@ -221,7 +283,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
                          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col sm:flex-row gap-6 justify-between items-center relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
                             <div className="relative z-10 w-full sm:w-auto">
-                              <p className="text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Amazon Price</p>
+                              <p className="text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">AMAZON PRICE</p>
                               <div className="flex items-end gap-2.5">
                                  <span className="text-2xl font-bold text-gray-800">
                                    {view.amazonPrice ? `€${view.amazonPrice}` : "—"}
@@ -233,7 +295,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
                             </div>
                             <div className="w-px h-10 bg-gray-200 hidden sm:block relative z-10"></div>
                             <div className="flex-1 w-full sm:w-auto relative z-10">
-                              <p className="text-[11px] font-semibold text-brand mb-1.5 uppercase tracking-wide">Your Selling Price (€)</p>
+                              <p className="text-[11px] font-semibold text-brand mb-1.5 uppercase tracking-wide">YOUR SELLING PRICE (€)</p>
                               <Input
                                 value={yourPrice ? `€${yourPrice}` : ""}
                                 onChange={(e) => setYourPrice(e.target.value.replace(/^€/, ""))}
@@ -244,12 +306,17 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
                          
                          {/* Delivery & Logistics */}
                          <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                            <h3 className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">Logistics & Returns</h3>
+                            <h3 className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">LOGISTICS & RETURNS</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                <div className="flex items-start gap-3">
                                  <div className="mt-0.5 text-blue-500 bg-blue-50 p-1.5 rounded-lg"><FaTruck size={14} /></div>
                                  <div>
-                                   <p className="text-[13px] font-semibold text-gray-800">Delivery Details</p>
+                                   <div className="flex items-center gap-2 mb-1">
+                                      <p className="text-[13px] font-semibold text-gray-800">Delivery Details</p>
+                                      <span className="inline-flex px-2 py-0.5 bg-blue-100 text-blue-700 font-bold text-[11px] rounded-md">
+                                        {view.deliveryDays}
+                                      </span>
+                                   </div>
                                    <p className="text-xs font-medium text-gray-500 mt-1 leading-relaxed">{view.delivery || "Standard Delivery"}</p>
                                  </div>
                                </div>
@@ -257,7 +324,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
                                  <div className="mt-0.5 text-green-500 bg-green-50 p-1.5 rounded-lg"><FaUndoAlt size={14} /></div>
                                  <div>
                                    <p className="text-[13px] font-semibold text-gray-800">Return Policy</p>
-                                   <p className="text-xs font-medium text-gray-500 mt-1 leading-relaxed">{view.returnPolicy || "Standard Return Policy"}</p>
+                                   <p className="text-xs font-medium text-gray-500 mt-1 leading-relaxed">{view.returnPolicy || "FREE 30-day refund/replacement"}</p>
                                  </div>
                                </div>
                             </div>
@@ -265,7 +332,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
                          
                          {/* Category & Bullet Features */}
                          <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                            <h3 className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">Category & Highlights</h3>
+                            <h3 className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">CATEGORY & HIGHLIGHTS</h3>
                             <div className="mb-4">
                                <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Internal Mapped Category</p>
                                <Select
