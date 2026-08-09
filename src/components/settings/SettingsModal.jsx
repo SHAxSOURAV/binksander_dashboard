@@ -161,8 +161,8 @@ const SettingsModal = () => {
       toast.error("Please choose an image file");
       return;
     }
-    if (file.size > 1024 * 1024) {
-      toast.error("Image must be under 1MB");
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Image must be under 20MB");
       return;
     }
     const reader = new FileReader();
@@ -410,7 +410,7 @@ const SettingsModal = () => {
                         {account.full_name || "—"}
                       </p>
                       <p className="text-xs text-gray-400">
-                        JPG or PNG, up to 1MB
+                        JPG or PNG, up to 20MB
                       </p>
                     </div>
                   </div>

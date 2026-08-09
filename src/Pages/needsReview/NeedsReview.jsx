@@ -1,8 +1,14 @@
-import React, { useState } from "react";
-import { Empty, Table, Tag, message, Tooltip, Button, Select } from "antd";
-import { FiAlertCircle, FiCopy, FiRefreshCw, FiExternalLink, FiCheck, FiCheckCircle } from "react-icons/fi";
+import React, { useState, useEffect } from "react";
+import { Empty, Table, Tag, message, Tooltip, Button, Select, Input, Modal } from "antd";
+import { 
+  FiAlertCircle, FiCopy, FiExternalLink, FiCheck, 
+  FiCheckCircle, FiSearch, FiTrash2 
+} from "react-icons/fi";
+import { LuRefreshCw } from "react-icons/lu";
 import { 
   useGetNeedsReviewItemsQuery, 
+  useDeleteNeedsReviewItemMutation,
+  useDeleteNeedsReviewBulkMutation,
   useRevalidateItemMutation, 
   useSyncConnectedSheetMutation,
   useForcePassItemMutation,
@@ -16,12 +22,32 @@ const NeedsReview = () => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [filterBrand, setFilterBrand] = useState(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFailure, setSelectedFailure] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
-  const { data, isLoading } = useGetNeedsReviewItemsQuery({ page, limit, filter_brand: filterBrand }, { pollingInterval: 5000 });
+  // Modal states for delete confirmation
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+
+  // Debounce the search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data, isLoading } = useGetNeedsReviewItemsQuery(
+    { page, limit, filter_brand: filterBrand, search: debouncedSearch },
+    { pollingInterval: 5000 }
+  );
   const { data: filtersMeta } = useGetFiltersMetaQuery();
   const [revalidateItem] = useRevalidateItemMutation();
+  const [deleteItem, { isLoading: isDeletingSingle }] = useDeleteNeedsReviewItemMutation();
+  const [deleteBulk, { isLoading: isDeletingBulk }] = useDeleteNeedsReviewBulkMutation();
   const [syncConnectedSheet, { isLoading: isSyncingSheet }] = useSyncConnectedSheetMutation();
   const [forcePassItem] = useForcePassItemMutation();
   const [forcePassBulk, { isLoading: isForcePassingBulk }] = useForcePassBulkMutation();
@@ -32,6 +58,30 @@ const NeedsReview = () => {
       message.success("Item queued for re-validation!");
     } catch (err) {
       message.error("Failed to revalidate item");
+    }
+  };
+
+  const handleDeleteItem = async (id) => {
+    if (!id) return;
+    try {
+      await deleteItem(id).unwrap();
+      message.success("Item deleted from Needs Review");
+      setSelectedRowKeys((prev) => prev.filter((k) => k !== id));
+      setItemToDelete(null);
+    } catch (err) {
+      message.error(err?.data?.detail || "Failed to delete item");
+    }
+  };
+
+  const handleDeleteBulk = async () => {
+    if (!selectedRowKeys.length) return;
+    try {
+      const res = await deleteBulk(selectedRowKeys).unwrap();
+      message.success(res.message || `Deleted ${selectedRowKeys.length} product(s)`);
+      setSelectedRowKeys([]);
+      setIsBulkDeleteOpen(false);
+    } catch (err) {
+      message.error(err?.data?.detail || "Failed to delete selected products");
     }
   };
 
@@ -112,7 +162,7 @@ const NeedsReview = () => {
                   <Tooltip title="Copy">
                     <button 
                       onClick={() => handleCopy(codeToDisplay)}
-                      className="text-gray-400 hover:text-brand transition-colors"
+                      className="text-gray-400 hover:text-brand transition-colors cursor-pointer"
                     >
                       <FiCopy size={12} />
                     </button>
@@ -213,28 +263,36 @@ const NeedsReview = () => {
     {
       title: "Action",
       key: "action",
+      align: "right",
       render: (_, record) => {
         if (record.validation_status === "PROCESSING") {
           return (
             <span className="flex items-center gap-1.5 text-[11px] font-bold text-brand uppercase tracking-wide">
-              <FiRefreshCw className="animate-spin" /> Processing
+              <LuRefreshCw className="animate-spin" /> Processing
             </span>
           );
         }
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <button 
-              className="text-xs font-semibold px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg transition-colors"
+              className="text-xs font-semibold px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg transition-colors cursor-pointer"
               onClick={() => handleRevalidateItem(record._id)}
             >
               Re-validate
             </button>
             <button 
-              className="text-xs font-semibold px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+              className="text-xs font-semibold px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
               onClick={() => handleForcePassItem(record._id)}
               title="Force validation pass and move to catalog"
             >
               <FiCheck size={13} /> Force Pass
+            </button>
+            <button 
+              className="text-xs font-semibold p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center cursor-pointer"
+              onClick={() => setItemToDelete(record)}
+              title="Delete item"
+            >
+              <FiTrash2 size={14} />
             </button>
           </div>
         );
@@ -250,58 +308,77 @@ const NeedsReview = () => {
   const totalItems = data?.total || 0;
 
   const brandOptions = [
-    { label: "All Brands", value: null },
-    ...(filtersMeta?.brands || []).map((b) => ({ label: b, value: b }))
+    { value: "all", label: "All Brands" },
+    ...(filtersMeta?.brands || []).map((b) => ({ value: b, label: b }))
   ];
 
   return (
-    <div className="min-h-screen bg-[#f7f7f8] font-poppins">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Needs Review</h1>
-            <p className="text-gray-500 text-sm">
-              Products that failed validation during import. Review the reasons and re-validate them to add to your catalog.
-            </p>
-          </div>
+    <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
+      <div className="bg-white rounded-2xl p-5 card-shadow">
+        {/* Header matching Inventory Catalog */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <h2 className="text-lg font-semibold text-gray-700">
+            {totalItems} Needs Review
+          </h2>
           <div className="flex items-center gap-3 flex-wrap">
-            {selectedRowKeys.length > 0 && (
-              <Button
-                type="primary"
-                onClick={handleForcePassBulk}
-                loading={isForcePassingBulk}
-                icon={<FiCheckCircle />}
-                className="bg-green-600 hover:bg-green-700 h-10 font-semibold shadow-sm border-0"
-              >
-                Force Pass Selected ({selectedRowKeys.length})
-              </Button>
-            )}
-
-            {/* Brand Dropdown Select */}
-            <Select
-              value={filterBrand}
-              onChange={(val) => {
-                setFilterBrand(val);
-                setPage(1);
-              }}
-              options={brandOptions}
-              placeholder="Filter Brand"
-              className="w-48 h-10 shadow-sm"
-              allowClear
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              prefix={<FiSearch className="text-gray-400 mr-1" />}
+              placeholder="Search"
+              className="h-10 rounded-lg w-full sm:w-64"
             />
 
             <button
               onClick={handleSyncSpreadsheet}
               disabled={isSyncingSheet}
               title="Sync from spreadsheet"
-              className="w-10 h-10 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50 transition-colors shadow-sm"
+              className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50 cursor-pointer"
             >
-              <FiRefreshCw size={16} className={isSyncingSheet ? "animate-spin" : ""} />
+              <LuRefreshCw size={16} className={isSyncingSheet ? "animate-spin" : ""} />
             </button>
+
+            <Select
+              value={filterBrand || "all"}
+              onChange={(val) => {
+                setFilterBrand(val === "all" ? null : val);
+                setPage(1);
+              }}
+              className="w-40 h-10 custom-select"
+              options={brandOptions}
+            />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-gray-100 overflow-hidden">
+        {/* Bulk Action Toolbar */}
+        {selectedRowKeys.length > 0 && (
+          <div className="mb-4 p-3 bg-white rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4">
+            <span className="text-sm font-medium text-gray-700 pl-1">
+              Selected <strong className="text-gray-900">{selectedRowKeys.length}</strong> item(s)
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="primary"
+                onClick={handleForcePassBulk}
+                loading={isForcePassingBulk}
+                icon={<FiCheckCircle />}
+                className="bg-green-600 hover:bg-green-700 h-9 font-semibold shadow-sm border-0 cursor-pointer"
+              >
+                Force Pass Selected
+              </Button>
+              <Button
+                danger
+                onClick={() => setIsBulkDeleteOpen(true)}
+                icon={<FiTrash2 />}
+                className="h-9 font-semibold shadow-sm cursor-pointer"
+              >
+                Delete Selected
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <Table 
             dataSource={items}
             columns={columns}
@@ -336,6 +413,80 @@ const NeedsReview = () => {
           record={selectedFailure?.record}
           checkKey={selectedFailure?.checkKey}
         />
+
+        {/* Single Delete Confirmation Modal */}
+        <Modal
+          open={!!itemToDelete}
+          onCancel={() => setItemToDelete(null)}
+          footer={null}
+          centered
+          width={420}
+          className="rounded-2xl overflow-hidden"
+        >
+          <div className="p-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-3">
+              <FiTrash2 size={24} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Product</h3>
+            <p className="text-gray-500 text-sm mb-5 leading-relaxed">
+              Are you sure you want to delete <span className="font-semibold text-gray-800">"{itemToDelete?.product_title || itemToDelete?.TITLE || itemToDelete?.asin || "this product"}"</span> from Needs Review? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                className="h-10 px-5 rounded-lg border-gray-200 text-gray-700 font-medium cursor-pointer"
+                onClick={() => setItemToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                danger
+                type="primary"
+                loading={isDeletingSingle}
+                className="h-10 px-5 rounded-lg font-medium bg-red-600 hover:bg-red-700 border-0 cursor-pointer"
+                onClick={() => handleDeleteItem(itemToDelete?._id)}
+              >
+                Delete Product
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Bulk Delete Confirmation Modal */}
+        <Modal
+          open={isBulkDeleteOpen}
+          onCancel={() => setIsBulkDeleteOpen(false)}
+          footer={null}
+          centered
+          width={420}
+          className="rounded-2xl overflow-hidden"
+        >
+          <div className="p-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-3">
+              <FiTrash2 size={24} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Selected Products</h3>
+            <p className="text-gray-500 text-sm mb-5 leading-relaxed">
+              Are you sure you want to delete <strong className="text-gray-900 font-bold">{selectedRowKeys.length}</strong> selected product(s) from Needs Review? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                className="h-10 px-5 rounded-lg border-gray-200 text-gray-700 font-medium cursor-pointer"
+                onClick={() => setIsBulkDeleteOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                danger
+                type="primary"
+                loading={isDeletingBulk}
+                className="h-10 px-5 rounded-lg font-medium bg-red-600 hover:bg-red-700 border-0 cursor-pointer"
+                onClick={handleDeleteBulk}
+              >
+                Delete Selected ({selectedRowKeys.length})
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );

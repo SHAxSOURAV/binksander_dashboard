@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { TbBrandAmazon } from "react-icons/tb";
+import { getToken } from "../../utils/session";
 
 const AmazonLookup = () => {
   const [accounts, setAccounts] = useState([]);
@@ -20,7 +21,7 @@ const AmazonLookup = () => {
       try {
         const response = await fetch("http://localhost:8002/users/amazon-affiliate-accounts", {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${getToken()}`,
           },
         });
         if (response.ok) {
@@ -58,7 +59,7 @@ const AmazonLookup = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
           asin: formData.asin,

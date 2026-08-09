@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
+import { getToken } from "../../utils/session";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -18,7 +19,7 @@ const AmazonAffiliateAccounts = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/users/amazon-affiliate-accounts`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
       if (response.ok) {
@@ -47,7 +48,7 @@ const AmazonAffiliateAccounts = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify(formData),
       });
@@ -71,7 +72,7 @@ const AmazonAffiliateAccounts = () => {
       const response = await fetch(`${API_BASE_URL}/users/amazon-affiliate-accounts/${id}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
 

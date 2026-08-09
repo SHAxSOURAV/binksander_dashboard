@@ -56,7 +56,7 @@ const Products = () => {
   // Remember the user's chosen page size across sessions.
   const [limit, setLimit] = useState(() => {
     const saved = Number(localStorage.getItem("products:pageSize"));
-    return PAGE_SIZE_OPTIONS.includes(saved) ? saved : 20;
+    return PAGE_SIZE_OPTIONS.includes(saved) ? saved : 100;
   });
   const [selected, setSelected] = useState(null);
   const [editingDraftId, setEditingDraftId] = useState(null);
@@ -141,12 +141,10 @@ const Products = () => {
 
     const hasProcessing = data?.items?.some(p => p.publishStatus === 'processing');
     const hasPendingScrape = data?.items?.some(p => p.scrapePending);
-    const hasPendingStock = data?.items?.some(p => p.is_valid_amazon && p.stockQuantity == null);
+    const hasMissingImage = data?.items?.some(p => p.isValidAmazon && !p.image);
+    const hasPendingStock = data?.items?.some(p => p.isValidAmazon && p.stockQuantity == null);
     
-    if (hasPendingScrape && scrapePollCount < 25) {
-      setPollingInterval(3000);
-      setScrapePollCount(prev => prev + 1);
-    } else if (hasPendingStock && scrapePollCount < 25) {
+    if ((hasPendingScrape || hasMissingImage || hasPendingStock) && scrapePollCount < 35) {
       setPollingInterval(3000);
       setScrapePollCount(prev => prev + 1);
     } else if (hasProcessing) {
