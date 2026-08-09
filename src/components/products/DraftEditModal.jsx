@@ -28,12 +28,10 @@ const calcSellingPrice = (val) => {
   if (val == null || val === "" || isNaN(val)) return 39.95;
   const num = parseFloat(String(val).replace(/[^\d.,]/g, "").replace(",", "."));
   if (!Number.isFinite(num) || num <= 0) return 39.95;
-  const basePrice = num * 2.5;
-  const rounded = Math.floor(basePrice / 10) * 10 + 9.95;
-  return Math.max(29.95, Math.round(rounded * 100) / 100);
+  return num;
 };
 
-const DraftEditModal = ({ draftId, onClose }) => {
+const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
   const [selectedPhotos, setSelectedPhotos] = useState([]);
@@ -295,6 +293,12 @@ const DraftEditModal = ({ draftId, onClose }) => {
     const saved = await handleSave();
     if (!saved) return;
 
+    if (isBulkMode) {
+      toast.success("Draft saved successfully!");
+      onClose();
+      return;
+    }
+
     try {
       if (scheduleEnabled && form.schedule_at) {
         const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || getToken() || "";
@@ -339,11 +343,24 @@ const DraftEditModal = ({ draftId, onClose }) => {
     >
       <div className="font-poppins pt-1 pb-1">
         <div className="flex items-start justify-between border-b border-gray-100 pb-3 mb-2">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800">Final Review & Publish</h2>
-            <p className="text-[13px] font-medium text-gray-500 mt-0.5">
-              Review the complete product data payload that will be submitted to Bol.com.
-            </p>
+          <div className="flex items-start gap-3">
+            {isBulkMode && (
+              <button
+                onClick={onClose}
+                className="mt-1 p-1.5 rounded-full hover:bg-gray-100 transition-colors flex items-center justify-center text-gray-500 hover:text-gray-800"
+                title="Back to Bulk Publish"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+              </button>
+            )}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Final Review & Publish</h2>
+              <p className="text-[13px] font-medium text-gray-500 mt-0.5">
+                Review the complete product data payload that will be submitted to Bol.com.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -632,7 +649,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
                 loading={publishing || updating}
                 className="h-10 px-6 rounded-lg font-semibold bg-brand shadow-sm hover:opacity-90 transition-opacity"
               >
-                {scheduleEnabled ? "Schedule Publish" : "Publish to Bol.com"}
+                {isBulkMode ? "Save Draft" : (scheduleEnabled ? "Schedule Publish" : "Publish to Bol.com")}
               </Button>
             </div>
           </div>

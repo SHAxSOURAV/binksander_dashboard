@@ -186,6 +186,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
         stock_amount: 10,
         condition: "NEW",
         delivery_code: "24uurs-23",
+        estimated_price: parsePrice(yourPrice) || parsePrice(view.price),
       }).unwrap();
       const draftId = draftRes?.data?.id;
       if (!draftId) throw new Error("Draft was not created");
