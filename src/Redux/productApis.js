@@ -142,16 +142,36 @@ const productApis = baseApis.injectEndpoints({
       providesTags: ["Products"],
     }),
 
-    // GET /spreadsheet/needs-review?page&limit&filter_brand
+    // GET /spreadsheet/needs-review?page&limit&filter_brand&search
     getNeedsReviewItems: builder.query({
-      query: ({ page = 1, limit = 50, filter_brand } = {}) => {
+      query: ({ page = 1, limit = 50, filter_brand, search } = {}) => {
         let url = `/spreadsheet/needs-review?page=${page}&limit=${limit}`;
         if (filter_brand) {
           url += `&filter_brand=${encodeURIComponent(filter_brand)}`;
         }
+        if (search) {
+          url += `&search=${encodeURIComponent(search)}`;
+        }
         return url;
       },
       providesTags: ["Products"],
+    }),
+
+    deleteNeedsReviewItem: builder.mutation({
+      query: (itemId) => ({
+        url: `/spreadsheet/needs-review/${itemId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
+    deleteNeedsReviewBulk: builder.mutation({
+      query: (itemIds) => ({
+        url: "/spreadsheet/needs-review/bulk-delete",
+        method: "POST",
+        body: { item_ids: itemIds },
+      }),
+      invalidatesTags: ["Products"],
     }),
 
     revalidateItem: builder.mutation({
@@ -561,6 +581,8 @@ export const {
   useGetFiltersMetaQuery,
   useGetRawItemsQuery,
   useGetNeedsReviewItemsQuery,
+  useDeleteNeedsReviewItemMutation,
+  useDeleteNeedsReviewBulkMutation,
   useRevalidateItemMutation,
   useRevalidateAllMutation,
   useSyncConnectedSheetMutation,

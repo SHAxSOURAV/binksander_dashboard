@@ -1,5 +1,6 @@
 // Persists the auth session returned by the backend (signin / verify-email / reset-password).
-export const saveSession = (res, remember = true) => {
+export const saveSession = (res, remember = false) => {
+  clearSession();
   const storage = remember ? localStorage : sessionStorage;
   if (res?.access_token) storage.setItem("token", res.access_token);
   if (res?.refresh_token) storage.setItem("refreshToken", res.refresh_token);
@@ -16,11 +17,11 @@ export const clearSession = () => {
 };
 
 export const getToken = () => {
-  return localStorage.getItem("token") || sessionStorage.getItem("token");
+  return sessionStorage.getItem("token") || localStorage.getItem("token");
 };
 
 export const getRefreshToken = () => {
-  return localStorage.getItem("refreshToken") || sessionStorage.getItem("refreshToken");
+  return sessionStorage.getItem("refreshToken") || localStorage.getItem("refreshToken");
 };
 
 export const updateTokens = (accessToken, refreshToken) => {
@@ -35,7 +36,7 @@ export const updateTokens = (accessToken, refreshToken) => {
 
 export const getUser = () => {
   try {
-    const userStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+    const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
     return JSON.parse(userStr) || null;
   } catch {
     return null;

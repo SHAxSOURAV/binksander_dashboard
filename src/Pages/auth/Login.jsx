@@ -14,7 +14,7 @@ const Login = () => {
   const onFinish = async (values) => {
     try {
       const res = await login(values).unwrap();
-      saveSession(res, values.remember);
+      saveSession(res, Boolean(values.remember));
       toast.success("Login successful!");
       navigate("/");
     } catch (err) {
@@ -47,7 +47,7 @@ const Login = () => {
           <h1 className="text-xl font-bold mt-4">Admin Login</h1>
         </div>
 
-        <Form form={form} layout="vertical" onFinish={onFinish}>
+        <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ remember: false }}>
           <Form.Item
             name="email"
             rules={[

@@ -11,6 +11,7 @@ import {
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
 import { url as API_URL } from "../../Redux/main/server";
+import { getToken } from "../../utils/session";
 
 const { TextArea } = Input;
 
@@ -103,7 +104,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const token = localStorage.getItem("bol_access_token") || localStorage.getItem("token") || "";
+      const token = localStorage.getItem("bol_access_token") || getToken() || "";
       const res = await fetch(`${API_URL}/bol/upload-image`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` },
@@ -296,7 +297,7 @@ const DraftEditModal = ({ draftId, onClose }) => {
 
     try {
       if (scheduleEnabled && form.schedule_at) {
-        const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || localStorage.getItem("token") || "";
+        const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || getToken() || "";
         const res = await fetch(`${API_URL}/bol/drafts/bulk-publish`, {
           method: "POST",
           headers: {
