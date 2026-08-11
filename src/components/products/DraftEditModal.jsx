@@ -235,6 +235,10 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         description: cleanDesc,
         attributes: cleanAttrs,
         photos: draft.photos || [],
+        product_category: draft.product_category || "",
+        chunk_id: draft.chunk_id || null,
+        chunk_name: draft.chunk_name || "",
+        chunk_recommendations: draft.chunk_recommendations || [],
       });
       setOriginalPhotos(draft.original_photos || draft.photos || []);
       if (draft.photos?.length > 0) {
@@ -399,6 +403,56 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                               value: c.account_id,
                               label: c.account_name || c.client_id.substring(0,8) + '...'
                             }))}
+                          />
+                        </Field>
+
+                        <Field label="Spreadsheet Category">
+                          <Input
+                            value={form.product_category}
+                            onChange={(e) => handleChange("product_category", e.target.value)}
+                            placeholder="Spreadsheet Product Category"
+                            className="rounded-lg h-10 text-[14px] text-gray-800"
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-3.5 rounded-xl border border-gray-200/80">
+                        <Field label="Bol.com Product Group (Chunk ID)" required>
+                          {form.chunk_recommendations?.length > 0 ? (
+                            <Select
+                              value={form.chunk_id ? String(form.chunk_id) : undefined}
+                              onChange={(val) => {
+                                const strVal = String(val);
+                                const found = form.chunk_recommendations.find(r => String(r.chunkId || r.chunk_id) === strVal);
+                                setForm(prev => ({
+                                  ...prev,
+                                  chunk_id: strVal,
+                                  chunk_name: found ? (found.chunkName || found.chunk_name || prev.product_category || "") : prev.chunk_name
+                                }));
+                              }}
+                              placeholder="Select Bol Category Recommendation"
+                              className="w-full h-10 draft-select"
+                              options={form.chunk_recommendations.map(r => ({
+                                value: String(r.chunkId || r.chunk_id),
+                                label: `${r.chunkName || r.chunk_name || form.product_category || 'Chunk'} (${r.chunkId || r.chunk_id}) ${r.probability ? `- ${(r.probability * 100).toFixed(0)}% Match` : ''}`
+                              }))}
+                            />
+                          ) : (
+                            <Input
+                              value={form.chunk_id || ""}
+                              onChange={(e) => handleChange("chunk_id", e.target.value)}
+                              placeholder="Enter Bol Chunk ID (e.g. 30006542)"
+                              className="w-full rounded-lg h-10 text-[14px] text-gray-800"
+                            />
+                          )}
+                        </Field>
+
+                        <Field label="Bol Product Group Name">
+                          <Input
+                            value={form.chunk_name}
+                            onChange={(e) => handleChange("chunk_name", e.target.value)}
+                            placeholder="Product Group Name"
+                            className="rounded-lg h-10 text-[14px] text-gray-800"
                           />
                         </Field>
                       </div>

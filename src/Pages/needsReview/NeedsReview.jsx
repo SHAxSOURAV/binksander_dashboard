@@ -18,10 +18,13 @@ import {
 import Pagination from "../../components/shared/Pagination";
 import ValidationFailureModal from "../../components/needsReview/ValidationFailureModal";
 
+import { getSafeAmazonUrl } from "../../utils/urlUtils";
+
 const NeedsReview = () => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [filterBrand, setFilterBrand] = useState(null);
+  const [filterReason, setFilterReason] = useState(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFailure, setSelectedFailure] = useState(null);
@@ -41,8 +44,8 @@ const NeedsReview = () => {
   }, [search]);
 
   const { data, isLoading } = useGetNeedsReviewItemsQuery(
-    { page, limit, filter_brand: filterBrand, search: debouncedSearch },
-    { pollingInterval: 5000 }
+    { page, limit, filter_brand: filterBrand, filter_reason: filterReason, search: debouncedSearch },
+    { pollingInterval: 30000 }
   );
   const { data: filtersMeta } = useGetFiltersMetaQuery();
   const [revalidateItem] = useRevalidateItemMutation();
@@ -133,7 +136,7 @@ const NeedsReview = () => {
         const asin = record.asin;
         const codeToDisplay = ean || asin;
         const codeLabel = ean ? "EAN" : "ASIN";
-        const title = record.product_title || record.TITLE || record.title || "No Title";
+        const title = record.TITLE || record.Title || record.title || record.product_title || "No Title";
         const brand = record.product_brand;
         const photo = record.product_photo;
         
@@ -177,18 +180,19 @@ const NeedsReview = () => {
     {
       title: "Supplier Link",
       key: "supplier",
-      render: (_, record) => (
-        record.supplier_link ? (
+      render: (_, record) => {
+        const safeUrl = getSafeAmazonUrl(record.supplier_link, record.asin, record.country);
+        return safeUrl ? (
           <a 
-            href={record.supplier_link} 
+            href={safeUrl} 
             target="_blank" 
             rel="noreferrer"
             className="flex items-center gap-1 text-brand hover:text-brand-dark hover:underline text-sm truncate max-w-[200px]"
           >
             View Source <FiExternalLink size={12} />
           </a>
-        ) : <span className="text-gray-400">—</span>
-      ),
+        ) : <span className="text-gray-400">—</span>;
+      },
     },
     {
       title: "Failing Checks",
@@ -347,6 +351,23 @@ const NeedsReview = () => {
               className="w-40 h-10 custom-select"
               options={brandOptions}
             />
+
+            <Select
+              value={filterReason || "all"}
+              onChange={(val) => {
+                setFilterReason(val === "all" ? null : val);
+                setPage(1);
+              }}
+              className="w-48 h-10 custom-select"
+              options={[
+                { value: "all", label: "All Reasons" },
+                { value: "Already on bol.com (EAN)", label: "Duplicate EAN" },
+                { value: "Already on bol.com (Brand)", label: "Duplicate Brand" },
+                { value: "Low Amazon Rating", label: "Low Rating" },
+                { value: "Bol Connection Error", label: "Bol Connection Error" },
+                { value: "search error", label: "Search Service Error" },
+              ]}
+            />
           </div>
         </div>
 
@@ -429,7 +450,7 @@ const NeedsReview = () => {
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Product</h3>
             <p className="text-gray-500 text-sm mb-5 leading-relaxed">
-              Are you sure you want to delete <span className="font-semibold text-gray-800">"{itemToDelete?.product_title || itemToDelete?.TITLE || itemToDelete?.asin || "this product"}"</span> from Needs Review? This action cannot be undone.
+              Are you sure you want to delete <span className="font-semibold text-gray-800">"{itemToDelete?.TITLE || itemToDelete?.Title || itemToDelete?.title || itemToDelete?.product_title || itemToDelete?.asin || "this product"}"</span> from Needs Review? This action cannot be undone.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button
