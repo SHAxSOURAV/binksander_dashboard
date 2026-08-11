@@ -142,12 +142,15 @@ const productApis = baseApis.injectEndpoints({
       providesTags: ["Products"],
     }),
 
-    // GET /spreadsheet/needs-review?page&limit&filter_brand&search
+    // GET /spreadsheet/needs-review?page&limit&filter_brand&filter_reason&search
     getNeedsReviewItems: builder.query({
-      query: ({ page = 1, limit = 50, filter_brand, search } = {}) => {
+      query: ({ page = 1, limit = 50, filter_brand, filter_reason, search } = {}) => {
         let url = `/spreadsheet/needs-review?page=${page}&limit=${limit}`;
         if (filter_brand) {
           url += `&filter_brand=${encodeURIComponent(filter_brand)}`;
+        }
+        if (filter_reason) {
+          url += `&filter_reason=${encodeURIComponent(filter_reason)}`;
         }
         if (search) {
           url += `&search=${encodeURIComponent(search)}`;
@@ -155,6 +158,7 @@ const productApis = baseApis.injectEndpoints({
         return url;
       },
       providesTags: ["Products"],
+      keepUnusedDataFor: 120, // 2 minutes cache for instant tab-switching
     }),
 
     deleteNeedsReviewItem: builder.mutation({

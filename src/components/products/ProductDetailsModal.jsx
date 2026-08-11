@@ -12,6 +12,7 @@ import {
   useTranslateDraftImagesMutation,
   useGetLiveDeliveryQuery,
 } from "../../Redux/productApis";
+import { getSafeAmazonUrl } from "../../utils/urlUtils";
 
 // Helper for .95 rounding rule with €39.95 floor price
 const calcSellingPrice = (purchasePrice, mult = 2.5) => {
@@ -446,16 +447,19 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
               )}
               
               <div className="pt-1 mt-1 flex flex-col gap-2.5">
-                 {view.productUrl && (
-                    <a
-                      href={view.productUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="w-full h-10 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 font-semibold text-[12px] flex items-center justify-center gap-2 hover:bg-gray-100 hover:text-black transition-colors"
-                    >
-                      <FaAmazon className="text-[#FF9900]" size={14} /> View Original on Amazon
-                    </a>
-                 )}
+                  {(() => {
+                    const safeAmazonUrl = getSafeAmazonUrl(view.productUrl, product?.asin, product?.country);
+                    return safeAmazonUrl ? (
+                       <a
+                         href={safeAmazonUrl}
+                         target="_blank"
+                         rel="noreferrer"
+                         className="w-full h-10 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 font-semibold text-[12px] flex items-center justify-center gap-2 hover:bg-gray-100 hover:text-black transition-colors"
+                       >
+                         <FaAmazon className="text-[#FF9900]" size={14} /> View Original on Amazon
+                       </a>
+                    ) : null;
+                  })()}
                  <button
                    onClick={handlePublish}
                    disabled={busy}
