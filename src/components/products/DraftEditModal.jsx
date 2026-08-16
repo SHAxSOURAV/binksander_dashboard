@@ -81,16 +81,19 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       /\bprime\b/gi
     ];
     let cleaned = text;
-    amazonPatterns.forEach(pat => { cleaned = cleaned.replace(pat, ""); });
+    amazonPatterns.forEach(pat => { cleaned = cleaned.replace(pat, " "); });
 
-    // 2. Strip Emojis, Symbols (®, ™, etc.)
-    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B06}\u{2934}\u{2935}\u{25AA}-\u{25FE}\u{00AE}\u{00A9}\u{2122}]/gu, '');
+    // 2. Strip Emojis and decorative symbols (Preserve Trademark symbols: ®, ™, ©)
+    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B06}\u{2934}\u{2935}\u{25AA}-\u{25FE}]/gu, ' ');
 
-    // 3. Strip trailing dashes or punctuation
-    cleaned = cleaned.replace(/[-–—]\s*$/g, '').trim();
+    // 3. Strip invisible Unicode variation selectors and zero-width characters (\uFE00-\uFE0F, \u200B-\u200D, \uFEFF)
+    cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}\u{200B}-\u{200D}\u{FEFF}]/gu, '');
 
-    // 4. Normalize spaces
-    cleaned = cleaned.replace(/  +/g, ' ');
+    // 4. Strip trailing dashes or punctuation
+    cleaned = cleaned.replace(/[-–—\s]+$/g, '').trim();
+
+    // 5. Normalize multiple spaces into a single space
+    cleaned = cleaned.replace(/\s+/g, ' ');
 
     return cleaned.trim();
   };
