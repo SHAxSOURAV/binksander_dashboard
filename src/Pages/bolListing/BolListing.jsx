@@ -72,6 +72,16 @@ const BolListing = () => {
     setPage(1);
   };
 
+  const isOfferForSale = (offer) => {
+    if (Array.isArray(offer?.countryAvailabilities) && offer.countryAvailabilities.length > 0) {
+      return offer.countryAvailabilities.some(c => c.forSale === true);
+    }
+    if (offer?.store?.visible !== undefined) {
+      return Boolean(offer.store.visible);
+    }
+    return !offer?.onHoldByRetailer;
+  };
+
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
       <div className="bg-white rounded-2xl p-5 card-shadow">
@@ -279,21 +289,24 @@ const BolListing = () => {
                 <div
                   key={offer.offerId}
                   onClick={() => setSelectedOffer(offer)}
-                  className="cursor-pointer text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full"
+                  className="cursor-pointer text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full relative"
                 >
                   <div className="bg-[#f8f9fc] rounded-xl h-40 flex items-center justify-center mb-4 overflow-hidden relative group-hover:bg-[#f0f2f8] transition-colors w-full">
-                    <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 items-end z-10">
-                      {columns.status && (
-                        offer.onHoldByRetailer ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-white/90 text-amber-600 border border-amber-100">
-                            ON HOLD
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-green-100/90 text-green-700">
-                            LIVE
-                          </span>
-                        )
+                    {/* Top-Left Live Bol.com Status Badge */}
+                    <div className="absolute top-2.5 left-2.5 z-10">
+                      {isOfferForSale(offer) ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-emerald-500 text-white flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                          For Sale
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-rose-500/90 text-white flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-200"></span>
+                          Not For Sale
+                        </span>
                       )}
+                    </div>
+                    <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 items-end z-10">
                       {columns.stock && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-emerald-50 text-emerald-700 border border-emerald-200/60 backdrop-blur-md">
                           {offer.stock?.amount || 0} in stock
@@ -351,7 +364,7 @@ const BolListing = () => {
                   {columns.price && <th className="py-3 px-2">Price</th>}
                   {columns.stock && <th className="py-3 px-2">Stock</th>}
                   {columns.condition && <th className="py-3 px-2">Condition</th>}
-                  {columns.status && <th className="py-3 px-2">Status</th>}
+                  {columns.status && <th className="py-3 px-2">Live Status</th>}
                   {columns.action && <th className="py-3 px-2 text-right">Actions</th>}
                 </tr>
               </thead>
@@ -399,10 +412,16 @@ const BolListing = () => {
                     )}
                     {columns.status && (
                       <td className="py-3 px-2">
-                        {offer.onHoldByRetailer ? (
-                           <Tag color="warning" className="border-0 m-0">ON HOLD</Tag>
+                        {isOfferForSale(offer) ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            For Sale (Live)
+                          </span>
                         ) : (
-                           <Tag color="processing" className="border-0 m-0">LIVE</Tag>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            Not For Sale
+                          </span>
                         )}
                       </td>
                     )}
