@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useGetBolOffersQuery } from "../../Redux/productApis";
+import { useGetBolOffersQuery, useSyncBolOffersMutation } from "../../Redux/productApis";
 import { Empty, Spin, Tag, Input, Drawer, Select, Button, Slider, Rate, Popover, Checkbox } from "antd";
 import { LuRefreshCw, LuUnplug } from "react-icons/lu";
 import { FiSearch, FiFilter, FiEye, FiLink, FiCopy } from "react-icons/fi";
@@ -62,6 +62,17 @@ const BolListing = () => {
     ...activeFilters
   });
 
+  const [syncBolOffers, { isLoading: isSyncing }] = useSyncBolOffersMutation();
+
+  const handleRefresh = async () => {
+    try {
+      await syncBolOffers().unwrap();
+      toast.success("Successfully synchronized with Bol.com");
+    } catch (err) {
+      toast.error("Failed to sync with Bol.com");
+    }
+  };
+
   const offers = data?.data || [];
   const brands = data?.brands || [];
   const totalItems = data?.total_items || 0;
@@ -99,11 +110,12 @@ const BolListing = () => {
               className="h-10 rounded-lg w-full sm:w-64"
             />
             <button
-              onClick={refetch}
+              onClick={handleRefresh}
+              disabled={isSyncing || isFetching}
               title="Refresh from Bol.com"
-              className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50"
+              className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50 transition-colors"
             >
-              <LuRefreshCw size={16} className={isFetching ? "animate-spin" : ""} />
+              <LuRefreshCw size={16} className={isSyncing || isFetching ? "animate-spin text-brand" : ""} />
             </button>
 
             <Popover

@@ -456,6 +456,15 @@ const productApis = baseApis.injectEndpoints({
       keepUnusedDataFor: 300, // 5 minutes cache
     }),
 
+    // GET /bol/offers?refresh=true (Forced Sync)
+    syncBolOffers: builder.mutation({
+      query: () => ({
+        url: "/bol/offers?refresh=true",
+        method: "GET",
+      }),
+      invalidatesTags: ["BolOffers"],
+    }),
+
     // GET /bol/product-image/{ean}
     getBolProductImage: builder.query({
       query: (ean) => `/bol/product-image/${ean}`,
@@ -609,6 +618,7 @@ export const {
   useGetDraftsQuery,
   useGetDraftQuery,
   useGetBolOffersQuery,
+  useSyncBolOffersMutation,
   useGetBolProductImageQuery,
   useGetBolProductAssetsQuery,
   useGetGtinToAsinQuery,
