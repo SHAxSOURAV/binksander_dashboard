@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Dropdown, Menu, Modal, InputNumber, message } from 'antd';
 import { FiMoreVertical, FiEdit2, FiPauseCircle, FiPlayCircle, FiTrash2, FiLoader } from 'react-icons/fi';
+import { LuShieldCheck } from 'react-icons/lu';
 import { useDispatch } from 'react-redux';
 import productApis, { 
   useUpdateBolOfferStatusMutation, 
   useUpdateBolOfferStockMutation, 
   useDeleteBolOfferMutation,
-  useGetBolProcessStatusQuery
+  useGetBolProcessStatusQuery,
+  useRevalidateProductsContentMutation,
 } from '../../../Redux/productApis';
 
 const OfferActionMenu = ({ offer }) => {
@@ -30,6 +32,19 @@ const OfferActionMenu = ({ offer }) => {
   const [updateStatus, { isLoading: isStatusLoading }] = useUpdateBolOfferStatusMutation();
   const [updateStock, { isLoading: isStockLoading }] = useUpdateBolOfferStockMutation();
   const [deleteOffer, { isLoading: isDeleteLoading }] = useDeleteBolOfferMutation();
+  const [revalidateContent, { isLoading: isRevalidating }] = useRevalidateProductsContentMutation();
+
+  const handleRevalidate = async () => {
+    try {
+      const res = await revalidateContent({
+        eans: offer.ean ? [offer.ean] : [],
+        draftIds: offer.draftId ? [offer.draftId] : [],
+      }).unwrap();
+      message.success(res.message || "Product content re-validated successfully!");
+    } catch (err) {
+      message.error(err?.data?.detail || "Failed to re-validate product content.");
+    }
+  };
 
   const handleStatusToggle = async () => {
     try {
@@ -76,6 +91,14 @@ const OfferActionMenu = ({ offer }) => {
 
   const menu = (
     <Menu onClick={(e) => e.domEvent.stopPropagation()}>
+      <Menu.Item 
+        key="revalidate" 
+        icon={<LuShieldCheck />} 
+        onClick={(e) => { e.domEvent.stopPropagation(); handleRevalidate(); }}
+        disabled={isRevalidating}
+      >
+        {isRevalidating ? "Re-validating..." : "Re-validate Content"}
+      </Menu.Item>
       <Menu.Item 
         key="stock" 
         icon={<FiEdit2 />} 

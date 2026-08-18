@@ -5,6 +5,7 @@ import {
   useGetDraftQuery,
   useUpdateDraftMutation,
   usePublishDraftMutation,
+  useTranslateDraftImagesMutation,
   useTranslateSingleImageMutation,
   useRevertSingleImageMutation,
 } from "../../Redux/productApis";
@@ -46,6 +47,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
   const [updateDraft, { isLoading: updating }] = useUpdateDraftMutation();
   const [publishDraft, { isLoading: publishing }] = usePublishDraftMutation();
+  const [translateDraftImages, { isLoading: translatingAll }] = useTranslateDraftImagesMutation();
   const [translateSingleImage] = useTranslateSingleImageMutation();
   const [revertSingleImage] = useRevertSingleImageMutation();
 
@@ -194,6 +196,29 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     }
   };
 
+  const handleTranslateAllImages = async () => {
+    if (!draftId) return;
+    try {
+      const res = await translateDraftImages({
+        draftId,
+        bolAccountId: selectedAccount
+      }).unwrap();
+      
+      if (res.success && res.data?.photos) {
+        setForm(prev => ({
+          ...prev,
+          photos: res.data.photos
+        }));
+        if (res.data.original_photos) {
+          setOriginalPhotos(res.data.original_photos);
+        }
+        toast.success("All pictures translated successfully!");
+      }
+    } catch (err) {
+      toast.error(err?.data?.detail || err?.message || "Failed to translate all images.");
+    }
+  };
+
   useEffect(() => {
     if (draft) {
       const rawPrice = draft.bol_price || draft.estimated_price || "";
@@ -279,7 +304,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         ...form,
         photos: photosToSave,
       }).unwrap();
-      return true;
+      return { id: draftId, ...form, photos: photosToSave };
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to update draft");
       return false;
@@ -302,7 +327,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
     if (isBulkMode) {
       toast.success("Draft saved successfully!");
-      onClose();
+      if (onClose) onClose(saved);
       return;
     }
 
@@ -595,8 +620,29 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   label: 'Media Gallery',
                   children: (
                     <div className="py-4">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                         <span className="text-[13px] text-gray-500 font-medium">Select images or upload custom images to include in the Bol.com listing.</span>
+                        <button
+                          type="button"
+                          onClick={handleTranslateAllImages}
+                          disabled={translatingAll || !form.photos?.length}
+                          className="px-3.5 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                          title="Translate all Dutch text in product pictures using AI"
+                        >
+                          {translatingAll ? (
+                            <>
+                              <Spin size="small" className="text-white" />
+                              <span>Translating All Pictures...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
+                              </svg>
+                              <span>Translate All Pictures</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {/* Upload custom image dropzone card */}
