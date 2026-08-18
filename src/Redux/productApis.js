@@ -322,6 +322,21 @@ const productApis = baseApis.injectEndpoints({
       invalidatesTags: ["Drafts"],
     }),
 
+    // POST /bol/drafts/bulk-translate-images
+    bulkTranslateDraftImages: builder.mutation({
+      query: (args) => {
+        const ids = args?.draftIds || args?.draft_ids || [];
+        const accountId = args?.bolAccountId || args?.account_id;
+        return {
+          url: `/bol/drafts/bulk-translate-images`,
+          method: "POST",
+          headers: accountId ? { "X-Bol-Account-Id": accountId } : {},
+          body: { draft_ids: ids },
+        };
+      },
+      invalidatesTags: ["Drafts"],
+    }),
+
     // POST /bol/drafts/{id}/translate-image
     translateSingleImage: builder.mutation({
       query: ({ draftId, bolAccountId, photoIndex }) => ({
@@ -569,6 +584,36 @@ const productApis = baseApis.injectEndpoints({
       },
     }),
 
+    // POST /bol/offers/bulk-delete
+    bulkDeleteBolOffers: builder.mutation({
+      query: ({ offer_ids }) => ({
+        url: "/bol/offers/bulk-delete",
+        method: "POST",
+        body: { offer_ids },
+      }),
+      invalidatesTags: ["BolOffers"],
+    }),
+
+    // POST /bol/offers/bulk-stock
+    bulkUpdateBolOfferStock: builder.mutation({
+      query: ({ offer_ids, amount }) => ({
+        url: "/bol/offers/bulk-stock",
+        method: "POST",
+        body: { offer_ids, amount },
+      }),
+      invalidatesTags: ["BolOffers"],
+    }),
+
+    // POST /bol/offers/bulk-status
+    bulkUpdateBolOfferStatus: builder.mutation({
+      query: ({ offer_ids, onHoldByRetailer }) => ({
+        url: "/bol/offers/bulk-status",
+        method: "POST",
+        body: { offer_ids, onHoldByRetailer },
+      }),
+      invalidatesTags: ["BolOffers"],
+    }),
+
     // GET /amazon/gtin-to-asin/{ean}
     getGtinToAsin: builder.query({
       query: (ean) => `/amazon/gtin-to-asin/${ean}?country=NL`,
@@ -583,6 +628,17 @@ const productApis = baseApis.injectEndpoints({
     // GET /spreadsheet/products/{asin}/live-delivery
     getLiveDelivery: builder.query({
       query: (asin) => `/spreadsheet/products/${asin}/live-delivery`,
+    }),
+
+    // POST /bol/products/revalidate-content
+    revalidateProductsContent: builder.mutation({
+      query: ({ accountId, draftIds, eans, asins }) => ({
+        url: "/bol/products/revalidate-content",
+        method: "POST",
+        headers: accountId ? { "x-bol-account-id": accountId } : {},
+        body: { account_id: accountId, draft_ids: draftIds, eans, asins },
+      }),
+      invalidatesTags: ["Products", "Drafts", "BolOffers"],
     }),
   }),
   overrideExisting: false,
@@ -608,6 +664,7 @@ export const {
   useResyncInventoryMutation,
   useCreateDraftFromAmazonMutation,
   useTranslateDraftImagesMutation,
+  useBulkTranslateDraftImagesMutation,
   useTranslateSingleImageMutation,
   useRevertSingleImageMutation,
   useResyncStockMutation,
@@ -625,8 +682,12 @@ export const {
   useUpdateBolOfferStatusMutation,
   useUpdateBolOfferStockMutation,
   useDeleteBolOfferMutation,
+  useBulkDeleteBolOffersMutation,
+  useBulkUpdateBolOfferStockMutation,
+  useBulkUpdateBolOfferStatusMutation,
   useGetBolProcessStatusQuery,
   useGetLiveDeliveryQuery,
+  useRevalidateProductsContentMutation,
 } = productApis;
 
 export default productApis;

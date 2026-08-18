@@ -3,6 +3,7 @@ import { Modal, Input, Select, Spin, Tabs } from "antd";
 import toast from "react-hot-toast";
 import { FaStar, FaCheckCircle, FaAmazon, FaTruck, FaUndoAlt, FaCrown } from "react-icons/fa";
 import { FiRefreshCw } from "react-icons/fi";
+import { LuShieldCheck } from "react-icons/lu";
 import {
   useCreateDraftFromAmazonMutation,
   usePublishDraftMutation,
@@ -11,6 +12,7 @@ import {
   useUpdateDraftMutation,
   useTranslateDraftImagesMutation,
   useGetLiveDeliveryQuery,
+  useRevalidateProductsContentMutation,
 } from "../../Redux/productApis";
 import { getSafeAmazonUrl } from "../../utils/urlUtils";
 
@@ -101,7 +103,7 @@ const calculateDeliveryDays = (deliveryStr) => {
   return "3-5 Days";
 };
 
-const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
+const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDraftModal }) => {
   const [activeImage, setActiveImage] = useState("");
   const [useSheetTitle, setUseSheetTitle] = useState(false);
   const [createDraft, { isLoading: drafting }] = useCreateDraftFromAmazonMutation();
@@ -199,7 +201,8 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated }) => {
       
       toast.success("Draft created successfully");
       onClose();
-      if (onDraftCreated) onDraftCreated(draftId);
+      const openDraftFn = onOpenDraftModal || onDraftCreated;
+      if (openDraftFn) openDraftFn(draftId);
     } catch (err) {
       toast.error(
         err?.data?.detail || err?.message || "Failed to create draft",

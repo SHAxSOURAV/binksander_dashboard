@@ -4,7 +4,7 @@ import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate, 
 import { FiSearch, FiPlus, FiLink, FiFilter, FiEye, FiCopy } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import { FaStar } from "react-icons/fa";
-import { LuRefreshCw } from "react-icons/lu";
+import { LuRefreshCw, LuShieldCheck } from "react-icons/lu";
 import ProductDetailsModal from "../../components/products/ProductDetailsModal";
 import ConnectInventoryModal from "../../components/products/ConnectInventoryModal";
 import DraftEditModal from "../../components/products/DraftEditModal";
@@ -19,6 +19,7 @@ import productApis, {
   useResyncStockMutation,
   useCreateDraftFromAmazonMutation,
   useGetBolProcessStatusQuery,
+  useRevalidateProductsContentMutation,
 } from "../../Redux/productApis";
 import toast from "react-hot-toast";
 import OfferActionMenu from "../bolListing/components/OfferActionMenu";
@@ -179,6 +180,27 @@ const Products = () => {
       toast.error(err?.data?.detail || "Failed to resync stock.");
     } finally {
       setResyncingStockAsin(null);
+    }
+  };
+
+  const [revalidateProductsContent, { isLoading: isRevalidatingBulk }] = useRevalidateProductsContentMutation();
+
+  const handleBulkRevalidate = async () => {
+    if (!selectedProducts || selectedProducts.length === 0) return;
+    const eans = selectedProducts.map(p => p.ean).filter(Boolean);
+    const draftIds = selectedProducts.map(p => p.id).filter(id => id && !id.startsWith('item-'));
+    const asins = selectedProducts.map(p => p.asin).filter(Boolean);
+
+    try {
+      const res = await revalidateProductsContent({
+        draftIds,
+        eans,
+        asins
+      }).unwrap();
+      toast.success(res.message || `Re-validation triggered for ${selectedProducts.length} product(s)!`);
+      setSelectedProducts([]);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to re-validate selected products.");
     }
   };
 
@@ -512,10 +534,10 @@ const Products = () => {
           /* Grid view */
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {products.map((p) => (
-              <button
+              <div
                 key={p.id}
                 onClick={() => setSelected(p)}
-                className="text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full"
+                className="cursor-pointer text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full"
               >
                 <div className="bg-[#f8f9fc] rounded-xl h-40 flex items-center justify-center mb-4 overflow-hidden relative group-hover:bg-[#f0f2f8] transition-colors w-full">
                   <div className="absolute top-2.5 left-2.5 z-20" onClick={(e) => e.stopPropagation()}>
@@ -695,7 +717,7 @@ const Products = () => {
                     )}
                   </div>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         ) : (
@@ -703,217 +725,144 @@ const Products = () => {
           <div className="overflow-x-auto thin-scrollbar">
             <table className="w-full min-w-[820px] text-sm">
               <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-200">
-                  <th className="px-4 py-3 w-10">
+                <tr className="border-b border-gray-100 text-gray-400 font-medium">
+                  <th className="py-3 px-2 w-8">
                     <Checkbox
-                      onChange={toggleSelectAll}
                       checked={selectedProducts.length > 0 && selectedProducts.length === products.filter(p => !p.scrapePending && p.title).length}
                       indeterminate={selectedProducts.length > 0 && selectedProducts.length < products.filter(p => !p.scrapePending && p.title).length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedProducts(products.filter(p => !p.scrapePending && p.title));
+                        } else {
+                          setSelectedProducts([]);
+                        }
+                      }}
                     />
                   </th>
-                  {columns.serial && <th className="py-3 px-2">Serial</th>}
                   {columns.asin && <th className="py-3 px-2">ASIN</th>}
                   {columns.ean && <th className="py-3 px-2">EAN</th>}
-                  {columns.title && <th className="py-3 px-2">Products name</th>}
-                  {columns.sheetTitle && <th className="py-3 px-2">Sheet Name</th>}
+                  {columns.title && <th className="py-3 px-2">Title</th>}
+                  {columns.sheetTitle && <th className="py-3 px-2">Sheet Title</th>}
                   {columns.category && <th className="py-3 px-2">Category</th>}
                   {columns.brand && <th className="py-3 px-2">Brand</th>}
-                  {columns.purchasePrice && <th className="py-3 px-2">Purchase Price</th>}
-                  {columns.price && <th className="py-3 px-2">Price</th>}
+                  {columns.purchasePrice && <th className="py-3 px-2">Purchase</th>}
+                  {columns.price && <th className="py-3 px-2">Bol Price</th>}
                   {columns.delivery && <th className="py-3 px-2">Delivery</th>}
                   {columns.sheetSource && <th className="py-3 px-2">Sheet Source</th>}
-                  {columns.ratings && <th className="py-3 px-2">Ratings</th>}
-                  {columns.stock && <th className="py-3 px-2">Stock</th>}
+                  {columns.ratings && <th className="py-3 px-2">Rating</th>}
+                  {columns.stock && <th className="py-3 px-2">Live Stock</th>}
                   {columns.status && <th className="py-3 px-2">Status</th>}
-                  {columns.publishAction && <th className="py-3 px-2">Publish</th>}
-                  {columns.action && <th className="py-3 px-2">Action</th>}
+                  {columns.publishAction && <th className="py-3 px-2">Action</th>}
                 </tr>
               </thead>
-              <tbody>
-                {products.map((p, i) => (
+              <tbody className="divide-y divide-gray-50">
+                {products.map((p) => (
                   <tr
                     key={p.id}
-                    className="border-b border-gray-50 hover:bg-gray-50/60"
+                    onClick={() => setSelected(p)}
+                    className="hover:bg-gray-50/50 cursor-pointer transition-colors"
                   >
-                    <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selectedProducts.some(item => item.id === p.id)}
-                        onChange={() => toggleSelection(p)}
-                        disabled={p.scrapePending || !p.title}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedProducts(prev => [...prev, p]);
+                          } else {
+                            setSelectedProducts(prev => prev.filter(item => item.id !== p.id));
+                          }
+                        }}
                       />
                     </td>
-                    {columns.serial && <td className="py-3 px-2 text-gray-500">
-                      {(page - 1) * limit + i + 1}
-                    </td>}
-                    {columns.asin && <td className="py-3 px-2 text-gray-500">
+                    {columns.asin && <td className="py-3 px-2 font-mono text-gray-600">
                       <div className="flex items-center gap-1.5 group/copy">
                         <span>{p.asin}</span>
                         <button onClick={(e) => handleCopy(e, p.asin)} className="text-gray-400 hover:text-brand opacity-0 group-hover/copy:opacity-100 transition-opacity"><FiCopy size={12} /></button>
                       </div>
                     </td>}
-                    {columns.ean && <td className="py-3 px-2 text-gray-500">
-                      <div className="flex items-center gap-1.5 group/copy">
-                        <span>{p.ean || "—"}</span>
-                        {p.ean && <button onClick={(e) => handleCopy(e, p.ean)} className="text-gray-400 hover:text-brand opacity-0 group-hover/copy:opacity-100 transition-opacity"><FiCopy size={12} /></button>}
-                      </div>
-                    </td>}
-                    {columns.title && <td className="py-3 px-2">
-                      <div className="flex items-center gap-2">
-                        {p.image && (
-                          <img
-                            src={p.image}
-                            alt=""
-                            className="w-8 h-8 rounded object-cover"
-                          />
-                        )}
-                        <span className="text-gray-700 font-semibold line-clamp-1 max-w-[160px]">
-                          {p.title}
-                        </span>
-                      </div>
-                    </td>}
-                    {columns.sheetTitle && <td className="py-3 px-2 text-gray-700 font-semibold">
-                      <span className="line-clamp-2">{p.spreadsheetTitle || "—"}</span>
-                    </td>}
-                    {columns.category && <td className="py-3 px-2 text-gray-500">{p.category}</td>}
-                    {columns.brand && <td className="py-3 px-2 text-gray-500">
-                      {p.product_brand ? (
-                        <span className="inline-flex px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold">
-                          {p.product_brand}
-                        </span>
-                      ) : "—"}
-                    </td>}
-                    {columns.purchasePrice && <td className="py-3 px-2 text-gray-700">
-                      {p.purchasePrice ? `€${p.purchasePrice}` : "—"}
-                    </td>}
-                    {columns.price && <td className="py-3 px-2 text-brand font-medium">
-                      {p.price ? `€${p.price}` : "—"}
-                    </td>}
-                    {columns.delivery && <td className="py-3 px-2 text-gray-500">{p.deliveryTime || "—"}</td>}
-                    {columns.sheetSource && <td className="py-3 px-2 text-gray-500">
-                      {p.spreadsheetUrl ? (
-                        <a
-                          href={`${p.spreadsheetUrl}${p.sheetId ? `&gid=${p.sheetId}` : ''}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-500 hover:underline flex items-center gap-1"
-                        >
-                          <FiLink size={12} />
-                          {p.spreadsheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) ? `Doc: ${p.spreadsheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)[1].substring(0, 6)}...` : "Spreadsheet"}
-                        </a>
-                      ) : "—"}
-                    </td>}
-                    {columns.ratings && <td className="py-3 px-2">
-                      <span className="flex items-center gap-1 text-gray-500">
-                        <FaStar className="text-yellow-400" size={11} /> {p.rating || "—"}
-                      </span>
-                    </td>}
-                    {columns.stock && (
-                      <td className="py-3 px-2 text-gray-700 font-medium">
-                        <button
-                          type="button"
-                          disabled={resyncingStockAsin === p.asin}
-                          onClick={(e) => handleResyncStock(p, e)}
-                          title="Click to resync live stock quantity from Amazon"
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-75 ${getStockBadgeColor(p)}`}
-                        >
-                          <span>
-                            {resyncingStockAsin === p.asin ? (
-                              "Resyncing..."
-                            ) : p.stockQuantity != null ? (
-                              p.stockQuantity > 0 ? `${p.stockQuantity} in stock` : "Out of stock"
-                            ) : p.bolStock != null ? (
-                              `${p.bolStock} in stock`
-                            ) : (
-                              "Checking stock..."
-                            )}
-                          </span>
-                          <LuRefreshCw
-                            size={11}
-                            className={`${resyncingStockAsin === p.asin ? "animate-spin text-brand" : "opacity-80"}`}
-                          />
-                        </button>
-                      </td>
-                    )}
-                    {columns.status && <td className="py-3 px-2">
-                      <span className={`px-2 py-1 rounded text-[10px] ${p.status?.toLowerCase() === 'online' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                        {p.status || "—"}
-                      </span>
-                    </td>}
-                    {columns.publishAction && <td className="py-3 px-2">
-                      {p.publishStatus === 'published' ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
-                            Published
-                          </span>
-                          <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
-                        </div>
-                      ) : p.publishStatus === 'failed' ? (
-                        <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                    {columns.ean && <td className="py-3 px-2 text-gray-600">{p.ean || "—"}</td>}
+                    {columns.title && <td className="py-3 px-2 max-w-[200px] truncate">{p.title}</td>}
+                    {columns.sheetTitle && <td className="py-3 px-2 text-gray-600">{p.spreadsheetTitle || "—"}</td>}
+                    {columns.category && <td className="py-3 px-2 text-gray-600">{p.category || "—"}</td>}
+                    {columns.brand && <td className="py-3 px-2 text-gray-600">{p.product_brand || "—"}</td>}
+                    {columns.purchasePrice && <td className="py-3 px-2 text-gray-600">€{p.purchasePrice?.toFixed(2) || "0.00"}</td>}
+                    {columns.price && <td className="py-3 px-2 font-bold text-brand">€{p.price?.toFixed(2) || "0.00"}</td>}
+                    {columns.delivery && <td className="py-3 px-2 text-gray-600">{p.deliveryTime || "—"}</td>}
+                    {columns.sheetSource && <td className="py-3 px-2 text-gray-600">{p.spreadsheetUrl ? "Yes" : "—"}</td>}
+                    {columns.ratings && <td className="py-3 px-2 text-gray-600">{p.rating || "—"}</td>}
+                    {columns.stock && <td className="py-3 px-2 text-gray-600">{p.stockQuantity ?? "—"}</td>}
+                    {columns.status && <td className="py-3 px-2 text-gray-600">{p.status || "—"}</td>}
+                    {columns.publishAction && (
+                      <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
+                        {p.publishStatus === 'published' ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
+                              Published
+                            </span>
+                            <OfferActionMenu offer={{ offerId: p.bol_offer_id, ean: p.ean, draftId: p.id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                          </div>
+                        ) : p.publishStatus === 'failed' ? (
+                          <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelected(p);
+                              }}
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                            >
+                              Failed
+                            </button>
+                          </Tooltip>
+                        ) : (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelected(p);
                             }}
-                            className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                            className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-brand/10 text-brand hover:bg-brand hover:text-white transition-all"
                           >
-                            Failed
+                            Publish
                           </button>
-                        </Tooltip>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (p.publishStatus === 'processing') {
-                              toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
-                            } else {
-                              setSelected(p); // Open details modal to start publish flow
-                            }
-                          }}
-                          className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${
-                            p.publishStatus === 'processing'
-                                ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
-                                : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
-                            }`}
-                        >
-                          {p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
-                        </button>
-                      )}
-                    </td>}
-                    {columns.action && <td className="py-3 px-2">
-                      <button
-                        onClick={() => setSelected(p)}
-                        className="text-xs px-4 py-1.5 rounded-full border border-brand/30 text-brand"
-                      >
-                        View
-                      </button>
-                    </td>}
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        {/* Footer / Pagination */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 pt-4">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span>Per page:</span>
+            <Select
+              value={limit}
+              onChange={handlePageSizeChange}
+              options={PAGE_SIZE_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+              size="small"
+              className="w-20"
+            />
+          </div>
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
+        </div>
       </div>
 
-      {!loading && products.length > 0 && (
-        <Pagination
-          current={page}
-          total={totalPages}
-          onChange={setPage}
-          pageSize={limit}
-          onPageSizeChange={handlePageSizeChange}
-          pageSizeOptions={PAGE_SIZE_OPTIONS}
-          totalItems={total}
-        />
-      )}
-
+      {/* Modals & Drawers */}
       <ProductDetailsModal
         open={!!selected}
         product={selected}
         onClose={() => setSelected(null)}
         onDraftCreated={(draftId) => setEditingDraftId(draftId)}
+        onOpenDraftModal={(draftId) => setEditingDraftId(draftId)}
       />
       <DraftEditModal
+        open={!!editingDraftId}
         draftId={editingDraftId}
         onClose={() => setEditingDraftId(null)}
       />
@@ -930,10 +879,6 @@ const Products = () => {
         />
       )}
 
-      {Array.from(new Set(products.filter(p => p.publishStatus === 'processing' && p.pending_process_id).map(p => p.pending_process_id))).map(pid => (
-        <ProcessPoller key={pid} processId={pid} />
-      ))}
-
       {/* Sticky Bulk Action Bar */}
       {selectedProducts.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-2xl shadow-xl border border-gray-200 flex items-center gap-6 z-50 animate-fade-in-up">
@@ -947,6 +892,19 @@ const Products = () => {
           <div className="flex items-center gap-3">
             <Button onClick={() => setSelectedProducts([])} type="text" className="text-gray-500 hover:text-gray-800">
               Cancel
+            </Button>
+            <Button
+              type="default"
+              disabled={isRevalidatingBulk}
+              className="border-gray-300 text-gray-700 hover:text-black font-semibold h-9 px-4 flex items-center gap-1.5"
+              onClick={handleBulkRevalidate}
+            >
+              {isRevalidatingBulk ? (
+                <LuRefreshCw className="animate-spin text-brand" size={14} />
+              ) : (
+                <LuShieldCheck className="text-blue-600" size={14} />
+              )}
+              Re-validate Content
             </Button>
             <Button
               type="primary"
