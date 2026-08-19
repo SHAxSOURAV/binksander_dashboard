@@ -4,12 +4,13 @@ import {
   FiAlertCircle, FiCopy, FiExternalLink, FiCheck, 
   FiCheckCircle, FiSearch, FiTrash2 
 } from "react-icons/fi";
-import { LuRefreshCw } from "react-icons/lu";
+import { LuRefreshCw, LuShieldCheck } from "react-icons/lu";
 import { 
   useGetNeedsReviewItemsQuery, 
   useDeleteNeedsReviewItemMutation,
   useDeleteNeedsReviewBulkMutation,
   useRevalidateItemMutation, 
+  useRevalidateInventoryItemsMutation,
   useSyncConnectedSheetMutation,
   useForcePassItemMutation,
   useForcePassBulkMutation,
@@ -49,6 +50,7 @@ const NeedsReview = () => {
   );
   const { data: filtersMeta } = useGetFiltersMetaQuery();
   const [revalidateItem] = useRevalidateItemMutation();
+  const [revalidateInventoryItems, { isLoading: isRevalidatingBulk }] = useRevalidateInventoryItemsMutation();
   const [deleteItem, { isLoading: isDeletingSingle }] = useDeleteNeedsReviewItemMutation();
   const [deleteBulk, { isLoading: isDeletingBulk }] = useDeleteNeedsReviewBulkMutation();
   const [syncConnectedSheet, { isLoading: isSyncingSheet }] = useSyncConnectedSheetMutation();
@@ -61,6 +63,17 @@ const NeedsReview = () => {
       message.success("Item queued for re-validation!");
     } catch (err) {
       message.error("Failed to revalidate item");
+    }
+  };
+
+  const handleRevalidateBulk = async () => {
+    if (!selectedRowKeys.length) return;
+    try {
+      const res = await revalidateInventoryItems({ item_ids: selectedRowKeys }).unwrap();
+      message.success(res.message || `Started re-validation for ${selectedRowKeys.length} product(s)!`);
+      setSelectedRowKeys([]);
+    } catch (err) {
+      message.error(err?.data?.detail || "Failed to revalidate selected items");
     }
   };
 
@@ -371,34 +384,6 @@ const NeedsReview = () => {
           </div>
         </div>
 
-        {/* Bulk Action Toolbar */}
-        {selectedRowKeys.length > 0 && (
-          <div className="mb-4 p-3 bg-white rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4">
-            <span className="text-sm font-medium text-gray-700 pl-1">
-              Selected <strong className="text-gray-900">{selectedRowKeys.length}</strong> item(s)
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="primary"
-                onClick={handleForcePassBulk}
-                loading={isForcePassingBulk}
-                icon={<FiCheckCircle />}
-                className="bg-green-600 hover:bg-green-700 h-9 font-semibold shadow-sm border-0 cursor-pointer"
-              >
-                Force Pass Selected
-              </Button>
-              <Button
-                danger
-                onClick={() => setIsBulkDeleteOpen(true)}
-                icon={<FiTrash2 />}
-                className="h-9 font-semibold shadow-sm cursor-pointer"
-              >
-                Delete Selected
-              </Button>
-            </div>
-          </div>
-        )}
-
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <Table 
             dataSource={items}
@@ -427,8 +412,57 @@ const NeedsReview = () => {
             />
           </div>
         )}
+      </div>
 
-        <ValidationFailureModal
+      {/* Sticky Bulk Action Bar (bottom-middle floating) */}
+      {selectedRowKeys.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-2xl shadow-xl border border-gray-200 flex items-center gap-6 z-50 animate-fade-in-up">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+              {selectedRowKeys.length}
+            </div>
+            <span className="text-sm font-semibold text-gray-700">Products Selected</span>
+          </div>
+          <div className="h-6 w-px bg-gray-200"></div>
+          <div className="flex items-center gap-3">
+            <Button onClick={() => setSelectedRowKeys([])} type="text" className="text-gray-500 hover:text-gray-800 cursor-pointer">
+              Cancel
+            </Button>
+            <Button
+              type="default"
+              disabled={isRevalidatingBulk}
+              className="border-gray-300 text-gray-700 hover:text-black font-semibold h-9 px-4 flex items-center gap-1.5 cursor-pointer"
+              onClick={handleRevalidateBulk}
+            >
+              {isRevalidatingBulk ? (
+                <LuRefreshCw className="animate-spin text-brand" size={14} />
+              ) : (
+                <LuShieldCheck className="text-blue-600" size={14} />
+              )}
+              Re-validate ({selectedRowKeys.length})
+            </Button>
+            <Button
+              type="primary"
+              loading={isForcePassingBulk}
+              className="bg-green-600 hover:bg-green-700 h-9 px-5 font-semibold border-0 flex items-center gap-1.5 cursor-pointer text-white shadow-sm"
+              onClick={handleForcePassBulk}
+            >
+              <FiCheckCircle size={14} />
+              Force Pass ({selectedRowKeys.length})
+            </Button>
+            <Button
+              danger
+              onClick={() => setIsBulkDeleteOpen(true)}
+              className="h-9 px-4 font-semibold flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <FiTrash2 size={14} />
+              Delete ({selectedRowKeys.length})
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <ValidationFailureModal
           open={!!selectedFailure}
           onClose={() => setSelectedFailure(null)}
           record={selectedFailure?.record}
@@ -509,8 +543,7 @@ const NeedsReview = () => {
           </div>
         </Modal>
       </div>
-    </div>
-  );
+    );
 };
 
 export default NeedsReview;

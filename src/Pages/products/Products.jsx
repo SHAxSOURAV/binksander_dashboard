@@ -20,6 +20,7 @@ import productApis, {
   useCreateDraftFromAmazonMutation,
   useGetBolProcessStatusQuery,
   useRevalidateProductsContentMutation,
+  useRevalidateInventoryItemsMutation,
 } from "../../Redux/productApis";
 import toast from "react-hot-toast";
 import OfferActionMenu from "../bolListing/components/OfferActionMenu";
@@ -183,24 +184,43 @@ const Products = () => {
     }
   };
 
-  const [revalidateProductsContent, { isLoading: isRevalidatingBulk }] = useRevalidateProductsContentMutation();
+  const [revalidateInventoryItems, { isLoading: isRevalidatingInventory }] = useRevalidateInventoryItemsMutation();
+  const [revalidatingItemId, setRevalidatingItemId] = useState(null);
 
   const handleBulkRevalidate = async () => {
     if (!selectedProducts || selectedProducts.length === 0) return;
     const eans = selectedProducts.map(p => p.ean).filter(Boolean);
-    const draftIds = selectedProducts.map(p => p.id).filter(id => id && !id.startsWith('item-'));
+    const itemIds = selectedProducts.map(p => p.itemId || p.id).filter(id => id && !String(id).startsWith('item-'));
     const asins = selectedProducts.map(p => p.asin).filter(Boolean);
 
     try {
-      const res = await revalidateProductsContent({
-        draftIds,
-        eans,
-        asins
+      const res = await revalidateInventoryItems({
+        item_ids: itemIds.length > 0 ? itemIds : undefined,
+        eans: eans.length > 0 ? eans : undefined,
+        asins: asins.length > 0 ? asins : undefined
       }).unwrap();
-      toast.success(res.message || `Re-validation triggered for ${selectedProducts.length} product(s)!`);
+      toast.success(res.message || `Quality re-validation started for ${selectedProducts.length} product(s)!`);
       setSelectedProducts([]);
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to re-validate selected products.");
+    }
+  };
+
+  const handleSingleRevalidate = async (e, p) => {
+    e?.stopPropagation();
+    const targetId = p.itemId || p.id;
+    setRevalidatingItemId(targetId);
+    try {
+      const res = await revalidateInventoryItems({
+        item_ids: targetId && !String(targetId).startsWith('item-') ? [targetId] : undefined,
+        asins: p.asin ? [p.asin] : undefined,
+        eans: p.ean ? [p.ean] : undefined
+      }).unwrap();
+      toast.success(res.message || "Quality re-validation started! If passed, item stays here; if failed, moves to Needs Review.");
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to re-validate product.");
+    } finally {
+      setRevalidatingItemId(null);
     }
   };
 
@@ -631,45 +651,57 @@ const Products = () => {
                           {p.price ? `€${p.price}` : "—"}
                         </p>
                       )}
-                      {columns.publishAction && (
-                        p.publishStatus === 'published' ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
-                              Published
-                            </span>
-                            <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
-                          </div>
-                        ) : p.publishStatus === 'failed' ? (
-                          <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <Tooltip title="Quality Re-validate (Bol Duplicate & Amazon Rating checks). If failed, moves to Needs Review.">
+                          <button
+                            type="button"
+                            disabled={revalidatingItemId === (p.itemId || p.id)}
+                            onClick={(e) => handleSingleRevalidate(e, p)}
+                            className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 transition-all flex items-center justify-center disabled:opacity-50"
+                          >
+                            <LuShieldCheck size={13} className={revalidatingItemId === (p.itemId || p.id) ? "animate-spin text-blue-600" : ""} />
+                          </button>
+                        </Tooltip>
+                        {columns.publishAction && (
+                          p.publishStatus === 'published' ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
+                                Published
+                              </span>
+                              <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                            </div>
+                          ) : p.publishStatus === 'failed' ? (
+                            <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelected(p);
+                                }}
+                                className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                              >
+                                Failed
+                              </button>
+                            </Tooltip>
+                          ) : (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelected(p);
+                                if (p.publishStatus === 'processing') {
+                                  toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
+                                } else {
+                                  setSelected(p); // Open details modal to start publish flow
+                                }
                               }}
-                              className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${p.publishStatus === 'processing'
+                                  ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
+                                  : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
+                                }`}
                             >
-                              Failed
+                              {p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
                             </button>
-                          </Tooltip>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (p.publishStatus === 'processing') {
-                                toast("This product is currently processing. Bol.com may take up to 15 minutes to display it.");
-                              } else {
-                                setSelected(p); // Open details modal to start publish flow
-                              }
-                            }}
-                            className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${p.publishStatus === 'processing'
-                                ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
-                                : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
-                              }`}
-                          >
-                            {p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
-                          </button>
-                        )
-                      )}
+                          )
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -794,36 +826,48 @@ const Products = () => {
                     {columns.status && <td className="py-3 px-2 text-gray-600">{p.status || "—"}</td>}
                     {columns.publishAction && (
                       <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
-                        {p.publishStatus === 'published' ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
-                              Published
-                            </span>
-                            <OfferActionMenu offer={{ offerId: p.bol_offer_id, ean: p.ean, draftId: p.id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
-                          </div>
-                        ) : p.publishStatus === 'failed' ? (
-                          <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                        <div className="flex items-center gap-1.5">
+                          <Tooltip title="Quality Re-validate (EAN, Brand, Rating)">
+                            <button
+                              type="button"
+                              disabled={revalidatingItemId === (p.itemId || p.id)}
+                              onClick={(e) => handleSingleRevalidate(e, p)}
+                              className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 transition-all flex items-center justify-center disabled:opacity-50"
+                            >
+                              <LuShieldCheck size={13} className={revalidatingItemId === (p.itemId || p.id) ? "animate-spin text-blue-600" : ""} />
+                            </button>
+                          </Tooltip>
+                          {p.publishStatus === 'published' ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
+                                Published
+                              </span>
+                              <OfferActionMenu offer={{ offerId: p.bol_offer_id, ean: p.ean, draftId: p.id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                            </div>
+                          ) : p.publishStatus === 'failed' ? (
+                            <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelected(p);
+                                }}
+                                className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                              >
+                                Failed
+                              </button>
+                            </Tooltip>
+                          ) : (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelected(p);
                               }}
-                              className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-brand/10 text-brand hover:bg-brand hover:text-white transition-all"
                             >
-                              Failed
+                              Publish
                             </button>
-                          </Tooltip>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelected(p);
-                            }}
-                            className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-brand/10 text-brand hover:bg-brand hover:text-white transition-all"
-                          >
-                            Publish
-                          </button>
-                        )}
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -895,16 +939,16 @@ const Products = () => {
             </Button>
             <Button
               type="default"
-              disabled={isRevalidatingBulk}
+              disabled={isRevalidatingInventory}
               className="border-gray-300 text-gray-700 hover:text-black font-semibold h-9 px-4 flex items-center gap-1.5"
               onClick={handleBulkRevalidate}
             >
-              {isRevalidatingBulk ? (
+              {isRevalidatingInventory ? (
                 <LuRefreshCw className="animate-spin text-brand" size={14} />
               ) : (
                 <LuShieldCheck className="text-blue-600" size={14} />
               )}
-              Re-validate Content
+              Re-validate ({selectedProducts.length})
             </Button>
             <Button
               type="primary"

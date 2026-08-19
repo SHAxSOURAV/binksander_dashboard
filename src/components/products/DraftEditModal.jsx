@@ -65,10 +65,45 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     schedule_at: null,
   });
 
+  const [customUploadedUrls, setCustomUploadedUrls] = useState(new Set());
+  const [isDraftTranslated, setIsDraftTranslated] = useState(false);
+  const [verifiedPhotoIndexes, setVerifiedPhotoIndexes] = useState(new Set());
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [translatingIndex, setTranslatingIndex] = useState(null);
   const [revertingIndex, setRevertingIndex] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  const isPhotoTranslated = (index, url) => {
+    if (!url) return false;
+    // 1. Custom uploaded image by user
+    if (customUploadedUrls.has(url)) return true;
+    // 2. Cloud / S3 translated image URL
+    if (typeof url === 'string' && url.includes("translated-images")) return true;
+    // 3. Draft overall translation verified (images_translated flag from backend)
+    if (isDraftTranslated || draft?.images_translated === true) return true;
+    // 4. Single photo explicitly checked & verified by translation engine (including photos with no text)
+    if (verifiedPhotoIndexes.has(index)) return true;
+    // 5. Modified from original photo URL
+    if (originalPhotos[index] && originalPhotos[index] !== url) return true;
+    return false;
+  };
+
+  // Translation & Validation State Checks for all selected photos
+  const selectedCount = selectedPhotos.length;
+  const untranslatedSelectedPhotos = form.photos.filter((src, i) => selectedPhotos.includes(i) && !isPhotoTranslated(i, src));
+  const untranslatedCount = untranslatedSelectedPhotos.length;
+  const hasUntranslatedImages = selectedCount === 0 || untranslatedCount > 0;
+
+  const cleanEan = (form.ean || "").replace(/\D/g, "");
+  const isValidEan = cleanEan.length === 13;
+
+  const isPublishDisabled = (
+    publishing ||
+    updating ||
+    translatingAll ||
+    translatingIndex !== null ||
+    (!isBulkMode && (hasUntranslatedImages || !isValidEan || !form.title?.trim() || !form.bol_price))
+  );
 
   const sanitizeAntiAmazonAndEmojiText = (text) => {
     if (!text || typeof text !== "string") return text || "";
@@ -116,6 +151,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Upload failed");
       if (data.url) {
+        setCustomUploadedUrls(prev => new Set([...prev, data.url]));
         setForm(prev => {
           const newPhotos = [...prev.photos, data.url];
           setSelectedPhotos(sPrev => [...sPrev, prev.photos.length]);
@@ -130,13 +166,6 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     }
   };
 
-  const isPhotoTranslated = (index, url) => {
-    if (!url) return false;
-    if (originalPhotos[index] && originalPhotos[index] !== url) return true;
-    if (typeof url === 'string' && url.includes("translated-images")) return true;
-    return false;
-  };
-
   const handleTranslateImage = async (index, e) => {
     e.stopPropagation();
     setTranslatingIndex(index);
@@ -147,12 +176,15 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         photoIndex: index 
       }).unwrap();
       
-      if (res.success && res.translated_url) {
-        setForm(prev => {
-          const newPhotos = [...prev.photos];
-          newPhotos[index] = res.translated_url;
-          return { ...prev, photos: newPhotos };
-        });
+      if (res.success) {
+        setVerifiedPhotoIndexes(prev => new Set([...prev, index]));
+        if (res.translated_url) {
+          setForm(prev => {
+            const newPhotos = [...prev.photos];
+            newPhotos[index] = res.translated_url;
+            return { ...prev, photos: newPhotos };
+          });
+        }
         if (res.original_photos) {
           setOriginalPhotos(res.original_photos);
         } else if (res.original_url) {
@@ -162,7 +194,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
             return updated;
           });
         }
-        toast.success("Image translated successfully!");
+        toast.success(res.message || (res.has_text === false ? "No text found — image is clean and ready!" : "Image translated successfully!"));
       }
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to translate image.");
@@ -182,6 +214,12 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       }).unwrap();
 
       if (res.success && res.reverted_url) {
+        setVerifiedPhotoIndexes(prev => {
+          const next = new Set(prev);
+          next.delete(index);
+          return next;
+        });
+        setIsDraftTranslated(false);
         setForm(prev => {
           const newPhotos = [...prev.photos];
           newPhotos[index] = res.reverted_url;
@@ -205,6 +243,8 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       }).unwrap();
       
       if (res.success && res.data?.photos) {
+        setIsDraftTranslated(true);
+        setVerifiedPhotoIndexes(new Set(res.data.photos.map((_, i) => i)));
         setForm(prev => ({
           ...prev,
           photos: res.data.photos
@@ -212,7 +252,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         if (res.data.original_photos) {
           setOriginalPhotos(res.data.original_photos);
         }
-        toast.success("All pictures translated successfully!");
+        toast.success("All pictures checked & translated successfully!");
       }
     } catch (err) {
       toast.error(err?.data?.detail || err?.message || "Failed to translate all images.");
@@ -268,6 +308,14 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         chunk_name: draft.chunk_name || "",
         chunk_recommendations: draft.chunk_recommendations || [],
       });
+      const isTranslated = draft.images_translated === true || (draft.photos && draft.photos.some(u => typeof u === 'string' && u.includes("translated-images")));
+      setIsDraftTranslated(isTranslated);
+      if (draft.verified_photo_indexes?.length) {
+        setVerifiedPhotoIndexes(new Set(draft.verified_photo_indexes));
+      } else if (isTranslated && draft.photos?.length) {
+        setVerifiedPhotoIndexes(new Set(draft.photos.map((_, i) => i)));
+      }
+
       setOriginalPhotos(draft.original_photos || draft.photos || []);
       if (draft.photos?.length > 0) {
         setSelectedPhotos(draft.photos.map((_, i) => i));
@@ -617,7 +665,24 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                 },
                 {
                   key: '3',
-                  label: 'Media Gallery',
+                  label: (
+                    <div className="flex items-center gap-2">
+                      <span>Media Gallery</span>
+                      {!isBulkMode && (
+                        hasUntranslatedImages ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                            {untranslatedCount > 0 ? `${untranslatedCount} Untranslated` : "Select Image"}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                            <span>✓</span>
+                            <span>{selectedCount}/{selectedCount}</span>
+                          </span>
+                        )
+                      )}
+                    </div>
+                  ),
                   children: (
                     <div className="py-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -687,11 +752,11 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                              {isPhotoTranslated(i, src) ? (
                                <>
                                  <div className="absolute top-2.5 left-2.5 z-10">
-                                   <span className="px-2.5 py-0.5 bg-emerald-600/90 backdrop-blur-md text-white rounded-full text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border border-emerald-400/30">
+                                   <span className={`px-2.5 py-0.5 backdrop-blur-md text-white rounded-full text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border ${(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? 'bg-emerald-600/90 border-emerald-400/30' : 'bg-teal-600/90 border-teal-400/30'}`}>
                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-white">
                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                      </svg>
-                                     Translated
+                                     {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? "Translated" : "Ready (No Text)"}
                                    </span>
                                  </div>
                                  
@@ -742,18 +807,61 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
               ]}
             />
 
-            <div className="flex items-center justify-end gap-3 mt-6 pt-5 border-t border-gray-100">
-              <Button onClick={onClose} className="h-10 px-5 rounded-lg font-medium border-gray-200 text-gray-600">
-                Cancel
-              </Button>
-              <Button
-                type="primary"
-                onClick={handlePublish}
-                loading={publishing || updating}
-                className="h-10 px-6 rounded-lg font-semibold bg-brand shadow-sm hover:opacity-90 transition-opacity"
-              >
-                {isBulkMode ? "Save Draft" : (scheduleEnabled ? "Schedule Publish" : "Publish to Bol.com")}
-              </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-6 pt-5 border-t border-gray-100">
+              {/* Left side: Dynamic translation / validation status banner */}
+              <div className="flex items-center gap-2">
+                {!isBulkMode && hasUntranslatedImages ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
+                    <span>⚠️</span>
+                    <span>
+                      {selectedCount === 0
+                        ? "Select at least 1 image to publish."
+                        : `${untranslatedCount} selected image${untranslatedCount === 1 ? '' : 's'} untranslated.`}
+                    </span>
+                    {untranslatedCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleTranslateAllImages}
+                        disabled={translatingAll}
+                        className="ml-1 px-2 py-0.5 bg-brand text-white rounded font-bold hover:bg-brand-dark cursor-pointer disabled:opacity-50"
+                      >
+                        {translatingAll ? "Translating..." : "Translate All"}
+                      </button>
+                    )}
+                  </div>
+                ) : !isBulkMode && !isValidEan ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                    <span>⚠️</span>
+                    <span>Valid 13-digit EAN required.</span>
+                  </div>
+                ) : !isBulkMode ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                    <span>✓</span>
+                    <span>All {selectedCount} images ready & translated</span>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Right side: Action buttons */}
+              <div className="flex items-center justify-end gap-3 shrink-0">
+                <Button onClick={onClose} className="h-10 px-5 rounded-lg font-medium border-gray-200 text-gray-600 cursor-pointer">
+                  Cancel
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={handlePublish}
+                  loading={publishing || updating}
+                  disabled={isPublishDisabled}
+                  className="h-10 px-6 rounded-lg font-semibold bg-brand text-white shadow-sm disabled:!bg-gray-200 disabled:!text-gray-400 disabled:!border-gray-200 disabled:!cursor-not-allowed cursor-pointer transition-all"
+                  title={
+                    hasUntranslatedImages && !isBulkMode
+                      ? "All product images must be translated to Dutch before publishing."
+                      : (!isValidEan && !isBulkMode ? "A valid 13-digit EAN is required." : "")
+                  }
+                >
+                  {isBulkMode ? "Save Draft" : (scheduleEnabled ? "Schedule Publish" : "Publish to Bol.com")}
+                </Button>
+              </div>
             </div>
           </div>
         )}
