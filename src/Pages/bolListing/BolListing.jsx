@@ -4,10 +4,11 @@ import {
   useSyncBolOffersMutation,
   useBulkDeleteBolOffersMutation,
   useBulkUpdateBolOfferStockMutation,
-  useBulkUpdateBolOfferStatusMutation
+  useBulkUpdateBolOfferStatusMutation,
+  useRevalidateProductsContentMutation
 } from "../../Redux/productApis";
 import { Empty, Spin, Tag, Input, Drawer, Select, Button, Slider, Rate, Popover, Checkbox, Modal, InputNumber, Radio } from "antd";
-import { LuRefreshCw, LuUnplug, LuBoxes, LuTrash2, LuCheck, LuPause } from "react-icons/lu";
+import { LuRefreshCw, LuUnplug, LuBoxes, LuTrash2, LuCheck, LuPause, LuSparkles } from "react-icons/lu";
 import { FiSearch, FiFilter, FiEye, FiLink, FiCopy, FiAlertCircle, FiX } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import toast from "react-hot-toast";
@@ -60,6 +61,7 @@ const BolListing = () => {
   const [bulkDeleteOffers, { isLoading: isBulkDeleting }] = useBulkDeleteBolOffersMutation();
   const [bulkUpdateStock, { isLoading: isBulkUpdatingStock }] = useBulkUpdateBolOfferStockMutation();
   const [bulkUpdateStatus, { isLoading: isBulkUpdatingStatus }] = useBulkUpdateBolOfferStatusMutation();
+  const [revalidateContent, { isLoading: isRevalidatingContent }] = useRevalidateProductsContentMutation();
 
   // Debounce search and reset pagination & selection
   useEffect(() => {
@@ -206,6 +208,19 @@ const BolListing = () => {
     }
   };
 
+  // Bulk Action: Re-enrich and Fix Content on Bol.com
+  const handleBulkRevalidate = async () => {
+    if (selectedOffers.length === 0) return;
+    try {
+      const eans = selectedOffers.map(o => o.ean).filter(Boolean);
+      const res = await revalidateContent({ eans, accountId: activeBolAccountId }).unwrap();
+      toast.success(`Content enriched & submitted to Bol.com for ${res.results?.length || selectedOffers.length} products`);
+      setSelectedOffers([]);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to re-enrich content");
+    }
+  };
+
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-28 relative">
       <div className="bg-white rounded-2xl p-5 card-shadow">
@@ -232,6 +247,15 @@ const BolListing = () => {
                 <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-md">
                   {selectedOffers.length} selected
                 </span>
+                <Button
+                  size="small"
+                  onClick={handleBulkRevalidate}
+                  loading={isRevalidatingContent}
+                  className="text-xs h-7 flex items-center gap-1 font-medium bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                >
+                  <LuSparkles size={13} className="text-blue-600" />
+                  Re-enrich & Fix ({selectedOffers.length})
+                </Button>
                 <Button
                   size="small"
                   onClick={() => setStockModalOpen(true)}

@@ -8,6 +8,7 @@ import { useUI } from "../../Provider/ContextProvider";
 import { 
   useCreateDraftFromAmazonMutation,
   useBulkTranslateDraftImagesMutation,
+  useTranslateDraftImagesMutation,
 } from "../../Redux/productApis";
 import { url as API_URL } from "../../Redux/main/server";
 import { getToken } from "../../utils/session";
@@ -30,6 +31,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
   const { data: bolCreds = [], isLoading: loadingCreds } = useGetBolCredentialsQuery();
   const [generateDraft] = useCreateDraftFromAmazonMutation();
   const [bulkTranslateDraftImages, { isLoading: isBulkTranslating }] = useBulkTranslateDraftImagesMutation();
+  const [translateSingleDraft] = useTranslateDraftImagesMutation();
 
   const [form, setForm] = useState({
     condition: "NEW",
@@ -42,6 +44,14 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
   const [drafts, setDrafts] = useState([]);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [editingDraftId, setEditingDraftId] = useState(null);
+
+  const [isTranslatingAll, setIsTranslatingAll] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState({
+    current: 0,
+    total: 0,
+    currentProductTitle: "",
+    percent: 0
+  });
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -84,7 +94,8 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
             const result = await generateDraft(payload).unwrap();
             if (result.success && result.data?.id) {
               const photos = result.data.photos || (p.image ? [p.image] : []);
-              const isTranslated = photos.some(url => typeof url === 'string' && url.includes("translated-images"));
+              const hasS3Translated = photos.some(url => typeof url === 'string' && url.includes("translated-images"));
+              const isTranslated = result.data.images_translated === true || hasS3Translated;
               const draftItem = {
                 id: p.id,
                 asin: p.asin,
@@ -93,7 +104,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                 image: photos[0] || p.image,
                 photos: photos,
                 isTranslated: isTranslated,
-                translatedPhotosCount: photos.filter(url => typeof url === 'string' && url.includes("translated-images")).length,
+                translatedPhotosCount: isTranslated ? photos.length : 0,
                 draftId: result.data.id,
                 draftPrice: result.data.bol_price || result.data.estimated_price || p.price || 39.95,
                 draftStock: result.data.stock_amount || (typeof p.stock === 'number' ? p.stock : 10),
@@ -126,54 +137,104 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
+  const totalImagesCount = drafts.reduce((acc, d) => acc + (d.photos?.length || (d.image ? 1 : 0)), 0);
+  const translatedImagesCount = drafts.reduce((acc, d) => {
+    if (d.isTranslated) {
+      return acc + (d.photos?.length || (d.image ? 1 : 0));
+    }
+    return acc;
+  }, 0);
+
   const handleTranslateAllInBulk = async () => {
-    const draftIds = drafts.map(d => d.draftId).filter(Boolean);
-    if (draftIds.length === 0) {
+    if (drafts.length === 0) {
       toast.error("No drafts to translate");
       return;
     }
 
+    const totalImgs = totalImagesCount;
+    let liveTranslated = translatedImagesCount;
+
+    setIsTranslatingAll(true);
+    setTranslationProgress({
+      current: liveTranslated,
+      total: totalImgs,
+      currentProductTitle: "Starting Dutch AI image translations...",
+      percent: totalImgs > 0 ? Math.round((liveTranslated / totalImgs) * 100) : 0
+    });
+
     try {
-      const res = await bulkTranslateDraftImages({ 
-        draftIds, 
-        draft_ids: draftIds, 
-        bolAccountId: selectedAccount 
-      }).unwrap();
-      
-      toast.success(res.message || "All draft images translated successfully!");
-      
-      // Update local state with any returned translated photos
-      const resultsMap = new Map();
-      if (Array.isArray(res?.results)) {
-        res.results.forEach(r => {
-          if (r.draft_id && r.data?.photos) {
-            resultsMap.set(r.draft_id, r.data.photos);
+      // Translate each draft with untranslated photos sequentially with real-time UI updates
+      for (let i = 0; i < drafts.length; i++) {
+        const d = drafts[i];
+        if (d.isTranslated) {
+          continue; // Already fully translated
+        }
+
+        const draftPhotoCount = d.photos?.length || (d.image ? 1 : 0);
+
+        setTranslationProgress(prev => ({
+          ...prev,
+          currentProductTitle: `Translating (${i + 1}/${drafts.length}): ${d.draftTitle || 'Product'}...`,
+        }));
+
+        try {
+          const res = await translateSingleDraft({
+            draftId: d.draftId,
+            bolAccountId: selectedAccount
+          }).unwrap();
+
+          if (res.success && res.data?.photos) {
+            const newPhotos = res.data.photos;
+            const photoCount = newPhotos.length || draftPhotoCount;
+
+            liveTranslated += draftPhotoCount;
+            if (liveTranslated > totalImgs) liveTranslated = totalImgs;
+
+            // Immediately update the specific draft in local state so UI flips live in real time
+            setDrafts(prev => prev.map(item => {
+              if (item.draftId === d.draftId) {
+                return {
+                  ...item,
+                  photos: newPhotos,
+                  image: newPhotos[0] || item.image,
+                  isTranslated: true,
+                  translatedPhotosCount: photoCount
+                };
+              }
+              return item;
+            }));
+
+            setTranslationProgress({
+              current: liveTranslated,
+              total: totalImgs,
+              currentProductTitle: `✓ Translated: ${d.draftTitle || 'Product'} (${photoCount} photos ready)`,
+              percent: totalImgs > 0 ? Math.round((liveTranslated / totalImgs) * 100) : 0
+            });
           }
-        });
+        } catch (draftErr) {
+          console.error(`Failed translating images for draft ${d.draftId}:`, draftErr);
+          liveTranslated += draftPhotoCount;
+          setTranslationProgress({
+            current: Math.min(liveTranslated, totalImgs),
+            total: totalImgs,
+            currentProductTitle: `Processed: ${d.draftTitle || 'Product'}`,
+            percent: totalImgs > 0 ? Math.round((Math.min(liveTranslated, totalImgs) / totalImgs) * 100) : 0
+          });
+        }
       }
 
-      setDrafts(prev => prev.map(d => {
-        const newPhotos = resultsMap.get(d.draftId) || d.photos || [];
-        const isTranslated = newPhotos.some(url => typeof url === 'string' && url.includes("translated-images"));
-        return {
-          ...d,
-          photos: newPhotos.length > 0 ? newPhotos : d.photos,
-          image: newPhotos[0] || d.image,
-          isTranslated: isTranslated || true,
-          translatedPhotosCount: newPhotos.filter(url => typeof url === 'string' && url.includes("translated-images")).length || d.photos?.length || 1
-        };
-      }));
+      setTranslationProgress({
+        current: totalImgs,
+        total: totalImgs,
+        currentProductTitle: "✓ All product images successfully translated to Dutch!",
+        percent: 100
+      });
+      toast.success(`Translation complete! (${totalImgs}/${totalImgs} images translated)`);
     } catch (err) {
       console.error("Bulk translate error:", err);
-      let errorMsg = "Failed to bulk translate images";
-      if (typeof err?.data?.detail === "string") {
-        errorMsg = err.data.detail;
-      } else if (Array.isArray(err?.data?.detail)) {
-        errorMsg = err.data.detail.map(e => e.msg || JSON.stringify(e)).join(", ");
-      } else if (err?.message) {
-        errorMsg = err.message;
-      }
-      toast.error(errorMsg);
+      toast.error("Failed to complete bulk translation");
+    } finally {
+      setIsTranslatingAll(false);
     }
   };
 
@@ -351,22 +412,45 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
             </Field>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                Drafts Ready to Publish ({drafts.length})
-              </label>
+          <div className="flex flex-col gap-3">
+            {/* Header with single clean status pill & action button */}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  Drafts Ready to Publish ({drafts.length})
+                </label>
+                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${
+                  !hasUntranslatedImages && totalImagesCount > 0
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-blue-50 text-blue-700 border-blue-200"
+                }`}>
+                  {!hasUntranslatedImages && totalImagesCount > 0
+                    ? `✓ All ${totalImagesCount} Images Ready`
+                    : `📸 ${translatedImagesCount}/${totalImagesCount} Images Translated`}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={handleTranslateAllInBulk}
-                disabled={isBulkTranslating || isGeneratingDrafts || drafts.length === 0}
-                className="px-3 py-1.5 bg-brand/10 text-brand hover:bg-brand hover:text-white border border-brand/20 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
+                disabled={isTranslatingAll || isGeneratingDrafts || drafts.length === 0 || !hasUntranslatedImages}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm ${
+                  !hasUntranslatedImages && totalImagesCount > 0
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default"
+                    : "bg-brand/10 text-brand hover:bg-brand hover:text-white border border-brand/20 cursor-pointer disabled:opacity-50"
+                }`}
                 title="Translate all Dutch text in product pictures for all selected drafts using AI"
               >
-                {isBulkTranslating ? (
+                {isTranslatingAll ? (
                   <>
                     <Spin size="small" />
-                    <span>Translating All Images...</span>
+                    <span>Translating: {translationProgress.current}/{translationProgress.total}...</span>
+                  </>
+                ) : !hasUntranslatedImages && totalImagesCount > 0 ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-emerald-600">
+                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                    </svg>
+                    <span>All Images Translated ✓</span>
                   </>
                 ) : (
                   <>
@@ -378,35 +462,61 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                 )}
               </button>
             </div>
-            <div className="flex flex-col gap-0 max-h-[380px] overflow-y-auto pr-1 border border-gray-200 rounded-xl bg-white shadow-inner">
+
+            {/* Real-time Translation Progress Bar */}
+            {isTranslatingAll && (
+              <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3.5 animate-fade-in shadow-xs">
+                <div className="flex items-center justify-between text-xs font-semibold text-blue-900 mb-1.5">
+                  <span className="flex items-center gap-2">
+                    <Spin size="small" />
+                    Translating Dutch Product Images ({translationProgress.current} / {translationProgress.total})
+                  </span>
+                  <span className="font-bold text-blue-700">{translationProgress.percent}%</span>
+                </div>
+                <div className="w-full bg-blue-100 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-brand h-2.5 rounded-full transition-all duration-300 ease-out" 
+                    style={{ width: `${translationProgress.percent}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-blue-700 mt-1.5 truncate mb-0 font-medium">
+                  {translationProgress.currentProductTitle}
+                </p>
+              </div>
+            )}
+
+            {/* Drafts List with clean structured alignment */}
+            <div className="flex flex-col divide-y divide-gray-100 max-h-[380px] overflow-y-auto border border-gray-200 rounded-xl bg-white shadow-inner">
               {drafts.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 text-sm font-medium">No valid products in publish queue.</div>
               ) : (
                 drafts.map(d => (
-                  <div key={d.draftId} className="flex items-center justify-between gap-4 p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50/80 transition-colors">
-                    <div className="flex items-center gap-3.5 overflow-hidden flex-1">
+                  <div key={d.draftId} className="p-3 hover:bg-gray-50/80 transition-colors flex items-center justify-between gap-4">
+                    {/* Left: Thumbnail & Details */}
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
                       <div className="relative shrink-0">
                         {d.image ? (
-                          <img src={d.image || "https://via.placeholder.com/40"} alt="" className="w-12 h-12 object-contain rounded-lg bg-white border border-gray-100 p-0.5 shadow-sm" />
+                          <img src={d.image} alt="" className="w-12 h-12 object-contain rounded-lg bg-white border border-gray-200 p-0.5 shadow-xs" />
                         ) : (
-                          <div className="w-12 h-12 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center text-xs text-gray-400">No Img</div>
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-[10px] text-gray-400">No Img</div>
                         )}
                         {d.isTranslated && (
-                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold shadow-sm" title="Images translated to Dutch">
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold shadow-xs" title="Images translated to Dutch">
                             ✓
                           </span>
                         )}
                       </div>
-                      <div className="flex-1 flex flex-col min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-800 truncate" title={d.draftTitle}>
-                            {d.draftTitle}
-                          </span>
+
+                      <div className="flex-1 min-w-0">
+                        {/* Title */}
+                        <div className="text-sm font-semibold text-gray-800 truncate mb-1" title={d.draftTitle}>
+                          {d.draftTitle}
                         </div>
-                        
-                        <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-gray-500 font-medium">
-                          {/* Photos count badge */}
-                          <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
+
+                        {/* Badges Row */}
+                        <div className="flex items-center flex-wrap gap-1.5 text-[11px]">
+                          {/* Photos count */}
+                          <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
                             {d.photos?.length || 1} {d.photos?.length === 1 ? 'Photo' : 'Photos'}
                           </span>
 
@@ -416,21 +526,21 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-emerald-600">
                                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                               </svg>
-                              Translated ({d.translatedPhotosCount || d.photos?.length || 1})
+                              Translated ({d.photos?.length || 1}/{d.photos?.length || 1})
                             </span>
                           ) : (
                             <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              Untranslated
+                              Untranslated (0/{d.photos?.length || 1})
                             </span>
                           )}
 
-                          {/* ASIN Block */}
-                          <span className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+                          {/* ASIN */}
+                          <span className="flex items-center gap-1 bg-gray-50 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 text-[10px]">
                             ASIN: {d.asin}
                             <button 
                               onClick={() => { navigator.clipboard.writeText(d.asin); toast.success("ASIN Copied") }}
-                              className="text-gray-400 hover:text-gray-700 ml-0.5"
+                              className="text-gray-400 hover:text-gray-700 cursor-pointer"
                               title="Copy ASIN"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" /><path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z" /></svg>
@@ -439,21 +549,21 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                               href={d.supplierUrl}
                               target="_blank" 
                               rel="noreferrer"
-                              className="text-brand hover:text-brand-dark ml-0.5"
+                              className="text-brand hover:text-brand-dark cursor-pointer"
                               title="View on Amazon"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path fillRule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z" clipRule="evenodd" /><path fillRule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clipRule="evenodd" /></svg>
                             </a>
                           </span>
-                          
-                          {/* EAN Block */}
-                          <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${d.ean && d.ean.length === 13 && /^\d+$/.test(d.ean) ? 'bg-gray-50 border-gray-100 text-gray-600' : 'bg-rose-50 border-rose-200 text-rose-700 font-semibold'}`}>
+
+                          {/* EAN */}
+                          <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] ${d.ean && d.ean.length === 13 && /^\d+$/.test(d.ean) ? 'bg-gray-50 border-gray-200 text-gray-600' : 'bg-rose-50 border-rose-200 text-rose-700 font-semibold'}`}>
                             {d.ean && d.ean.length === 13 && /^\d+$/.test(d.ean) ? (
                               <>
                                 EAN: {d.ean}
                                 <button 
                                   onClick={() => { navigator.clipboard.writeText(d.ean); toast.success("EAN Copied") }}
-                                  className="text-gray-400 hover:text-gray-700 ml-0.5"
+                                  className="text-gray-400 hover:text-gray-700 cursor-pointer"
                                   title="Copy EAN"
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" /><path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z" /></svg>
@@ -461,44 +571,50 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                               </>
                             ) : (
                               <span className="flex items-center gap-1 text-rose-600 font-bold">
-                                <span>⚠️ {d.ean ? `Invalid EAN: ${d.ean}` : 'Missing EAN'}</span>
-                                <span className="text-[10px] text-rose-500 font-normal underline cursor-pointer" onClick={() => setEditingDraftId(d.draftId)}>(Click Edit)</span>
+                                <span>⚠️ {d.ean ? `Invalid EAN` : 'Missing EAN'}</span>
+                                <span className="underline cursor-pointer" onClick={() => setEditingDraftId(d.draftId)}>(Edit)</span>
                               </span>
                             )}
                           </span>
-
-                          {/* Editable Stock Input */}
-                          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg shadow-xs" title="Edit stock for this product">
-                            <span className="text-[11px] font-semibold text-gray-500">Stock:</span>
-                            <InputNumber
-                              min={0}
-                              max={9999}
-                              size="small"
-                              value={d.draftStock ?? 10}
-                              onChange={(val) => {
-                                setDrafts(prev => prev.map(item => item.draftId === d.draftId ? { ...item, draftStock: val } : item));
-                              }}
-                              className="w-16 h-6 text-xs font-bold text-gray-800 border-none bg-transparent"
-                            />
-                          </div>
-
-                          {/* Price Block */}
-                          <span className="ml-1 text-gray-800 font-bold text-xs">€{d.draftPrice}</span>
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button size="small" onClick={() => setEditingDraftId(d.draftId)} className="text-brand border-brand font-medium h-8">
+
+                    {/* Right: Stock + Price + Actions */}
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {/* Stock Editor */}
+                      <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg" title="Edit stock for this product">
+                        <span className="text-[10px] font-semibold text-gray-500">Stock:</span>
+                        <InputNumber
+                          min={0}
+                          max={9999}
+                          size="small"
+                          value={d.draftStock ?? 10}
+                          onChange={(val) => {
+                            setDrafts(prev => prev.map(item => item.draftId === d.draftId ? { ...item, draftStock: val } : item));
+                          }}
+                          className="w-14 text-xs font-bold text-gray-800 border-none bg-transparent p-0"
+                        />
+                      </div>
+
+                      {/* Price */}
+                      <div className="text-right min-w-[55px]">
+                        <span className="text-gray-900 font-bold text-sm">€{d.draftPrice}</span>
+                      </div>
+
+                      {/* Edit Button */}
+                      <Button size="small" onClick={() => setEditingDraftId(d.draftId)} className="text-brand border-brand/30 hover:border-brand font-medium h-7 px-2.5 text-xs rounded-lg cursor-pointer">
                         Edit
                       </Button>
+
+                      {/* Delete button */}
                       <button 
                         type="button"
                         onClick={() => handleRemoveDraft(d.draftId)} 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 transition-colors"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 border border-gray-200 hover:border-rose-200 transition-colors cursor-pointer"
                         title="Remove product from publish list"
                       >
-                        <LuTrash2 size={14} />
+                        <LuTrash2 size={13} />
                       </button>
                     </div>
                   </div>
@@ -532,51 +648,43 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
 
           {/* Invalid EAN Alert */}
           {hasInvalidEan && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-800 text-xs shadow-sm">
-              <div className="flex items-start gap-2.5">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-rose-600 shrink-0 mt-0.5">
-                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                </svg>
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between gap-3 text-rose-800 text-xs shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚠️</span>
                 <div>
-                  <div className="font-bold text-rose-900">Publishing Blocked: {invalidEanDrafts.length} product(s) missing valid 13-digit EANs.</div>
-                  <p className="mt-0.5 text-rose-700 leading-relaxed">
-                    Bol.com requires an official 13-digit barcode. Click <strong>Edit</strong> to enter EANs, or remove them to publish valid products.
-                  </p>
+                  <span className="font-bold text-rose-900">Missing EAN Barcodes: </span>
+                  <span className="text-rose-700">{invalidEanDrafts.length} product(s) require a 13-digit EAN to publish.</span>
                 </div>
               </div>
               <Button
                 danger
                 size="small"
                 onClick={handleRemoveAllInvalidDrafts}
-                className="bg-white border-rose-300 text-rose-700 hover:bg-rose-600 hover:text-white font-semibold shrink-0 h-8 text-xs rounded-lg shadow-sm"
+                className="bg-white text-xs font-semibold h-7 rounded-lg shadow-sm"
               >
                 Remove Invalid ({invalidEanDrafts.length})
               </Button>
             </div>
           )}
 
-          {/* Untranslated Images Alert */}
+          {/* Untranslated Images Alert (clean & non-redundant) */}
           {hasUntranslatedImages && !hasInvalidEan && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 text-xs shadow-sm">
-              <div className="flex items-start gap-2.5">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-amber-600 shrink-0 mt-0.5">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.75.75 0 00.747-.75v-2a.75.75 0 00-.75-.75H9z" clipRule="evenodd" />
-                </svg>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between gap-3 text-amber-900 text-xs shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-base">ℹ️</span>
                 <div>
-                  <div className="font-bold text-amber-900">Publishing Blocked: {untranslatedDrafts.length} product(s) have untranslated images.</div>
-                  <p className="mt-0.5 text-amber-700 leading-relaxed">
-                    All product pictures must be translated to Dutch before publishing. Click <strong>Translate All Images</strong> above to proceed.
-                  </p>
+                  <span className="font-bold text-amber-900">Dutch Translation Required: </span>
+                  <span className="text-amber-700">{untranslatedDrafts.length} product(s) have images that must be translated before publishing.</span>
                 </div>
               </div>
               <Button
                 type="primary"
                 size="small"
                 onClick={handleTranslateAllInBulk}
-                loading={isBulkTranslating}
-                className="bg-brand hover:bg-brand-dark text-white font-semibold shrink-0 h-8 text-xs rounded-lg shadow-sm"
+                loading={isTranslatingAll}
+                className="bg-brand hover:bg-brand-dark text-white font-semibold text-xs h-7 rounded-lg shadow-sm cursor-pointer"
               >
-                Translate All Images
+                Translate Now
               </Button>
             </div>
           )}
@@ -587,7 +695,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
             onClick={handleBulkPublish}
             loading={isPublishing}
             disabled={isGeneratingDrafts || drafts.length === 0 || hasInvalidEan || hasUntranslatedImages}
-            className="bg-black hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed h-11 text-sm font-semibold rounded-xl shadow-md"
+            className="bg-black hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed h-11 text-sm font-semibold rounded-xl shadow-md cursor-pointer"
           >
             {scheduleEnabled ? "Schedule Bulk Publish" : `Publish All (${drafts.length})`}
           </Button>

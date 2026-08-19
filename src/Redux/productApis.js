@@ -19,7 +19,8 @@ const parseStockQuantity = (it) => {
 
 // Map a backend scrape-items row into the shape the product UI expects.
 const mapItem = (it, i) => ({
-  id: it.asin || `item-${i}`,
+  id: it.asin || it.item_id || it._id || `item-${i}`,
+  itemId: it.item_id || it._id || null,
   asin: it.asin || "",
   // Items whose live scrape failed come back without a title; show the ASIN
   // as a stand-in and flag them so the card can render a "syncing" state.
@@ -640,6 +641,16 @@ const productApis = baseApis.injectEndpoints({
       }),
       invalidatesTags: ["Products", "Drafts", "BolOffers"],
     }),
+
+    // POST /spreadsheet/revalidate-items (Quality validation check for Inventory Catalog)
+    revalidateInventoryItems: builder.mutation({
+      query: ({ item_ids, asins, eans, all_items } = {}) => ({
+        url: "/spreadsheet/revalidate-items",
+        method: "POST",
+        body: { item_ids, asins, eans, all_items },
+      }),
+      invalidatesTags: ["Products", "NeedsReview"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -688,6 +699,7 @@ export const {
   useGetBolProcessStatusQuery,
   useGetLiveDeliveryQuery,
   useRevalidateProductsContentMutation,
+  useRevalidateInventoryItemsMutation,
 } = productApis;
 
 export default productApis;
