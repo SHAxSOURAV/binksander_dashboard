@@ -17,11 +17,12 @@ import {
 import { getSafeAmazonUrl } from "../../utils/urlUtils";
 
 // Helper for .95 rounding rule with €39.95 floor price
-const calcSellingPrice = (purchasePrice, mult = 2.5) => {
-  if (purchasePrice == null || purchasePrice <= 0 || isNaN(purchasePrice)) return 39.95;
-  const basePrice = purchasePrice * mult;
-  const rounded = Math.floor(basePrice / 10) * 10 + 9.95;
-  return Math.max(29.95, Math.round(rounded * 100) / 100);
+const calcSellingPrice = (purchasePrice, multiplier = 2.5) => {
+  const raw = Number(purchasePrice) || 0;
+  if (!raw || raw <= 0) return 39.95;
+  const base = raw * multiplier;
+  const rounded = Math.floor(base / 10) * 10 + 9.95;
+  return Math.max(39.95, Math.round(rounded * 100) / 100);
 };
 
 // Parse a price that may use a comma as the decimal separator (e.g. "19,53")

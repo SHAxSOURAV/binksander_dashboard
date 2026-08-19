@@ -149,7 +149,7 @@ const NeedsReview = () => {
         const asin = record.asin;
         const codeToDisplay = ean || asin;
         const codeLabel = ean ? "EAN" : "ASIN";
-        const title = record.TITLE || record.Title || record.title || record.product_title || "No Title";
+        const title = record["PRODUCT TITLE"] || record["Product Title"] || record["product title"] || record.TITLE || record.Title || record.title || record.product_title || "No Title";
         const brand = record.product_brand;
         const photo = record.product_photo;
         
