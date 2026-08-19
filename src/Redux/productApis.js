@@ -35,7 +35,7 @@ const mapItem = (it, i) => ({
     if (!rawP || rawP <= 0) return 39.95;
     const baseP = rawP * 2.5;
     const roundedP = Math.floor(baseP / 10) * 10 + 9.95;
-    return Math.max(29.95, Math.round(roundedP * 100) / 100);
+    return Math.max(39.95, Math.round(roundedP * 100) / 100);
   })(),
   purchasePrice: parsePrice(it["Purchase price"]),
   deliveryTime: it["DELIVERY TIME"] || "",
