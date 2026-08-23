@@ -631,6 +631,15 @@ const productApis = baseApis.injectEndpoints({
       query: (asin) => `/spreadsheet/products/${asin}/live-delivery`,
     }),
 
+    // GET /bol/content-report/{ean}
+    getBolContentReport: builder.query({
+      query: ({ ean, accountId }) => ({
+        url: `/bol/content-report/${ean}`,
+        headers: accountId ? { "x-bol-account-id": accountId } : {},
+      }),
+      providesTags: ["BolOffers"],
+    }),
+
     // POST /bol/products/revalidate-content
     revalidateProductsContent: builder.mutation({
       query: ({ accountId, draftIds, eans, asins }) => ({
@@ -698,6 +707,8 @@ export const {
   useBulkUpdateBolOfferStatusMutation,
   useGetBolProcessStatusQuery,
   useGetLiveDeliveryQuery,
+  useGetBolContentReportQuery,
+  useLazyGetBolContentReportQuery,
   useRevalidateProductsContentMutation,
   useRevalidateInventoryItemsMutation,
 } = productApis;

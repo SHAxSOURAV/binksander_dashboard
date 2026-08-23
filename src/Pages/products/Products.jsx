@@ -878,21 +878,15 @@ const Products = () => {
         )}
 
         {/* Footer / Pagination */}
-        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 pt-4">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Per page:</span>
-            <Select
-              value={limit}
-              onChange={handlePageSizeChange}
-              options={PAGE_SIZE_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
-              size="small"
-              className="w-20"
-            />
-          </div>
+        <div className="mt-6 border-t border-gray-100 pt-4">
           <Pagination
-            currentPage={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
+            current={page}
+            total={totalPages}
+            onChange={setPage}
+            pageSize={limit}
+            onPageSizeChange={handlePageSizeChange}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            totalItems={total}
           />
         </div>
       </div>
