@@ -94,8 +94,8 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
             const result = await generateDraft(payload).unwrap();
             if (result.success && result.data?.id) {
               const photos = result.data.photos || (p.image ? [p.image] : []);
-              const hasS3Translated = photos.some(url => typeof url === 'string' && url.includes("translated-images"));
-              const isTranslated = result.data.images_translated === true || hasS3Translated;
+              const translatedPhotosCount = photos.filter(url => typeof url === 'string' && url.includes("translated-images")).length;
+              const isTranslated = photos.length > 0 && translatedPhotosCount === photos.length;
               const draftItem = {
                 id: p.id,
                 asin: p.asin,
@@ -104,7 +104,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                 image: photos[0] || p.image,
                 photos: photos,
                 isTranslated: isTranslated,
-                translatedPhotosCount: isTranslated ? photos.length : 0,
+                translatedPhotosCount: translatedPhotosCount,
                 draftId: result.data.id,
                 draftPrice: result.data.bol_price || result.data.estimated_price || p.price || 39.95,
                 draftStock: result.data.stock_amount || (typeof p.stock === 'number' ? p.stock : 10),
@@ -139,10 +139,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
 
   const totalImagesCount = drafts.reduce((acc, d) => acc + (d.photos?.length || (d.image ? 1 : 0)), 0);
   const translatedImagesCount = drafts.reduce((acc, d) => {
-    if (d.isTranslated) {
-      return acc + (d.photos?.length || (d.image ? 1 : 0));
-    }
-    return acc;
+    return acc + (d.translatedPhotosCount ?? (d.isTranslated ? (d.photos?.length || 1) : 0));
   }, 0);
 
   const handleTranslateAllInBulk = async () => {
@@ -531,7 +528,10 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                           ) : (
                             <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              Untranslated (0/{d.photos?.length || 1})
+                              {d.translatedPhotosCount > 0 
+                                ? `Partially Translated (${d.translatedPhotosCount}/${d.photos?.length || 1})`
+                                : `Untranslated (0/${d.photos?.length || 1})`
+                              }
                             </span>
                           )}
 
