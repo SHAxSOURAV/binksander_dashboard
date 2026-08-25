@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Modal, Input, Select, Button, Spin, InputNumber, Tabs, Image, DatePicker } from "antd";
 import toast from "react-hot-toast";
 import {
@@ -8,6 +8,8 @@ import {
   useTranslateDraftImagesMutation,
   useTranslateSingleImageMutation,
   useRevertSingleImageMutation,
+  useEnrichDraftAttributesMutation,
+  useGetDraftBolPayloadPreviewQuery,
 } from "../../Redux/productApis";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
@@ -50,6 +52,15 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const [translateDraftImages, { isLoading: translatingAll }] = useTranslateDraftImagesMutation();
   const [translateSingleImage] = useTranslateSingleImageMutation();
   const [revertSingleImage] = useRevertSingleImageMutation();
+  const [enrichDraftAttributes, { isLoading: enrichingAttributes }] = useEnrichDraftAttributesMutation();
+
+  const { data: bolPreviewData, isFetching: loadingPreview, refetch: refetchPreview } = useGetDraftBolPayloadPreviewQuery(
+    { draftId, bolAccountId: selectedAccount },
+    { skip: !draftId }
+  );
+
+  const [specViewMode, setSpecViewMode] = useState("categorized"); // "categorized" | "payload"
+  const [payloadType, setPayloadType] = useState("content"); // "content" | "offer"
 
   const [form, setForm] = useState({
     title: "",
@@ -79,12 +90,10 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     if (customUploadedUrls.has(url)) return true;
     // 2. Cloud / S3 translated image URL
     if (typeof url === 'string' && url.includes("translated-images")) return true;
-    // 3. Draft overall translation verified (images_translated flag from backend)
-    if (isDraftTranslated || draft?.images_translated === true) return true;
-    // 4. Single photo explicitly checked & verified by translation engine (including photos with no text)
-    if (verifiedPhotoIndexes.has(index)) return true;
-    // 5. Modified from original photo URL
+    // 3. Modified from original photo URL
     if (originalPhotos[index] && originalPhotos[index] !== url) return true;
+    // 4. Single photo explicitly checked & verified clean by translation engine
+    if (verifiedPhotoIndexes.has(index)) return true;
     return false;
   };
 
@@ -104,6 +113,112 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     translatingIndex !== null ||
     (!isBulkMode && (hasUntranslatedImages || !isValidEan || !form.title?.trim() || !form.bol_price))
   );
+
+  const liveOfferPayload = useMemo(() => {
+    const cleanStock = Math.max(parseInt(form.stock_amount, 10) || 1, 1);
+    const cleanPrice = parseFloat(form.bol_price) || 39.95;
+    const cleanEanVal = (form.ean || "").replace(/\D/g, "");
+
+    const deliveryMap = {
+      "24uurs-15": { minimumDaysToCustomer: 0, maximumDaysToCustomer: 1, ultimateOrderTime: "15:00" },
+      "24uurs-23": { minimumDaysToCustomer: 0, maximumDaysToCustomer: 1, ultimateOrderTime: "23:00" },
+      "1-2d": { minimumDaysToCustomer: 1, maximumDaysToCustomer: 2 },
+      "2-3d": { minimumDaysToCustomer: 2, maximumDaysToCustomer: 3 },
+      "3-5d": { minimumDaysToCustomer: 3, maximumDaysToCustomer: 5 },
+      "4-8d": { minimumDaysToCustomer: 4, maximumDaysToCustomer: 8 },
+      "1-8d": { minimumDaysToCustomer: 1, maximumDaysToCustomer: 8 },
+    };
+    const deliveryPromise = { ...(deliveryMap[form.delivery_code] || { minimumDaysToCustomer: 1, maximumDaysToCustomer: 8 }) };
+    if (deliveryPromise.minimumDaysToCustomer > 0 && deliveryPromise.ultimateOrderTime) {
+      delete deliveryPromise.ultimateOrderTime;
+    }
+
+    return {
+      ean: cleanEanVal,
+      onHoldByRetailer: false,
+      condition: {
+        category: (form.condition || "NEW").toUpperCase()
+      },
+      pricing: {
+        bundlePrices: [
+          {
+            quantity: 1,
+            unitPrice: cleanPrice
+          }
+        ]
+      },
+      stock: {
+        amount: cleanStock,
+        managedByRetailer: true
+      },
+      countryAvailabilities: [
+        { countryCode: "NL" },
+        { countryCode: "BE" }
+      ],
+      fulfilment: {
+        method: "FBR",
+        schedule: "BOL_DELIVERY_PROMISE",
+        deliveryPromise
+      }
+    };
+  }, [form.ean, form.bol_price, form.stock_amount, form.condition, form.delivery_code]);
+
+  const liveContentPayload = useMemo(() => {
+    if (!bolPreviewData?.exact_content_payload) {
+      return {
+        language: "nl",
+        chunkId: form.chunk_id || "80009900",
+        attributes: [
+          { id: "EAN", values: [{ value: (form.ean || "").replace(/\D/g, "") }] },
+          { id: "Name", values: [{ value: form.title || "" }] },
+          { id: "Description", values: [{ value: form.description || "" }] },
+          ...Object.entries(form.attributes || {}).map(([k, v]) => ({
+            id: k,
+            values: Array.isArray(v) ? v.map(val => ({ value: String(val) })) : [{ value: String(v) }]
+          }))
+        ],
+        assets: (form.photos || []).map((url, idx) => ({
+          url,
+          labels: [idx === 0 ? "FRONT" : "ADDITIONAL"]
+        }))
+      };
+    }
+
+    const payload = JSON.parse(JSON.stringify(bolPreviewData.exact_content_payload));
+    if (form.chunk_id) payload.chunkId = String(form.chunk_id);
+    
+    // Update live core attributes
+    const eanAttr = payload.attributes?.find(a => a.id === "EAN");
+    if (eanAttr) eanAttr.values = [{ value: (form.ean || "").replace(/\D/g, "") }];
+
+    const nameAttr = payload.attributes?.find(a => a.id === "Name");
+    if (nameAttr) nameAttr.values = [{ value: form.title || "" }];
+
+    const descAttr = payload.attributes?.find(a => a.id === "Description");
+    if (descAttr) descAttr.values = [{ value: form.description || "" }];
+
+    // Merge in current form attributes
+    if (form.attributes && typeof form.attributes === "object") {
+      Object.entries(form.attributes).forEach(([k, v]) => {
+        if (!k || v == null || !String(v).trim()) return;
+        const existing = payload.attributes?.find(a => a.id.toLowerCase() === k.toLowerCase());
+        const formattedValues = Array.isArray(v) ? v.map(val => ({ value: String(val) })) : [{ value: String(v) }];
+        if (existing) {
+          existing.values = formattedValues;
+        } else {
+          payload.attributes.push({ id: k, values: formattedValues });
+        }
+      });
+    }
+
+    // Live assets update
+    payload.assets = (form.photos || []).filter(u => u && typeof u === 'string').map((url, idx) => ({
+      url,
+      labels: [idx === 0 ? "FRONT" : "ADDITIONAL"]
+    }));
+
+    return payload;
+  }, [bolPreviewData, form.chunk_id, form.ean, form.title, form.description, form.attributes, form.photos]);
 
   const sanitizeAntiAmazonAndEmojiText = (text) => {
     if (!text || typeof text !== "string") return text || "";
@@ -259,6 +374,39 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     }
   };
 
+  const handleEnrichAttributes = async () => {
+    if (!draftId) return;
+    try {
+      const res = await enrichDraftAttributes({
+        draftId,
+        bolAccountId: selectedAccount
+      }).unwrap();
+
+      if (res.success && res.attributes) {
+        setForm(prev => ({
+          ...prev,
+          attributes: res.attributes
+        }));
+        if (typeof refetchPreview === 'function') {
+          refetchPreview();
+        }
+        toast.success(res.message || "AI auto-filled all mandatory attributes!");
+      }
+    } catch (err) {
+      toast.error(err?.data?.detail || err?.message || "Failed to auto-fill mandatory attributes.");
+    }
+  };
+
+  const handleAttributeChange = (attrKey, value) => {
+    setForm(prev => ({
+      ...prev,
+      attributes: {
+        ...prev.attributes,
+        [attrKey]: value
+      }
+    }));
+  };
+
   useEffect(() => {
     if (draft) {
       const rawPrice = draft.bol_price || draft.estimated_price || "";
@@ -308,12 +456,18 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         chunk_name: draft.chunk_name || "",
         chunk_recommendations: draft.chunk_recommendations || [],
       });
-      const isTranslated = draft.images_translated === true || (draft.photos && draft.photos.some(u => typeof u === 'string' && u.includes("translated-images")));
+      const isTranslated = draft.images_translated === true;
       setIsDraftTranslated(isTranslated);
       if (draft.verified_photo_indexes?.length) {
         setVerifiedPhotoIndexes(new Set(draft.verified_photo_indexes));
-      } else if (isTranslated && draft.photos?.length) {
-        setVerifiedPhotoIndexes(new Set(draft.photos.map((_, i) => i)));
+      } else {
+        const autoVerified = new Set();
+        (draft.photos || []).forEach((u, i) => {
+          if (typeof u === 'string' && u.includes("translated-images")) {
+            autoVerified.add(i);
+          }
+        });
+        setVerifiedPhotoIndexes(autoVerified);
       }
 
       setOriginalPhotos(draft.original_photos || draft.photos || []);
@@ -628,37 +782,289 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   label: 'Content & Description',
                   children: (
                     <div className="py-4 space-y-6">
-                      <Field label="Product Description">
+                      {/* Product Description */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                            Product Description <span className="text-red-500">*</span>
+                          </label>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {(form.description || "").length} characters
+                          </span>
+                        </div>
                         <TextArea
                           value={form.description}
                           onChange={(e) => handleChange("description", e.target.value)}
-                          rows={10}
-                          className="rounded-xl text-[13px] font-medium text-gray-700 leading-relaxed thin-scrollbar"
-                          placeholder="Rich product description for Bol.com..."
+                          rows={6}
+                          className="rounded-xl text-[13px] text-slate-800 leading-relaxed thin-scrollbar p-3.5 border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                          placeholder="Rich Dutch product description for Bol.com..."
                         />
-                      </Field>
-                      
-                      <div className="bg-gray-50 border border-gray-100 p-5 rounded-xl">
-                         <h3 className="text-[12px] font-bold text-gray-500 uppercase tracking-wide mb-4">Technical Specifications (Read Only)</h3>
-                         {Object.keys(form.attributes || {}).length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-                              {Object.entries(form.attributes).map(([k, v]) => {
-                                const rawK = String(k).trim();
-                                const rawV = String(v).trim();
-                                const draftAsin = (draft?.asin || "").toUpperCase();
-                                if (!rawK || rawK.toUpperCase() === "ASIN") return null;
-                                if (draftAsin && rawV.toUpperCase().includes(draftAsin)) return null;
-                                return (
-                                  <div key={k} className="flex flex-col border-b border-gray-200 pb-2">
-                                     <span className="text-[11px] font-bold text-gray-400 uppercase">{rawK}</span>
-                                     <span className="text-[13px] font-semibold text-gray-800">{rawV}</span>
-                                  </div>
-                                );
-                              })}
+                      </div>
+
+                      {/* Bol.com Data Model v10 Specifications Container */}
+                      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs">
+                        {/* Clean Top Header */}
+                        <div className="px-5 py-4 bg-slate-50/80 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 text-base font-bold shadow-2xs">
+                              🏷️
                             </div>
-                         ) : (
-                            <p className="text-sm text-gray-400 font-medium">No technical specifications provided.</p>
-                         )}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-slate-800 tracking-tight">
+                                  Bol.com Data Model Specifications
+                                </h3>
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100/70 text-blue-800 border border-blue-200">
+                                  {bolPreviewData?.chunk_name || form.chunk_name || "General Category"} ({form.chunk_id || "Auto"})
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Level 0 & 1 attributes are strictly validated by Bol.com for the product to be published as "Te koop".
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5">
+                            {/* View Switcher Segmented Control */}
+                            <div className="flex bg-slate-200/70 p-1 rounded-xl text-xs font-semibold">
+                              <button
+                                type="button"
+                                onClick={() => setSpecViewMode("categorized")}
+                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
+                                  specViewMode === "categorized"
+                                    ? "bg-white text-slate-800 shadow-xs font-bold"
+                                    : "text-slate-600 hover:text-slate-900"
+                                }`}
+                              >
+                                📋 Specifications
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSpecViewMode("payload")}
+                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
+                                  specViewMode === "payload"
+                                    ? "bg-white text-blue-700 shadow-xs font-bold"
+                                    : "text-slate-600 hover:text-slate-900"
+                                }`}
+                              >
+                                {"{ }"} Live Bol Payload
+                              </button>
+                            </div>
+
+                            {/* AI Auto-Fill Button */}
+                            <button
+                              type="button"
+                              onClick={handleEnrichAttributes}
+                              disabled={enrichingAttributes || !draftId}
+                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Automatically fill all mandatory attributes required by Bol.com using Claude / Gemini AI"
+                            >
+                              {enrichingAttributes ? (
+                                <>
+                                  <Spin size="small" className="text-white" />
+                                  <span>Auto-Filling...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                                    <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+                                  </svg>
+                                  <span>AI Auto-Fill Mandatory</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Content Area */}
+                        {specViewMode === "categorized" ? (
+                          <div className="p-5 space-y-6">
+                            {/* 1. Mandatory Attributes Section */}
+                            <div>
+                              <div className="flex items-center justify-between pb-2.5 mb-3.5 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                                    Mandatory Attributes (Level 0 & 1)
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 font-medium">
+                                    Required English Attribute Keys & Dutch Values
+                                  </span>
+                                </div>
+                                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                  {bolPreviewData?.mandatory_attributes?.filter(a => Boolean(form.attributes?.[a.id] || a.value)).length || 0} of {bolPreviewData?.mandatory_attributes?.length || 0} Ready
+                                </span>
+                              </div>
+
+                              {bolPreviewData?.mandatory_attributes?.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                                  {bolPreviewData.mandatory_attributes.map((attr) => {
+                                    const currentVal = form.attributes?.[attr.id] || attr.value || "";
+                                    const hasValue = Boolean(String(currentVal).trim());
+                                    const allowed = attr.allowed_values || [];
+
+                                    return (
+                                      <div
+                                        key={attr.id}
+                                        className={`p-3.5 rounded-xl border transition-all ${
+                                          hasValue
+                                            ? "bg-slate-50/60 border-slate-200/90 hover:border-slate-300"
+                                            : "bg-amber-50/50 border-amber-300/80 shadow-2xs"
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[12px] font-bold text-slate-800">
+                                              {attr.id}
+                                            </span>
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                                              attr.level === 0 ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"
+                                            }`}>
+                                              Level {attr.level}
+                                            </span>
+                                          </div>
+                                          {hasValue ? (
+                                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                              Ready
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 animate-pulse">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                              Required
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {allowed.length > 0 && allowed.length <= 15 ? (
+                                          <Select
+                                            value={currentVal || undefined}
+                                            onChange={(val) => handleAttributeChange(attr.id, val)}
+                                            placeholder={`Select ${attr.id}`}
+                                            className="w-full h-8 text-[12px]"
+                                            options={allowed.map((opt) => ({ value: opt, label: opt }))}
+                                            allowClear
+                                          />
+                                        ) : (
+                                          <Input
+                                            value={currentVal}
+                                            onChange={(e) => handleAttributeChange(attr.id, e.target.value)}
+                                            placeholder={`Enter ${attr.id}`}
+                                            className="w-full h-8 text-[12px] rounded-lg border-slate-200"
+                                          />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {Object.entries(form.attributes || {}).map(([k, v]) => {
+                                    const rawK = String(k).trim();
+                                    const rawV = String(v).trim();
+                                    const draftAsin = (draft?.asin || "").toUpperCase();
+                                    if (!rawK || rawK.toUpperCase() === "ASIN") return null;
+                                    if (draftAsin && rawV.toUpperCase().includes(draftAsin)) return null;
+                                    if (["DESCRIPTION", "BESCHRIJVING"].includes(rawK.toUpperCase())) return null;
+
+                                    return (
+                                      <div key={k} className="p-3 bg-slate-50/80 border border-slate-200/90 rounded-xl">
+                                        <span className="text-[11px] font-bold text-slate-600 block mb-1">
+                                          {rawK}
+                                        </span>
+                                        <Input
+                                          value={rawV}
+                                          onChange={(e) => handleAttributeChange(rawK, e.target.value)}
+                                          className="h-8 text-[12px] rounded-lg border-slate-200"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 2. Optional / Product Specifications Section */}
+                            {bolPreviewData?.optional_attributes?.length > 0 && (
+                              <div className="pt-2">
+                                <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+                                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                                    Additional Category Specifications (Optional)
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                  {bolPreviewData.optional_attributes.map((attr) => (
+                                    <div key={attr.id} className="p-2.5 bg-slate-50/50 border border-slate-200/70 rounded-xl">
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase block truncate" title={attr.id}>
+                                        {attr.id}
+                                      </span>
+                                      <span className="text-[12px] font-medium text-slate-700 block truncate mt-0.5" title={String(attr.value)}>
+                                        {String(attr.value)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* 2. Live Bol.com JSON Payload View */
+                          <div className="p-4 bg-slate-950 text-slate-100 font-mono text-xs">
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setPayloadType("content")}
+                                  className={`px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
+                                    payloadType === "content"
+                                      ? "bg-blue-600 text-white shadow-xs"
+                                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                  }`}
+                                >
+                                  POST /retailer/content/products
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPayloadType("offer")}
+                                  className={`px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
+                                    payloadType === "offer"
+                                      ? "bg-blue-600 text-white shadow-xs"
+                                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                  }`}
+                                >
+                                  POST /retailer/offers
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const payloadStr = JSON.stringify(
+                                    payloadType === "content"
+                                      ? liveContentPayload
+                                      : liveOfferPayload,
+                                    null,
+                                    2
+                                  );
+                                  navigator.clipboard.writeText(payloadStr);
+                                  toast.success("Payload copied to clipboard!");
+                                }}
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-700"
+                              >
+                                📋 Copy JSON
+                              </button>
+                            </div>
+
+                            <pre className="p-3.5 bg-slate-900 rounded-xl overflow-x-auto text-[11px] text-emerald-400 max-h-96 thin-scrollbar border border-slate-800/80">
+                              {JSON.stringify(
+                                payloadType === "content"
+                                  ? (liveContentPayload || { status: "Generating content payload..." })
+                                  : (liveOfferPayload || { status: "Generating offer payload..." }),
+                                null,
+                                2
+                              )}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -750,30 +1156,32 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                              <div className={`absolute inset-0 transition-all duration-200 pointer-events-none ${selectedPhotos.includes(i) ? 'bg-transparent' : 'bg-slate-900/20 group-hover:bg-slate-900/10'}`}></div>
                              
                              {isPhotoTranslated(i, src) ? (
-                               <>
-                                 <div className="absolute top-2.5 left-2.5 z-10">
-                                   <span className={`px-2.5 py-0.5 backdrop-blur-md text-white rounded-full text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border ${(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? 'bg-emerald-600/90 border-emerald-400/30' : 'bg-teal-600/90 border-teal-400/30'}`}>
-                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-white">
-                                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                     </svg>
-                                     {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? "Translated" : "Ready (No Text)"}
-                                   </span>
-                                 </div>
-                                 
-                                 <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
-                                   <button
-                                     type="button"
-                                     title="Undo translation & revert to original photo"
-                                     onClick={(e) => handleRevertImage(i, e)}
-                                     className="px-2.5 py-1 bg-slate-900/85 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded-xl text-[10px] font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
-                                   >
-                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
-                                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-                                     </svg>
-                                     Undo Translation
-                                   </button>
-                                 </div>
-                               </>
+                                <>
+                                  <div className="absolute top-2.5 left-2.5 z-10">
+                                    <span className={`px-2.5 py-0.5 backdrop-blur-md text-white rounded-full text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border ${(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? 'bg-emerald-600/90 border-emerald-400/30' : customUploadedUrls.has(src) ? 'bg-blue-600/90 border-blue-400/30' : 'bg-teal-600/90 border-teal-400/30'}`}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-white">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                      </svg>
+                                      {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? "Translated" : customUploadedUrls.has(src) ? "Custom Upload" : "Clean (No Text)"}
+                                    </span>
+                                  </div>
+                                  
+                                  {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) && (
+                                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                                      <button
+                                        type="button"
+                                        title="Undo translation & revert to original photo"
+                                        onClick={(e) => handleRevertImage(i, e)}
+                                        className="px-2.5 py-1 bg-slate-900/85 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded-xl text-[10px] font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                        </svg>
+                                        Undo Translation
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
                              ) : (
                                <div className="absolute top-2.5 left-2.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
                                  <button 

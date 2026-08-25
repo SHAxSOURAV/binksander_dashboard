@@ -660,6 +660,26 @@ const productApis = baseApis.injectEndpoints({
       }),
       invalidatesTags: ["Products", "NeedsReview"],
     }),
+
+    // POST /bol/drafts/{draft_id}/enrich-attributes (AI Mandatory Field Enrichment)
+    enrichDraftAttributes: builder.mutation({
+      query: ({ draftId, bolAccountId }) => ({
+        url: `/bol/drafts/${draftId}/enrich-attributes`,
+        method: "POST",
+        headers: bolAccountId ? { "x-bol-account-id": bolAccountId } : {},
+      }),
+      invalidatesTags: ["Drafts"],
+    }),
+
+    // GET /bol/drafts/{draft_id}/bol-payload-preview (Exact Bol Data Model & Payload Preview)
+    getDraftBolPayloadPreview: builder.query({
+      query: ({ draftId, bolAccountId }) => ({
+        url: `/bol/drafts/${draftId}/bol-payload-preview`,
+        method: "GET",
+        headers: bolAccountId ? { "x-bol-account-id": bolAccountId } : {},
+      }),
+      providesTags: ["Drafts"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -711,6 +731,8 @@ export const {
   useLazyGetBolContentReportQuery,
   useRevalidateProductsContentMutation,
   useRevalidateInventoryItemsMutation,
+  useEnrichDraftAttributesMutation,
+  useGetDraftBolPayloadPreviewQuery,
 } = productApis;
 
 export default productApis;
