@@ -152,7 +152,7 @@ const Products = () => {
     } else if (hasProcessing) {
       setPollingInterval(10000);
     } else {
-      setPollingInterval(0);
+      setPollingInterval(30000);
     }
   }, [data, editingDraftId, connectOpen, filterOpen, bulkPublishOpen, scrapePollCount]);
 

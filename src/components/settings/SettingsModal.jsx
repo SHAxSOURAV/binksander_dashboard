@@ -51,6 +51,7 @@ const SettingsModal = () => {
   const { settingsOpen, setSettingsOpen, settingsTab, setSettingsTab } = useUI();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [bolEditOpen, setBolEditOpen] = useState(false);
+  const [showAdvancedBol, setShowAdvancedBol] = useState(false);
   const [amazonEditOpen, setAmazonEditOpen] = useState(false);
 
   const { data: profile, isLoading: loadingProfile } = useGetProfileQuery(
@@ -199,7 +200,9 @@ const SettingsModal = () => {
         account_name: values.account_name,
         client_id: values.client_id,
         client_secret: values.client_secret,
-        boip_code: values.boip_code,
+        manufacturer_name: values.manufacturer_name,
+        manufacturer_email: values.manufacturer_email,
+        manufacturer_address: values.manufacturer_address,
       }).unwrap();
       toast.success("Bol.com credentials saved");
       setBolEditOpen(false);
@@ -676,11 +679,21 @@ const SettingsModal = () => {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-1">
                                 <p>Client ID: <span className="font-mono text-gray-500">{cred.client_id || "—"}</span></p>
-                                {cred.boip_code && (
-                                  <p className="bg-brand/5 border border-brand/20 text-brand px-2 py-0.5 rounded font-mono text-[11px] font-semibold">
-                                    BOIP: {cred.boip_code}
+                                {cred.economic_operator_id && (
+                                  <p className="bg-purple-50 border border-purple-200 text-purple-700 px-2 py-0.5 rounded font-mono text-[11px] font-semibold">
+                                    Operator: {cred.economic_operator_id.slice(0, 8)}...
+                                  </p>
+                                )}
+                                {cred.manufacturer_email && (
+                                  <p className="bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-mono text-[11px] font-semibold">
+                                    Support: {cred.manufacturer_email}
+                                  </p>
+                                )}
+                                {cred.manufacturer_name && (
+                                  <p className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[11px] font-semibold">
+                                    Mfg: {cred.manufacturer_name}
                                   </p>
                                 )}
                               </div>
@@ -693,7 +706,11 @@ const SettingsModal = () => {
                                   account_id: cred.account_id,
                                   account_name: cred.account_name,
                                   client_id: cred.client_id,
-                                  boip_code: cred.boip_code,
+                                  manufacturer_name: cred.manufacturer_name,
+                                  manufacturer_email: cred.manufacturer_email,
+                                  manufacturer_address: cred.manufacturer_address,
+                                  economic_operator_id: cred.economic_operator_id,
+                                  fulfilment_profile_id: cred.fulfilment_profile_id,
                                 });
                                 setBolEditOpen(true);
                               }}
@@ -720,54 +737,111 @@ const SettingsModal = () => {
                   form={bolForm}
                   layout="vertical"
                   onFinish={onSaveBol}
-                  className="rounded-2xl border border-gray-100 bg-white p-4"
+                  className="rounded-2xl border border-gray-100 bg-white p-4 space-y-1"
                 >
                   <Form.Item name="account_id" hidden>
                     <Input />
                   </Form.Item>
-                  <Form.Item
-                    name="account_name"
-                    label="Account Name"
-                    rules={[{ required: true, message: "Required" }]}
-                    className="mb-3"
-                  >
-                    <Input className="h-10 rounded-lg" placeholder="e.g. Main Account" />
-                  </Form.Item>
-                  <Form.Item
-                    name="client_id"
-                    label="Client ID"
-                    rules={[{ required: true, message: "Required" }]}
-                    className="mb-3"
-                  >
-                    <Input className="h-10 rounded-lg" placeholder="Bol.com Client ID" />
-                  </Form.Item>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Form.Item
+                      name="account_name"
+                      label="Account Name"
+                      rules={[{ required: true, message: "Required" }]}
+                      className="mb-2"
+                    >
+                      <Input className="h-10 rounded-lg" placeholder="e.g. Main Account" />
+                    </Form.Item>
+                    <Form.Item
+                      name="client_id"
+                      label="Client ID"
+                      rules={[{ required: true, message: "Required" }]}
+                      className="mb-2"
+                    >
+                      <Input className="h-10 rounded-lg font-mono text-xs" placeholder="Bol.com Client ID" />
+                    </Form.Item>
+                  </div>
                   <Form.Item
                     name="client_secret"
                     label="Client Secret"
                     rules={[{ required: true, message: "Required" }]}
-                    className="mb-3"
+                    className="mb-2"
                   >
                     <Input.Password
-                      className="h-10 rounded-lg"
+                      className="h-10 rounded-lg font-mono text-xs"
                       placeholder="Bol.com Client Secret"
                     />
                   </Form.Item>
-                  <Form.Item
-                    name="boip_code"
-                    label="BOIP Brand Authorization Code"
-                    tooltip="Benelux Office for Intellectual Property reference code used for Bol.com brand authorization & duplicate checks."
-                    className="mb-3"
-                  >
-                    <Input className="h-10 rounded-lg font-mono" placeholder="e.g. PJS_J23DAPH3" />
-                  </Form.Item>
-                  <div className="flex justify-end gap-2">
+
+                  <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-3 my-2 text-xs text-blue-800 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold">⚡ Auto-Discovered from Bol.com</p>
+                      <p className="text-blue-600 text-[11px] mt-0.5">Economic Operator (EU GPSR), address & support email will be fetched automatically via API upon saving.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedBol(!showAdvancedBol)}
+                      className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 underline whitespace-nowrap ml-3"
+                    >
+                      {showAdvancedBol ? "Hide Overrides" : "+ Custom Overrides"}
+                    </button>
+                  </div>
+
+                  {showAdvancedBol && (
+                    <div className="pt-2 border-t border-gray-100 space-y-1 animate-fadeIn">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Form.Item
+                          name="manufacturer_name"
+                          label="Manufacturer / Company Name"
+                          tooltip="Brand or company name sent to Bol.com for EU GPSR mandatory compliance (e.g. Warmara Trading B.V.)"
+                          className="mb-2"
+                        >
+                          <Input className="h-10 rounded-lg" placeholder="e.g. Warmara Trading B.V." />
+                        </Form.Item>
+                        <Form.Item
+                          name="manufacturer_email"
+                          label="Support Email / Contact URL"
+                          tooltip="Support email address or contact form sent to Bol.com for EU GPSR mandatory Manufacturer Email"
+                          className="mb-2"
+                        >
+                          <Input className="h-10 rounded-lg font-mono text-xs" placeholder="e.g. support@warmara.nl" />
+                        </Form.Item>
+                      </div>
+                      <Form.Item
+                        name="manufacturer_address"
+                        label="Manufacturer Address (EU GPSR)"
+                        tooltip="Official business address sent to Bol.com for EU GPSR mandatory Manufacturer Address"
+                        className="mb-2"
+                      >
+                        <Input className="h-10 rounded-lg text-xs" placeholder="e.g. Keizersgracht 123, 1015 CJ Amsterdam, Netherlands" />
+                      </Form.Item>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Form.Item
+                          name="economic_operator_id"
+                          label="Economic Operator ID (EU GPSR / DSA)"
+                          tooltip="UUID of your registered Economic Operator / Verantwoordelijke persoon in Bol.com"
+                          className="mb-3"
+                        >
+                          <Input className="h-10 rounded-lg font-mono text-xs" placeholder="e.g. 82a254a0-3ecf-4d82-abc3-8ad0355ccc92" />
+                        </Form.Item>
+                        <Form.Item
+                          name="fulfilment_profile_id"
+                          label="Fulfilment Profile ID (Optional)"
+                          tooltip="Bol.com Delivery Promise Profile ID (UUID) if you use predefined shipping profiles"
+                          className="mb-3"
+                        >
+                          <Input className="h-10 rounded-lg font-mono text-xs" placeholder="e.g. 0c6573a2-a80c-48b7-a03e-d5939f1173f1" />
+                        </Form.Item>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                     <button
                       type="button"
                       onClick={() => {
                         setBolEditOpen(false);
                         bolForm.resetFields();
                       }}
-                      className="h-9 px-4 rounded-lg border border-gray-200 text-sm text-gray-600"
+                      className="h-9 px-4 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                     >
                       Cancel
                     </button>

@@ -35,7 +35,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
 
   const [form, setForm] = useState({
     condition: "NEW",
-    delivery_code: "24uurs-15",
+    delivery_code: "1-8d",
     schedule_at: null,
   });
   
