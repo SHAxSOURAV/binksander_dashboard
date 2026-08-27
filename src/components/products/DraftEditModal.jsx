@@ -34,6 +34,98 @@ const calcSellingPrice = (val) => {
   return num;
 };
 
+const sanitizeAntiAmazonAndEmojiText = (text, sourceTitle = "") => {
+  if (!text || typeof text !== "string") return text || "";
+  
+  // Extract dynamic brand from title (e.g. Warmara, Quovo, Lumina)
+  let brand = "";
+  const cleanTitle = (sourceTitle || "").trim();
+  if (cleanTitle) {
+    const words = cleanTitle.split(/\s+/);
+    if (words.length > 0) {
+      brand = words[0].replace(/[®™©:,\(\)\[\]\.\-_/]/g, "").trim();
+    }
+  }
+
+  let cleaned = text;
+
+  // 1. Strip Amazon keywords
+  const amazonPatterns = [
+    /\bamazon(?:\.nl|\.de|\.com|\.co\.uk)?\b/gi,
+    /\basin\b/gi,
+    /\bfulfilled by amazon\b/gi,
+    /\bfba\b/gi,
+    /\bamazon's choice\b/gi,
+    /\bprime\b/gi
+  ];
+  amazonPatterns.forEach(pat => { cleaned = cleaned.replace(pat, " "); });
+
+  // 2. Strip Prohibited seller claims & contact info
+  const prohibitedClaims = [
+    /\b(?:op werkdagen )?voor \d{1,2}[:.]\d{2}(?: uur)? besteld(?:,)? morgen in huis\b/gi,
+    /\bvandaag besteld(?:,)? morgen in huis\b/gi,
+    /\bgratis verzending\b/gi,
+    /\bkostenloze verzending\b/gi,
+    /\b100% tevredenheidsgarantie\b/gi,
+    /\bniet goed(?:,)? geld terug\b/gi,
+    /\blaagste prijs(?:garantie)?\b/gi,
+    /\bhttps?:\/\/\S+/gi,
+    /\bwww\.\S+/gi,
+    /\b[\w\.-]+@[\w\.-]+\.\w+\b/gi,
+    /\b(?:\+31|06|0031)\s*\d{8,}\b/gi
+  ];
+  prohibitedClaims.forEach(pat => { cleaned = cleaned.replace(pat, ""); });
+
+  // 3. Clean Asian brackets into structured bullet headings: 【Title】 -> "\n\n• Title:\n"
+  cleaned = cleaned.replace(/【(.*?)】\s*/g, '\n\n• $1:\n');
+  cleaned = cleaned.replace(/\[(.*?)\]\s*/g, '\n\n• $1:\n');
+  cleaned = cleaned.replace(/「/g, '"').replace(/」/g, '"').replace(/『/g, '"').replace(/』/g, '"');
+  cleaned = cleaned.replace(/《/g, '<').replace(/》/g, '>').replace(/〔/g, '(').replace(/〕/g, ')');
+
+  // 4. Replace competitor/source brands with the actual listing brand (e.g. vancasso -> Warmara / Quovo)
+  if (brand && brand.length >= 2) {
+    const competitorPatterns = [
+      /\bvancasso\s*(?:Reno|Bella|Bonita|Haruka|Navia|Simphonio|Natsuki)?\b/gi,
+      /\bcimetech\b/gi,
+      /\bhomikit\b/gi,
+      /\bteamfar\b/gi,
+      /\bklarstein\b/gi,
+      /\bblitzwolf\b/gi,
+      /\bsongmics\b/gi,
+      /\bvasagle\b/gi,
+      /\bfeandrea\b/gi,
+      /\banker\b/gi
+    ];
+    competitorPatterns.forEach(pat => {
+      cleaned = cleaned.replace(pat, ` ${brand} `);
+    });
+  }
+
+  // 5. Strip Emojis and decorative symbols (Preserve Trademark symbols: ®, ™, ©)
+  cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B06}\u{2934}\u{2935}\u{25AA}-\u{25FE}]/gu, ' ');
+
+  // 6. Strip invisible Unicode variation selectors and zero-width characters
+  cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}\u{200B}-\u{200D}\u{FEFF}\u00a0\u200e\u200f\u202a-\u202e\u2060-\u206f\u00ad]/gu, '');
+
+  // 7. Normalize linebreaks & multiple spaces (preserve paragraph structure)
+  const lines = cleaned.split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim());
+  let formattedText = "";
+  let blankCount = 0;
+  for (const line of lines) {
+    if (!line) {
+      blankCount++;
+      if (blankCount <= 1 && formattedText) {
+        formattedText += "\n\n";
+      }
+    } else {
+      blankCount = 0;
+      formattedText += line + "\n";
+    }
+  }
+
+  return formattedText.trim().slice(0, 5000);
+};
+
 const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
@@ -68,7 +160,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     bol_price: "",
     stock_amount: 10,
     condition: "NEW",
-    delivery_code: "24uurs-23",
+    delivery_code: "1-8d",
     reference: "",
     description: "",
     attributes: {},
@@ -133,8 +225,26 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       delete deliveryPromise.ultimateOrderTime;
     }
 
-    return {
+    const eoId = bolPreviewData?.exact_offer_payload?.economicOperatorId || "82a254a0-3ecf-4d82-abc3-8ad0355ccc92";
+    const profileId = bolPreviewData?.exact_offer_payload?.fulfilment?.profileId;
+
+    const fulfilmentObj = {
+      method: "FBR",
+      schedule: "BOL_DELIVERY_PROMISE"
+    };
+    if (profileId) {
+      fulfilmentObj.profileId = profileId;
+    } else {
+      fulfilmentObj.deliveryPromise = deliveryPromise;
+    }
+
+    const isAmzAsin = /^B0[A-Z0-9]{8}$/i.test((form.reference || "").trim());
+    const cleanRef = (!form.reference || isAmzAsin) ? null : form.reference.trim().slice(0, 20);
+
+    const payload = {
       ean: cleanEanVal,
+      unknownProductTitle: form.title || form.spreadsheet_title || "",
+      economicOperatorId: eoId,
       onHoldByRetailer: false,
       condition: {
         category: (form.condition || "NEW").toUpperCase()
@@ -155,32 +265,20 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         { countryCode: "NL" },
         { countryCode: "BE" }
       ],
-      fulfilment: {
-        method: "FBR",
-        schedule: "BOL_DELIVERY_PROMISE",
-        deliveryPromise
-      }
+      fulfilment: fulfilmentObj
     };
-  }, [form.ean, form.bol_price, form.stock_amount, form.condition, form.delivery_code]);
+
+    if (cleanRef) {
+      payload.reference = cleanRef;
+    }
+
+    return payload;
+  }, [form.ean, form.title, form.spreadsheet_title, form.reference, form.bol_price, form.stock_amount, form.condition, form.delivery_code, bolPreviewData]);
 
   const liveContentPayload = useMemo(() => {
     if (!bolPreviewData?.exact_content_payload) {
       return {
-        language: "nl",
-        chunkId: form.chunk_id || "80009900",
-        attributes: [
-          { id: "EAN", values: [{ value: (form.ean || "").replace(/\D/g, "") }] },
-          { id: "Name", values: [{ value: form.title || "" }] },
-          { id: "Description", values: [{ value: form.description || "" }] },
-          ...Object.entries(form.attributes || {}).map(([k, v]) => ({
-            id: k,
-            values: Array.isArray(v) ? v.map(val => ({ value: String(val) })) : [{ value: String(v) }]
-          }))
-        ],
-        assets: (form.photos || []).map((url, idx) => ({
-          url,
-          labels: [idx === 0 ? "FRONT" : "ADDITIONAL"]
-        }))
+        status: "Loading exact Bol.com Data Model v10 payload..."
       };
     }
 
@@ -195,18 +293,17 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     if (nameAttr) nameAttr.values = [{ value: form.title || "" }];
 
     const descAttr = payload.attributes?.find(a => a.id === "Description");
-    if (descAttr) descAttr.values = [{ value: form.description || "" }];
+    if (descAttr) descAttr.values = [{ value: sanitizeAntiAmazonAndEmojiText(form.description || "", form.title || "") }];
 
-    // Merge in current form attributes
+    // Only update valid Data Model attributes that exist in the payload (excluding top-level form fields)
+    const topLevelKeys = ["description", "beschrijving", "name", "titel", "title", "ean", "brand", "merk"];
     if (form.attributes && typeof form.attributes === "object") {
       Object.entries(form.attributes).forEach(([k, v]) => {
         if (!k || v == null || !String(v).trim()) return;
+        if (topLevelKeys.includes(k.toLowerCase())) return;
         const existing = payload.attributes?.find(a => a.id.toLowerCase() === k.toLowerCase());
-        const formattedValues = Array.isArray(v) ? v.map(val => ({ value: String(val) })) : [{ value: String(v) }];
         if (existing) {
-          existing.values = formattedValues;
-        } else {
-          payload.attributes.push({ id: k, values: formattedValues });
+          existing.values = Array.isArray(v) ? v.map(item => ({ value: String(item) })) : [{ value: String(v) }];
         }
       });
     }
@@ -220,35 +317,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     return payload;
   }, [bolPreviewData, form.chunk_id, form.ean, form.title, form.description, form.attributes, form.photos]);
 
-  const sanitizeAntiAmazonAndEmojiText = (text) => {
-    if (!text || typeof text !== "string") return text || "";
-    
-    // 1. Strip Amazon keywords
-    const amazonPatterns = [
-      /\bamazon(?:\.nl|\.de|\.com|\.co\.uk)?\b/gi,
-      /\basin\b/gi,
-      /\bfulfilled by amazon\b/gi,
-      /\bfba\b/gi,
-      /\bamazon's choice\b/gi,
-      /\bprime\b/gi
-    ];
-    let cleaned = text;
-    amazonPatterns.forEach(pat => { cleaned = cleaned.replace(pat, " "); });
 
-    // 2. Strip Emojis and decorative symbols (Preserve Trademark symbols: ®, ™, ©)
-    cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}\u{2B50}\u{2B06}\u{2934}\u{2935}\u{25AA}-\u{25FE}]/gu, ' ');
-
-    // 3. Strip invisible Unicode variation selectors and zero-width characters (\uFE00-\uFE0F, \u200B-\u200D, \uFEFF)
-    cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}\u{200B}-\u{200D}\u{FEFF}]/gu, '');
-
-    // 4. Strip trailing dashes or punctuation
-    cleaned = cleaned.replace(/[-–—\s]+$/g, '').trim();
-
-    // 5. Normalize multiple spaces into a single space
-    cleaned = cleaned.replace(/\s+/g, ' ');
-
-    return cleaned.trim();
-  };
 
   const handleCustomFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -415,7 +484,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       const rawTitle = draft.spreadsheet_title || draft.title || "";
       const cleanTitle = sanitizeAntiAmazonAndEmojiText(rawTitle);
 
-      const cleanDesc = sanitizeAntiAmazonAndEmojiText(draft.description || "");
+      const cleanDesc = sanitizeAntiAmazonAndEmojiText(draft.description || "", cleanTitle);
 
       const cleanAttrs = {};
       if (draft.attributes && typeof draft.attributes === "object") {
@@ -430,12 +499,35 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
           if (draftAsin && (valUpper === draftAsin || valUpper.includes(draftAsin))) return;
 
           const cleanedK = sanitizeAntiAmazonAndEmojiText(rawK);
-          const cleanedV = sanitizeAntiAmazonAndEmojiText(rawV);
+          let cleanedV = sanitizeAntiAmazonAndEmojiText(rawV);
 
-          if (!cleanedK || !cleanedV) return;
+          // Prevent numeric/count attributes from having stale 'Zichtbaar'
+          const isNumericAttr = /number of|number pieces|aantal|persons|personen|pieces|delen|stuks|power|watt/i.test(cleanedK);
+          if (isNumericAttr && (cleanedV.toLowerCase() === "zichtbaar" || cleanedV.toLowerCase() === "niet van toepassing" || cleanedV.toLowerCase() === "y" || cleanedV.toLowerCase() === "n")) {
+            const mCount = (cleanTitle + " " + cleanDesc).match(/(\d+)\s*(?:delig|delige|stuks|pack|pcs|stk|teilig|piece|pieces|persoon|personen)/i);
+            cleanedV = mCount ? mCount[1] : "1";
+          }
 
           cleanAttrs[cleanedK] = cleanedV;
         });
+      }
+
+      // Enforce Brand strictly as the first word of the sheet title and CE Marking as Zichtbaar
+      const firstWord = (cleanTitle || draft.spreadsheet_title || "").trim().split(/\s+/)[0]?.replace(/[®™©:,\(\)\[\]\.\-_/]/g, "") || "Warmara";
+      cleanAttrs["Brand"] = firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+      cleanAttrs["CE Marking"] = "Zichtbaar";
+
+      // If Number of Pieces is missing in cleanAttrs, extract from title
+      if (!cleanAttrs["Number of Pieces"]) {
+        const mPieces = cleanTitle.match(/(\d+)\s*(?:delig|delige|stuks|pack|pcs|stk|teilig|piece|pieces)/i);
+        if (mPieces) cleanAttrs["Number of Pieces"] = mPieces[1];
+      }
+
+      // If Suitable for Number of Persons is missing in cleanAttrs, extract or infer
+      if (!cleanAttrs["Suitable for Number of Persons"]) {
+        const mPersons = (cleanTitle + " " + cleanDesc).match(/(\d+)\s*(?:persoons|personen|persoon|person|persons)/i);
+        const pCount = parseInt(cleanAttrs["Number of Pieces"] || "1", 10);
+        cleanAttrs["Suitable for Number of Persons"] = mPersons ? mPersons[1] : (pCount >= 16 ? "6" : (pCount >= 8 ? "4" : "1"));
       }
 
       const deliveryCodeDefault = (draft.delivery_code && draft.delivery_code !== "24uurs-23") ? draft.delivery_code : "1-8d";
@@ -447,7 +539,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         stock_amount: draft.stock_amount ?? 10,
         condition: draft.condition || "NEW",
         delivery_code: deliveryCodeDefault,
-        reference: draft.reference || draft.asin || "",
+        reference: (draft.reference && !/^B0[A-Z0-9]{8}$/i.test(draft.reference)) ? draft.reference : "",
         description: cleanDesc,
         attributes: cleanAttrs,
         photos: draft.photos || [],
@@ -785,12 +877,26 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       {/* Product Description */}
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
                             Product Description <span className="text-red-500">*</span>
                           </label>
-                          <span className="text-[11px] text-slate-400 font-medium">
-                            {(form.description || "").length} characters
-                          </span>
+                          <div className="flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cleaned = sanitizeAntiAmazonAndEmojiText(form.description || "", form.title || "");
+                                handleChange("description", cleaned);
+                                toast.success("Description formatted & cleaned for Bol.com!");
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-blue-600 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200/80 rounded-lg transition-all active:scale-95 shadow-2xs cursor-pointer"
+                              title="Strip Asian brackets 【】, remove Amazon terms, replace competitor brands, and format for Bol.com"
+                            >
+                              🪄 Clean for Bol.com
+                            </button>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {(form.description || "").length} characters
+                            </span>
+                          </div>
                         </div>
                         <TextArea
                           value={form.description}
@@ -850,29 +956,6 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                 {"{ }"} Live Bol Payload
                               </button>
                             </div>
-
-                            {/* AI Auto-Fill Button */}
-                            <button
-                              type="button"
-                              onClick={handleEnrichAttributes}
-                              disabled={enrichingAttributes || !draftId}
-                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Automatically fill all mandatory attributes required by Bol.com using Claude / Gemini AI"
-                            >
-                              {enrichingAttributes ? (
-                                <>
-                                  <Spin size="small" className="text-white" />
-                                  <span>Auto-Filling...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                                    <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
-                                  </svg>
-                                  <span>AI Auto-Fill Mandatory</span>
-                                </>
-                              )}
-                            </button>
                           </div>
                         </div>
 

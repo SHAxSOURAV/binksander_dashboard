@@ -189,7 +189,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
         country: "NL",
         stock_amount: 10,
         condition: "NEW",
-        delivery_code: "24uurs-23",
+        delivery_code: "1-8d",
         estimated_price: parsePrice(yourPrice) || parsePrice(view.price),
       }).unwrap();
       const draftId = draftRes?.data?.id;
