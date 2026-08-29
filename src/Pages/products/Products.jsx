@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate, Tooltip } from "antd";
 import { FiSearch, FiPlus, FiLink, FiFilter, FiEye, FiCopy } from "react-icons/fi";
-import { BsGrid, BsListUl } from "react-icons/bs";
+import { BsGrid, BsListUl, BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { FaStar } from "react-icons/fa";
 import { LuRefreshCw, LuShieldCheck } from "react-icons/lu";
 import ProductDetailsModal from "../../components/products/ProductDetailsModal";
@@ -85,7 +85,7 @@ const Products = () => {
     if (q == null) {
       return 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200';
     }
-    return 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/60';
+    return 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-200';
   };
 
   const [columns, setColumns] = useState({
@@ -162,6 +162,10 @@ const Products = () => {
 
   const { data: filtersMeta } = useGetFiltersMetaQuery();
   const { data: connectionData } = useGetConnectionQuery();
+  // /spreadsheet/connected returns { connected_sheets: [...] } — the old code read
+  // connectionData.spreadsheet_url / .spreadsheet_name, which never existed, so the
+  // banner always fell back to a generic "Google Sheet" label.
+  const connectedSheet = connectionData?.connected_sheets?.[0] || null;
   const [resyncStock] = useResyncStockMutation();
   const [resyncingStockAsin, setResyncingStockAsin] = useState(null);
 
@@ -250,10 +254,30 @@ const Products = () => {
     }
   };
 
-  const handleCopy = (e, text) => {
+  const handleCopy = async (e, text) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard!");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(String(text));
+    } catch {
+      // navigator.clipboard is undefined on a non-HTTPS origin (e.g. reaching the
+      // dashboard over a LAN IP), so fall back to a throwaway textarea.
+      const ta = document.createElement("textarea");
+      ta.value = String(text);
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        toast.error("Could not copy");
+        return;
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    toast.success(`Copied ${text}`);
   };
 
   const [generateDraft, { isLoading: isGenerating }] = useCreateDraftFromAmazonMutation();
@@ -306,26 +330,74 @@ const Products = () => {
 
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
-      <div className="bg-white rounded-2xl p-5 card-shadow">
+      <div className="bg-white rounded-lg p-4 card-shadow">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-          <h2 className="text-lg font-semibold text-gray-700">
-            {total} Products
-          </h2>
-          <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            {/* Square spreadsheet-connection status. The dot is the whole status
+                language: green = webhook active, grey = imported but not syncing,
+                dashed tile = nothing connected. */}
+            <Tooltip
+              title={
+                connectedSheet
+                  ? `${connectedSheet.item_count} items imported · ${connectedSheet.is_syncing ? "auto-syncing" : "not syncing"}`
+                  : "No spreadsheet connected"
+              }
+            >
+              {connectedSheet ? (
+                <a
+                  href={connectedSheet.spreadsheet_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="relative w-10 h-10 rounded border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300 flex items-center justify-center text-gray-500 transition-colors shrink-0"
+                >
+                  <BsFileEarmarkSpreadsheet size={16} />
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
+                      connectedSheet.is_syncing ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  />
+                </a>
+              ) : (
+                <button
+                  onClick={() => setConnectOpen(true)}
+                  className="relative w-10 h-10 rounded border border-dashed border-gray-300 hover:bg-gray-50 flex items-center justify-center text-gray-400 transition-colors shrink-0"
+                >
+                  <BsFileEarmarkSpreadsheet size={16} />
+                </button>
+              )}
+            </Tooltip>
+
+            <div className="leading-none">
+              <h2 className="text-[22px] font-semibold text-gray-900 tracking-tight tabular-nums">
+                {total.toLocaleString()}
+                <span className="text-[13px] font-medium text-gray-400 ml-1.5">
+                  Products
+                </span>
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {connectedSheet
+                  ? connectedSheet.is_syncing
+                    ? "Spreadsheet connected & syncing"
+                    : "Spreadsheet connected"
+                  : "No spreadsheet connected"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               prefix={<FiSearch className="text-gray-400 mr-1" />}
               placeholder="Search"
-              className="h-10 rounded-lg w-full sm:w-64"
+              className="h-9 w-full sm:w-56"
             />
 
             <button
               onClick={handleResync}
               disabled={isSyncingSheet}
               title="Sync from spreadsheet"
-              className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50"
+              className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition-colors"
             >
               <LuRefreshCw size={16} className={isSyncingSheet ? "animate-spin" : ""} />
             </button>
@@ -353,7 +425,7 @@ const Products = () => {
             >
               <button
                 title="View columns"
-                className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand"
+                className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
               >
                 <FiEye size={16} />
               </button>
@@ -361,7 +433,7 @@ const Products = () => {
             <button
               onClick={() => setFilterOpen(true)}
               title="Filter products"
-              className={`w-10 h-10 rounded-lg border flex items-center justify-center ${Object.keys(activeFilters).length ? 'border-brand text-brand bg-brand/5' : 'border-gray-200 text-gray-500 hover:text-brand'}`}
+              className={`w-9 h-9 rounded border flex items-center justify-center transition-colors ${Object.keys(activeFilters).length ? 'border-gray-900 text-gray-900 bg-gray-100' : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
             >
               <FiFilter size={16} />
             </button>
@@ -379,31 +451,31 @@ const Products = () => {
                 }
                 setPage(1);
               }}
-              className="w-36 h-10 custom-select"
+              className="w-40 h-9 custom-select"
               options={[
-                { value: 'default', label: 'Default' },
-                { value: 'creation-desc', label: 'Creation: Newest' },
-                { value: 'creation-asc', label: 'Creation: Oldest' },
-                { value: 'price-asc', label: 'Price: Low to High' },
-                { value: 'price-desc', label: 'Price: High to Low' },
-                { value: 'title-asc', label: 'Title: A to Z' },
-                { value: 'title-desc', label: 'Title: Z to A' },
-                { value: 'stock-asc', label: 'Stock: Low to High' },
-                { value: 'stock-desc', label: 'Stock: High to Low' },
+                { value: 'default', label: 'Default order' },
+                { value: 'creation-desc', label: 'Newest first' },
+                { value: 'creation-asc', label: 'Oldest first' },
+                { value: 'price-desc', label: 'Price: high first' },
+                { value: 'price-asc', label: 'Price: low first' },
+                { value: 'stock-desc', label: 'Stock: high first' },
+                { value: 'stock-asc', label: 'Stock: low first' },
+                { value: 'title-asc', label: 'Title: A–Z' },
+                { value: 'title-desc', label: 'Title: Z–A' },
               ]}
             />
 
-            <div className="flex bg-gray-100 rounded-lg p-1">
+            <div className="flex bg-gray-100 rounded p-0.5">
               <button
                 onClick={() => setView("grid")}
-                className={`w-8 h-8 rounded-md flex items-center justify-center ${view === "grid" ? "bg-brand text-white" : "text-gray-400"
+                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${view === "grid" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-700"
                   }`}
               >
                 <BsGrid size={15} />
               </button>
               <button
                 onClick={() => setView("list")}
-                className={`w-8 h-8 rounded-md flex items-center justify-center ${view === "list" ? "bg-brand text-white" : "text-gray-400"
+                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${view === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-700"
                   }`}
               >
                 <BsListUl size={16} />
@@ -412,33 +484,12 @@ const Products = () => {
           </div>
         </div>
 
-        {/* Sync Date Range Filter Bar */}
-        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100">
-          <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Synced:</span>
-          {DATE_FILTER_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => {
-                setSyncDateRange(prev => (prev === opt.key ? "" : opt.key));
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded-lg transition-all duration-200 text-xs ${
-                syncDateRange === opt.key
-                  ? "bg-brand text-white shadow-sm font-semibold"
-                  : "bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
         {/* Active Filter Chips (if any filter is selected) */}
         {Object.keys(activeFilters).length > 0 && (
-          <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 text-sm font-medium border-b border-gray-100 flex-wrap">
-            <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Active Filters:</span>
+          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-2 text-sm font-medium border-b border-gray-100 flex-wrap">
+            <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider mr-1">Filters</span>
             {activeFilters.filter_brand && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
                 Brand: {activeFilters.filter_brand}
                 <button
                   onClick={() => {
@@ -455,7 +506,7 @@ const Products = () => {
               </span>
             )}
             {activeFilters.filter_category && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
                 Category: {activeFilters.filter_category}
                 <button
                   onClick={() => {
@@ -477,39 +528,19 @@ const Products = () => {
                 setFilters({});
                 setPage(1);
               }}
-              className="text-xs text-red-600 hover:underline font-semibold ml-2"
+              className="text-[11px] text-gray-500 hover:text-gray-900 font-medium ml-1"
             >
               Clear All Filters
             </button>
           </div>
         )}
 
-        {/* Connect inventory banner */}
-        {total > 0 ? (
-          <div className="w-full flex items-center bg-[#f9f9f9] border border-gray-200/50 rounded-xl px-5 py-4 mb-5 text-left">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-                <FiLink size={18} />
-              </div>
-              <div>
-                <p className="text-[15px] font-semibold text-gray-800 mb-0.5">
-                  Connected Spreadsheet
-                </p>
-                <a
-                  href={connectionData?.spreadsheet_url || products[0]?.spreadsheetUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-gray-600 hover:underline"
-                >
-                  {connectionData?.spreadsheet_name || "Google Sheet"}
-                </a>
-              </div>
-            </div>
-          </div>
-        ) : (
+        {/* Connect prompt — only when nothing is imported yet. The connected state now
+            lives in the square status tile beside the product count. */}
+        {total === 0 && (
           <button
             onClick={() => setConnectOpen(true)}
-            className="w-full flex items-center justify-between bg-[#f5f5f5] rounded-xl px-5 py-3 mb-5 text-left border border-dashed border-gray-400/40 hover:bg-[#eeeeee] transition-colors"
+            className="w-full flex items-center justify-between rounded px-4 py-3 mb-4 text-left border border-dashed border-gray-300 hover:bg-gray-50 transition-colors"
           >
             <div>
               <p className="text-sm font-semibold text-gray-900">
@@ -519,7 +550,7 @@ const Products = () => {
                 Import products from a Google Spreadsheet link
               </p>
             </div>
-            <span className="button-color text-xs px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm font-medium">
+            <span className="button-color text-[11px] px-3 py-1.5 rounded flex items-center gap-1.5 font-medium">
               <FiPlus size={14} /> Connect
             </span>
           </button>
@@ -528,7 +559,7 @@ const Products = () => {
         {/* States */}
         {loading ? (
           view === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
               {Array.from({ length: limit > 20 ? 20 : limit }).map((_, i) => (
                 <ProductCardSkeleton key={i} />
               ))}
@@ -552,25 +583,25 @@ const Products = () => {
           </div>
         ) : view === "grid" ? (
           /* Grid view */
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
             {products.map((p) => (
               <div
                 key={p.id}
                 onClick={() => setSelected(p)}
-                className="cursor-pointer text-left bg-white rounded-2xl border border-gray-100/80 p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:border-brand/20 transition-all duration-300 flex flex-col group h-full"
+                className="cursor-pointer text-left bg-white rounded-md border border-gray-200 p-2.5 hover:border-gray-400 transition-colors flex flex-col group h-full"
               >
-                <div className="bg-[#f8f9fc] rounded-xl h-40 flex items-center justify-center mb-4 overflow-hidden relative group-hover:bg-[#f0f2f8] transition-colors w-full">
-                  <div className="absolute top-2.5 left-2.5 z-20" onClick={(e) => e.stopPropagation()}>
+                <div className="bg-gray-50 rounded h-24 flex items-center justify-center mb-2 overflow-hidden relative w-full">
+                  <div className="absolute top-1.5 left-1.5 z-20" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={selectedProducts.some(item => item.id === p.id)}
                       onChange={() => toggleSelection(p)}
                       disabled={p.scrapePending || !p.title}
-                      className="scale-125 bg-white/80 rounded-md backdrop-blur-sm"
+                      className="bg-white/90 rounded backdrop-blur-sm"
                     />
                   </div>
-                  <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 items-end z-10">
+                  <div className="absolute top-1.5 right-1.5 flex flex-col gap-1 items-end z-10">
                     {columns.status && p.status && (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md ${p.status?.toLowerCase() === 'online' ? 'bg-green-100/90 text-green-700' : 'bg-white/90 text-gray-700 border border-gray-100'}`}>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold backdrop-blur-md border ${p.status?.toLowerCase() === 'online' ? 'bg-white/90 text-gray-700 border-gray-200' : 'bg-white/90 text-gray-500 border-gray-200'}`}>
                         {p.status}
                       </span>
                     )}
@@ -580,7 +611,7 @@ const Products = () => {
                         disabled={resyncingStockAsin === p.asin}
                         onClick={(e) => handleResyncStock(p, e)}
                         title="Click to resync live stock quantity from Amazon"
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md border flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-75 ${getStockBadgeColor(p)}`}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-semibold backdrop-blur-md border flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-75 ${getStockBadgeColor(p)}`}
                       >
                         <span>
                           {resyncingStockAsin === p.asin ? (
@@ -595,7 +626,7 @@ const Products = () => {
                         </span>
                         <LuRefreshCw
                           size={11}
-                          className={`${resyncingStockAsin === p.asin ? "animate-spin text-brand" : "opacity-80"}`}
+                          className={`${resyncingStockAsin === p.asin ? "animate-spin" : "opacity-60"}`}
                         />
                       </button>
                     )}
@@ -604,7 +635,7 @@ const Products = () => {
                     <img
                       src={p.image}
                       alt={p.title}
-                      className="h-[85%] w-[85%] object-contain rounded-lg group-hover:scale-105 transition-transform duration-500"
+                      className="h-[86%] w-[86%] object-contain"
                     />
                   ) : p.scrapePending ? (
                     <span className="text-gray-400 text-xs font-medium animate-pulse">
@@ -617,37 +648,37 @@ const Products = () => {
 
                 <div className="flex flex-col flex-grow w-full">
                   {columns.title && (
-                    <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-snug mb-1.5">
+                    <p className="text-[12px] font-medium text-gray-900 line-clamp-2 leading-snug mb-1 min-h-[2.2em]">
                       {p.title || p.spreadsheetTitle || p.asin || "Loading product..."}
                     </p>
                   )}
                   {columns.sheetTitle && p.spreadsheetTitle && (
-                    <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 mb-1.5" title={p.spreadsheetTitle}>
+                    <p className="text-[11px] text-gray-500 line-clamp-2 leading-snug mb-1" title={p.spreadsheetTitle}>
                       📝 {p.spreadsheetTitle}
                     </p>
                   )}
                   {columns.category && (
-                    <div className="mb-2">
-                      <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium truncate max-w-full">
+                    <div className="mb-1.5">
+                      <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-500 rounded text-[9px] font-medium truncate max-w-full">
                         {p.category}
                       </span>
                     </div>
                   )}
                   {columns.brand && p.product_brand && (
-                    <div className="mb-2">
-                      <span className="inline-flex px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold truncate max-w-full">
+                    <div className="mb-1.5">
+                      <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-600 rounded text-[9px] font-semibold uppercase tracking-wide truncate max-w-full">
                         {p.product_brand}
                       </span>
                     </div>
                   )}
                   {p.scrapePending ? (
-                    <p className="text-[11px] text-brand mb-2 font-medium flex items-center gap-1.5 animate-pulse">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand"></span> Auto-loading details…
+                    <p className="text-[10px] text-gray-400 mb-1.5 font-medium flex items-center gap-1.5 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span> Auto-loading details…
                     </p>
                   ) : (
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1.5">
                       {columns.price && (
-                        <p className="text-base font-bold text-brand">
+                        <p className="text-[15px] font-semibold text-gray-900 tabular-nums">
                           {p.price ? `€${p.price}` : "—"}
                         </p>
                       )}
@@ -657,15 +688,15 @@ const Products = () => {
                             type="button"
                             disabled={revalidatingItemId === (p.itemId || p.id)}
                             onClick={(e) => handleSingleRevalidate(e, p)}
-                            className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 transition-all flex items-center justify-center disabled:opacity-50"
+                            className="p-1 rounded border border-gray-200 text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors flex items-center justify-center disabled:opacity-50"
                           >
-                            <LuShieldCheck size={13} className={revalidatingItemId === (p.itemId || p.id) ? "animate-spin text-blue-600" : ""} />
+                            <LuShieldCheck size={13} className={revalidatingItemId === (p.itemId || p.id) ? "animate-spin" : ""} />
                           </button>
                         </Tooltip>
                         {columns.publishAction && (
                           p.publishStatus === 'published' ? (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 cursor-default">
                                 Published
                               </span>
                               <OfferActionMenu offer={{ offerId: p.bol_offer_id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
@@ -677,7 +708,7 @@ const Products = () => {
                                   e.stopPropagation();
                                   setSelected(p);
                                 }}
-                                className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1"
                               >
                                 Failed
                               </button>
@@ -692,9 +723,9 @@ const Products = () => {
                                   setSelected(p); // Open details modal to start publish flow
                                 }
                               }}
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${p.publishStatus === 'processing'
-                                  ? 'bg-amber-50 text-amber-600 border border-amber-200 cursor-not-allowed'
-                                  : 'bg-brand/10 text-brand hover:bg-brand hover:text-white'
+                              className={`text-[9px] font-semibold px-2 py-0.5 rounded border transition-colors ${p.publishStatus === 'processing'
+                                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-300 text-gray-800 hover:bg-gray-900 hover:text-white hover:border-gray-900'
                                 }`}
                             >
                               {p.publishStatus === 'processing' ? 'Processing...' : 'Publish'}
@@ -705,10 +736,10 @@ const Products = () => {
                     </div>
                   )}
 
-                  <div className="flex flex-col gap-1.5 mt-auto">
+                  <div className="flex flex-col gap-1.5">
                     {columns.ratings && (
-                      <div className="flex items-center gap-1.5 text-[11px] mt-2">
-                        <span className="flex items-center gap-1 bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold">
+                      <div className="flex items-center gap-1.5 text-[10px] mt-1">
+                        <span className="flex items-center gap-1 text-gray-500 font-medium">
                           <FaStar size={10} className="mb-[1px]" />
                           {p.rating || "—"}
                         </span>
@@ -720,27 +751,37 @@ const Products = () => {
                   </div>
                 </div>
                 {(columns.asin || columns.ean || columns.sheetSource) && (
-                  <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-gray-100 w-full">
+                  <div className="flex flex-wrap items-center gap-1 mt-auto pt-2 border-t border-gray-100 w-full">
                     {columns.asin && (
-                      <div className="flex items-center gap-1 bg-gray-50/80 px-1.5 py-1 rounded group/copy border border-gray-100">
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopy(e, p.asin)}
+                        title="Copy ASIN"
+                        className="flex items-center gap-1 px-1 py-0.5 rounded group/copy border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
                         <span className="text-[9px] font-semibold text-gray-400 tracking-wide">ASIN</span>
                         <span className="text-[10px] text-gray-700 font-mono truncate max-w-[75px]">{p.asin}</span>
-                        <button onClick={(e) => handleCopy(e, p.asin)} className="text-gray-400 hover:text-brand opacity-0 group-hover/copy:opacity-100 transition-opacity"><FiCopy size={10} /></button>
-                      </div>
+                        <FiCopy size={10} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                      </button>
                     )}
                     {columns.ean && p.ean && (
-                      <div className="flex items-center gap-1 bg-gray-50/80 px-1.5 py-1 rounded group/copy border border-gray-100">
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopy(e, p.ean)}
+                        title="Copy EAN"
+                        className="flex items-center gap-1 px-1 py-0.5 rounded group/copy border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
                         <span className="text-[9px] font-semibold text-gray-400 tracking-wide">EAN</span>
                         <span className="text-[10px] text-gray-700 font-mono truncate max-w-[85px]">{p.ean}</span>
-                        <button onClick={(e) => handleCopy(e, p.ean)} className="text-gray-400 hover:text-brand opacity-0 group-hover/copy:opacity-100 transition-opacity"><FiCopy size={10} /></button>
-                      </div>
+                        <FiCopy size={10} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                      </button>
                     )}
                     {columns.sheetSource && p.spreadsheetUrl && (
                       <a
                         href={`${p.spreadsheetUrl}${p.sheetId ? `&gid=${p.sheetId}` : ''}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-brand/80 hover:text-brand hover:bg-brand/5 px-2 py-0.5 rounded transition-colors flex items-center gap-1 text-[10px] whitespace-nowrap font-medium ml-auto"
+                        className="text-gray-400 hover:text-gray-900 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 text-[9px] whitespace-nowrap font-medium ml-auto"
                         onClick={e => e.stopPropagation()}
                       >
                         <FiLink size={10} />
@@ -806,13 +847,40 @@ const Products = () => {
                         }}
                       />
                     </td>
-                    {columns.asin && <td className="py-3 px-2 font-mono text-gray-600">
-                      <div className="flex items-center gap-1.5 group/copy">
-                        <span>{p.asin}</span>
-                        <button onClick={(e) => handleCopy(e, p.asin)} className="text-gray-400 hover:text-brand opacity-0 group-hover/copy:opacity-100 transition-opacity"><FiCopy size={12} /></button>
-                      </div>
-                    </td>}
-                    {columns.ean && <td className="py-3 px-2 text-gray-600">{p.ean || "—"}</td>}
+                    {columns.asin && (
+                      <td className="py-3 px-2 text-gray-600">
+                        {p.asin ? (
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopy(e, p.asin)}
+                            title="Copy ASIN"
+                            className="group/copy inline-flex items-center gap-1.5 font-mono hover:text-gray-900 transition-colors"
+                          >
+                            {p.asin}
+                            <FiCopy size={11} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    )}
+                    {columns.ean && (
+                      <td className="py-3 px-2 text-gray-600">
+                        {p.ean ? (
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopy(e, p.ean)}
+                            title="Copy EAN"
+                            className="group/copy inline-flex items-center gap-1.5 font-mono hover:text-gray-900 transition-colors"
+                          >
+                            {p.ean}
+                            <FiCopy size={11} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    )}
                     {columns.title && <td className="py-3 px-2 max-w-[200px] truncate">{p.title}</td>}
                     {columns.sheetTitle && <td className="py-3 px-2 text-gray-600">{p.spreadsheetTitle || "—"}</td>}
                     {columns.category && <td className="py-3 px-2 text-gray-600">{p.category || "—"}</td>}
@@ -964,6 +1032,29 @@ const Products = () => {
         width={320}
       >
         <div className="flex flex-col gap-6">
+          {/* Moved out of the page header. Applies immediately rather than on "Apply",
+              because it drives its own query param, not the `filters` object. */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-2 block">Synced</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {DATE_FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => {
+                    setSyncDateRange((prev) => (prev === opt.key ? "" : opt.key));
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1.5 rounded border text-[11px] font-medium transition-colors ${
+                    syncDateRange === opt.key
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-2 block">Status</label>
             <Select

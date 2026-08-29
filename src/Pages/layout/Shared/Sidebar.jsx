@@ -2,8 +2,10 @@ import { NavLink } from "react-router-dom";
 import {
   MdOutlineDashboard,
   MdOutlineInventory2,
+  MdOutlineLocalOffer,
   MdOutlineShoppingCart,
   MdOutlineRateReview,
+  MdOutlineAssignmentReturn,
 } from "react-icons/md";
 import { TbBrandAmazon } from "react-icons/tb";
 import { LuTruck } from "react-icons/lu";
@@ -13,7 +15,7 @@ const menuItems = [
   { name: "Overview", link: "/", icon: <MdOutlineDashboard size={20} />, end: true },
   { name: "Inventory Catalog", link: "/products", icon: <MdOutlineInventory2 size={20} /> },
   { name: "Needs Review", link: "/needs-review", icon: <MdOutlineRateReview size={20} /> },
-  { name: "Bol.com Offers", link: "/bol-listings", icon: <MdOutlineInventory2 size={20} /> },
+  { name: "Bol.com Offers", link: "/bol-listings", icon: <MdOutlineLocalOffer size={20} /> },
   { name: "Sales & Orders", link: "/orders", icon: <MdOutlineShoppingCart size={20} /> },
   {
     name: "Amazon Sourcing",
@@ -38,7 +40,7 @@ const menuItems = [
   {
     name: "Amazon Return Dashboard",
     link: "https://amazon-dashbaord.vercel.app",
-    icon: <TbBrandAmazon size={20} />,
+    icon: <MdOutlineAssignmentReturn size={20} />,
     isExternal: true,
   }
 ];

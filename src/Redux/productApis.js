@@ -30,13 +30,20 @@ const mapItem = (it, i) => ({
   category: it["Product category"] || it["Product notes"] || it.country || "—",
   subcategory: "",
   amazonPrice: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
+  // The backend computes this with the selected Bol account's own multiplier, so the
+  // catalog price tracks whatever that account is set to. The local formula is only a
+  // fallback for responses predating that field — it assumes the default 2.5x.
   price: (() => {
+    if (typeof it.selling_price === "number" && it.selling_price > 0) {
+      return it.selling_price;
+    }
     const rawP = parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]);
     if (!rawP || rawP <= 0) return 39.95;
     const baseP = rawP * 2.5;
     const roundedP = Math.floor(baseP / 10) * 10 + 9.95;
     return Math.max(39.95, Math.round(roundedP * 100) / 100);
   })(),
+  priceMultiplier: it.price_multiplier ?? 2.5,
   purchasePrice: parsePrice(it["Purchase price"]),
   deliveryTime: it["DELIVERY TIME"] || "",
   rating: parseFloat(it.product_star_rating) || 0,
@@ -401,9 +408,13 @@ const productApis = baseApis.injectEndpoints({
       },
     }),
 
-    // GET /spreadsheet/low-stock-alerts
+    // GET /spreadsheet/low-stock-alerts?page=&limit=&search=
     getLowStockAlerts: builder.query({
-      query: () => `/spreadsheet/low-stock-alerts`,
+      query: ({ page = 1, limit = 100, search = "" } = {}) => {
+        const params = new URLSearchParams({ page, limit });
+        if (search) params.set("search", search);
+        return `/spreadsheet/low-stock-alerts?${params.toString()}`;
+      },
       providesTags: ["StockAlerts"],
     }),
 

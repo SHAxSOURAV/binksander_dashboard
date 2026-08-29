@@ -1,24 +1,39 @@
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
-// Build a compact page list: 1 … (c-1) c (c+1) … last
-const buildPages = (current, total) => {
-  const pages = [];
-  const push = (v) => pages.push(v);
+/**
+ * Compact page list with a fixed-width window around the current page:
+ *   page 24 of 52  →  1 … 22 23 [24] 25 26 … 52
+ *
+ * `siblings` is how many pages sit either side of the current one. The window is
+ * clamped so it keeps the same width at both ends of the range (page 2 of 52 still
+ * shows five numbered pages), which stops the control from resizing as you page
+ * through and keeps every table on the dashboard the same width.
+ */
+const buildPages = (current, total, siblings = 2) => {
+  const windowSize = siblings * 2 + 1;
+  // 2 ends + 2 ellipses + the window; below this everything fits without gaps.
+  const maxVisible = windowSize + 4;
 
-  if (total <= 7) {
-    for (let i = 1; i <= total; i++) push(i);
-    return pages;
+  if (total <= maxVisible) {
+    return Array.from({ length: total }, (_, i) => i + 1);
   }
 
-  push(1);
-  const start = Math.max(2, current - 1);
-  const end = Math.min(total - 1, current + 1);
+  let start = Math.max(2, current - siblings);
+  let end = Math.min(total - 1, current + siblings);
 
-  if (start > 2) push("…l");
-  for (let i = start; i <= end; i++) push(i);
-  if (end < total - 1) push("…r");
+  // Keep the window a constant width when the current page is near either end.
+  const deficit = windowSize - (end - start + 1);
+  if (deficit > 0) {
+    if (start === 2) end = Math.min(total - 1, end + deficit);
+    else if (end === total - 1) start = Math.max(2, start - deficit);
+  }
 
-  push(total);
+  const pages = [1];
+  if (start > 2) pages.push("gap-left");
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (end < total - 1) pages.push("gap-right");
+  pages.push(total);
+
   return pages;
 };
 
@@ -33,66 +48,87 @@ const Pagination = ({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50, 100],
   totalItems,
+  siblings = 2,
+  className = "",
 }) => {
   const activeCurrent = Number(current ?? currentPage ?? 1);
   const activeTotal = Math.max(1, Number(total ?? totalPages ?? 1));
   const handleChange = onChange ?? onPageChange;
 
-  const pages = buildPages(activeCurrent, activeTotal);
+  const go = (page) => {
+    const next = Math.min(activeTotal, Math.max(1, page));
+    if (next !== activeCurrent) handleChange?.(next);
+  };
+
+  if (activeTotal <= 1 && !onPageSizeChange) return null;
+
+  const pages = buildPages(activeCurrent, activeTotal, siblings);
+
+  const navBtn =
+    "w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 " +
+    "hover:text-gray-900 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-30 " +
+    "disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:cursor-not-allowed transition-colors";
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 w-full">
-      {/* Page-size selector + range summary */}
-      {onPageSizeChange && (
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>Per page:</span>
-          <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="h-8 rounded-lg border border-gray-200 px-2.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-brand cursor-pointer font-medium shadow-xs"
-          >
-            {pageSizeOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-          {typeof totalItems === "number" && totalItems > 0 && pageSize && (
-            <span className="ml-1 text-gray-400 font-normal">
-              · {(activeCurrent - 1) * pageSize + 1}–
-              {Math.min(activeCurrent * pageSize, totalItems)} of {totalItems} items
+    <div
+      className={`flex flex-col sm:flex-row items-center justify-between gap-3 w-full ${className}`}
+    >
+      {/* Page size + range summary */}
+      {(onPageSizeChange || typeof totalItems === "number") && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 order-2 sm:order-1">
+          {onPageSizeChange && (
+            <>
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                className="h-8 rounded-md border border-gray-200 px-2 text-xs text-gray-700 bg-white focus:outline-none focus:border-gray-400 cursor-pointer font-medium"
+              >
+                {pageSizeOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          {typeof totalItems === "number" && totalItems > 0 && pageSize > 0 && (
+            <span className="text-gray-400">
+              {(activeCurrent - 1) * pageSize + 1}–
+              {Math.min(activeCurrent * pageSize, totalItems)} of{" "}
+              {totalItems.toLocaleString()}
             </span>
           )}
         </div>
       )}
 
-      {/* Page Numbers and Navigation */}
-      <div className="flex items-center justify-center gap-1.5 flex-wrap ml-auto">
+      <div className="flex items-center gap-1 order-1 sm:order-2 sm:ml-auto">
         <button
-          onClick={() => activeCurrent > 1 && handleChange?.(activeCurrent - 1)}
-          className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+          onClick={() => go(activeCurrent - 1)}
+          className={navBtn}
           disabled={activeCurrent <= 1}
-          title="Previous Page"
+          aria-label="Previous page"
         >
-          <FiChevronLeft size={16} />
+          <FiChevronLeft size={15} />
         </button>
 
-        {pages.map((p, idx) =>
+        {pages.map((p) =>
           typeof p === "string" ? (
             <span
-              key={`${p}-${idx}`}
-              className="w-8 h-8 flex items-center justify-center text-gray-400 text-xs"
+              key={p}
+              className="w-7 h-8 flex items-end justify-center text-gray-300 text-xs pb-1.5 select-none"
             >
-              …
+              ···
             </span>
           ) : (
             <button
               key={p}
-              onClick={() => handleChange?.(p)}
-              className={`min-w-8 h-8 px-2.5 rounded-lg text-xs font-semibold transition-all ${
+              onClick={() => go(p)}
+              aria-current={p === activeCurrent ? "page" : undefined}
+              className={`min-w-8 h-8 px-2 rounded-md text-xs font-semibold transition-colors ${
                 p === activeCurrent
-                  ? "bg-brand text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-transparent"
+                  ? "bg-gray-900 text-white"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
               {p}
@@ -101,12 +137,12 @@ const Pagination = ({
         )}
 
         <button
-          onClick={() => activeCurrent < activeTotal && handleChange?.(activeCurrent + 1)}
-          className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+          onClick={() => go(activeCurrent + 1)}
+          className={navBtn}
           disabled={activeCurrent >= activeTotal}
-          title="Next Page"
+          aria-label="Next page"
         >
-          <FiChevronRight size={16} />
+          <FiChevronRight size={15} />
         </button>
       </div>
     </div>

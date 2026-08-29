@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Modal, Input, Form, Button, Spin, Checkbox } from "antd";
+import { Modal, Input, InputNumber, Form, Button, Spin, Checkbox } from "antd";
 import toast from "react-hot-toast";
 import {
   FiUser,
@@ -8,13 +8,10 @@ import {
   FiLock,
   FiArrowRight,
   FiArrowLeft,
-  FiCheckCircle,
-  FiXCircle,
   FiCamera,
   FiEdit2,
 } from "react-icons/fi";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
-import { TbBrandAmazon } from "react-icons/tb";
 import { LuUnplug } from "react-icons/lu";
 import { useUI } from "../../Provider/ContextProvider";
 import { getUser, setUser } from "../../utils/session";
@@ -28,9 +25,8 @@ import {
   useUnlinkSheetMutation,
   useGetBolCredentialsQuery,
   useSaveBolCredentialsMutation,
+  useUpdateBolMultiplierMutation,
   useDeleteBolCredentialsMutation,
-  useGetAmazonCredentialsQuery,
-  useSaveAmazonCredentialsMutation,
   useImportPublicSheetMutation,
   useImportOAuthSheetMutation,
   useLazyGetListUserSheetsQuery,
@@ -38,7 +34,6 @@ import {
   useExchangeGoogleCodeMutation,
 } from "../../Redux/connectionApis";
 import { useResyncInventoryMutation } from "../../Redux/productApis";
-import { useRegisterBolWebhookMutation } from "../../Redux/fulfillmentApis";
 import { useGoogleLogin } from "@react-oauth/google";
 
 const tabs = [
@@ -47,12 +42,89 @@ const tabs = [
   { key: "privacy", label: "Privacy & Security", icon: <FiShield size={16} /> },
 ];
 
+/**
+ * The account's price multiplier, editable in place.
+ *
+ * Reads as a plain "×2.5" chip until clicked, then becomes a small number input. Saves
+ * through the dedicated PATCH endpoint so no client secret is needed — the full edit form
+ * requires one, which makes it the wrong tool for nudging a markup.
+ */
+const MultiplierQuickEdit = ({ accountId, value }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [updateMultiplier, { isLoading }] = useUpdateBolMultiplierMutation();
+
+  // Follow the server value whenever it changes underneath us (refetch, other edit).
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commit = async () => {
+    const next = Number(draft);
+    if (!Number.isFinite(next) || next <= 0 || next > 100) {
+      toast.error("Multiplier must be between 0.1 and 100");
+      setDraft(value);
+      setEditing(false);
+      return;
+    }
+    if (next === Number(value)) {
+      setEditing(false);
+      return;
+    }
+    try {
+      await updateMultiplier({ accountId, price_multiplier: next }).unwrap();
+      toast.success(`Multiplier set to ×${next}`);
+      setEditing(false);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to update multiplier");
+      setDraft(value);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        title="Click to change the price multiplier"
+        className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors tabular-nums"
+      >
+        ×{value}
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <InputNumber
+        autoFocus
+        size="small"
+        value={draft}
+        onChange={setDraft}
+        onPressEnter={commit}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        disabled={isLoading}
+        step={0.1}
+        min={0.1}
+        max={100}
+        controls={false}
+        prefix="×"
+        className="w-[70px]"
+      />
+    </span>
+  );
+};
+
 const SettingsModal = () => {
   const { settingsOpen, setSettingsOpen, settingsTab, setSettingsTab } = useUI();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [bolEditOpen, setBolEditOpen] = useState(false);
   const [showAdvancedBol, setShowAdvancedBol] = useState(false);
-  const [amazonEditOpen, setAmazonEditOpen] = useState(false);
 
   const { data: profile, isLoading: loadingProfile } = useGetProfileQuery(
     undefined,
@@ -63,9 +135,6 @@ const SettingsModal = () => {
   const { data: bolCreds = [] } = useGetBolCredentialsQuery(undefined, {
     skip: !settingsOpen,
   });
-  const { data: amazonCreds } = useGetAmazonCredentialsQuery(undefined, {
-    skip: !settingsOpen,
-  });
 
   const [unlinkSheet, { isLoading: unlinking }] = useUnlinkSheetMutation();
   const [resyncInventory, { isLoading: resyncing }] = useResyncInventoryMutation();
@@ -73,16 +142,11 @@ const SettingsModal = () => {
     useSaveBolCredentialsMutation();
   const [deleteBolCredentials, { isLoading: deletingCreds }] =
     useDeleteBolCredentialsMutation();
-  const [saveAmazonCredentials, { isLoading: savingAmazon }] =
-    useSaveAmazonCredentialsMutation();
-  const [registerWebhook, { isLoading: registering }] =
-    useRegisterBolWebhookMutation();
   const [changePassword, { isLoading: changingPw }] = useChangePasswordMutation();
   const [updateProfile, { isLoading: savingProfile }] =
     useUpdateProfileMutation();
 
   const [bolForm] = Form.useForm();
-  const [amazonForm] = Form.useForm();
 
   // New states for Spreadsheet connection
   const [publicLinkModalOpen, setPublicLinkModalOpen] = useState(false);
@@ -118,7 +182,6 @@ const SettingsModal = () => {
     if (!settingsOpen) {
       setShowChangePassword(false);
       setBolEditOpen(false);
-      setAmazonEditOpen(false);
       setEditingName(false);
     }
   }, [settingsOpen]);
@@ -203,6 +266,13 @@ const SettingsModal = () => {
         manufacturer_name: values.manufacturer_name,
         manufacturer_email: values.manufacturer_email,
         manufacturer_address: values.manufacturer_address,
+        // These three were collected by the form but never submitted, so the advanced
+        // overrides silently reverted to whatever Bol auto-discovery returned.
+        economic_operator_id: values.economic_operator_id,
+        fulfilment_profile_id: values.fulfilment_profile_id,
+        price_multiplier: values.price_multiplier
+          ? Number(values.price_multiplier)
+          : undefined,
       }).unwrap();
       toast.success("Bol.com credentials saved");
       setBolEditOpen(false);
@@ -228,26 +298,6 @@ const SettingsModal = () => {
         }
       },
     });
-  };
-
-  const onSaveAmazon = async (values) => {
-    try {
-      await saveAmazonCredentials(values).unwrap();
-      toast.success("amazon.nl credentials saved");
-      amazonForm.resetFields();
-      setAmazonEditOpen(false);
-    } catch (err) {
-      toast.error(err?.data?.detail || "Failed to save credentials");
-    }
-  };
-
-  const onRegisterWebhook = async () => {
-    try {
-      const res = await registerWebhook().unwrap();
-      toast.success(res?.message || "Bol order webhook registered");
-    } catch (err) {
-      toast.error(err?.data?.detail || "Failed to register webhook");
-    }
   };
 
   const onChangePassword = async (values) => {
@@ -339,16 +389,16 @@ const SettingsModal = () => {
       footer={null}
       centered
       width={800}
-      title={<span className="text-xl font-bold text-gray-800 tracking-tight">Settings</span>}
+      title={<span className="text-base font-semibold text-gray-900">Settings</span>}
       className="settings-modal-premium"
       styles={{
-        content: { padding: '24px 32px', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)' },
-        header: { marginBottom: '16px' }
+        content: { padding: '20px 24px', borderRadius: '8px', boxShadow: '0 16px 40px -12px rgba(0, 0, 0, 0.18)' },
+        header: { marginBottom: '12px' }
       }}
     >
-      <div className="flex flex-col sm:flex-row gap-2 sm:gap-8 font-poppins mt-2 min-h-[400px]">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 font-poppins mt-1 min-h-[420px]">
         {/* Tabs */}
-        <div className="sm:w-56 flex sm:flex-col gap-2 flex-wrap mb-4 sm:mb-0">
+        <div className="sm:w-44 flex sm:flex-col gap-0.5 flex-wrap mb-3 sm:mb-0">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -356,13 +406,13 @@ const SettingsModal = () => {
                 setSettingsTab(t.key);
                 setShowChangePassword(false);
               }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+              className={`flex items-center gap-2.5 px-3 py-2 rounded text-[13px] font-medium transition-colors text-left ${
                 settingsTab === t.key
-                  ? "bg-gradient-to-r from-brand/10 to-brand/5 text-brand shadow-sm border border-brand/20"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700 border border-transparent"
+                  ? "bg-gray-100 text-gray-900"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
               }`}
             >
-              <span className={`${settingsTab === t.key ? 'text-brand' : 'text-gray-400'}`}>
+              <span className={settingsTab === t.key ? "text-gray-700" : "text-gray-400"}>
                 {t.icon}
               </span>
               {t.label}
@@ -371,12 +421,12 @@ const SettingsModal = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 sm:border-l sm:border-gray-100 sm:pl-8">
+        <div className="flex-1 min-w-0 sm:border-l sm:border-gray-100 sm:pl-6">
           {/* Account */}
           {settingsTab === "account" && (
             <div className="animate-fade-in">
-              <h3 className="text-lg font-bold text-gray-800">Your Account</h3>
-              <p className="text-sm text-gray-500 mb-6">
+              <h3 className="text-sm font-semibold text-gray-900">Your Account</h3>
+              <p className="text-xs text-gray-500 mb-5">
                 Manage your personal information and preferences.
               </p>
               {loadingProfile && !account.email ? (
@@ -396,7 +446,7 @@ const SettingsModal = () => {
                         onClick={() => avatarInputRef.current?.click()}
                         disabled={savingProfile}
                         title="Change photo"
-                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full button-color flex items-center justify-center shadow disabled:opacity-60"
+                        className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full button-color flex items-center justify-center disabled:opacity-60"
                       >
                         <FiCamera size={13} />
                       </button>
@@ -419,9 +469,9 @@ const SettingsModal = () => {
                   </div>
 
                   {/* Full name */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-100 rounded-2xl px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 rounded px-4 py-3">
                     <div className="flex-1 min-w-0 mb-3 sm:mb-0">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Full Name</p>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Full Name</p>
                       {editingName ? (
                         <div className="flex items-center gap-2">
                           <Input
@@ -453,8 +503,8 @@ const SettingsModal = () => {
                       )}
                     </div>
                     {!editingName && (
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] font-bold text-brand bg-brand/10 px-3 py-1.5 rounded-full capitalize">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded capitalize">
                           {account.role || "seller"}
                         </span>
                         <button
@@ -463,21 +513,21 @@ const SettingsModal = () => {
                             setEditingName(true);
                           }}
                           title="Edit name"
-                          className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors"
+                          className="w-7 h-7 flex items-center justify-center rounded text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
                         >
-                          <FiEdit2 size={14} />
+                          <FiEdit2 size={13} />
                         </button>
                       </div>
                     )}
                   </div>
-                  
-                  <div className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-5 py-4 shadow-sm hover:shadow-md transition-shadow">
+
+                  <div className="flex items-center justify-between bg-white border border-gray-200 rounded px-4 py-3">
                     <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Email</p>
-                      <p className="text-base font-medium text-gray-800">{account.email || "—"}</p>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Email</p>
+                      <p className="text-sm font-medium text-gray-800">{account.email || "—"}</p>
                     </div>
-                    <span className="bg-gray-50 text-gray-400 w-10 h-10 rounded-full flex items-center justify-center shadow-inner">
-                      <FiLock size={16} />
+                    <span className="text-gray-300">
+                      <FiLock size={15} />
                     </span>
                   </div>
                 </div>
@@ -488,56 +538,51 @@ const SettingsModal = () => {
           {/* Connection */}
           {settingsTab === "connection" && (
             <div className="animate-fade-in">
-              <h3 className="text-lg font-bold text-gray-800">Integrations</h3>
-              <p className="text-sm text-gray-500 mb-6">
+              <h3 className="text-sm font-semibold text-gray-900">Integrations</h3>
+              <p className="text-xs text-gray-500 mb-5">
                 Manage your inventory sources and Bol.com connection.
               </p>
 
               {/* Inventory sheets */}
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-bold text-gray-700">
-                  Inventory Source
-                </p>
-              </div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                Inventory Source
+              </p>
 
               {loadingSheets ? (
                 <Spin />
               ) : sheets.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-5">
+                <div className="rounded border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-4">
                   No spreadsheet connected. Please add one below.
                 </div>
               ) : (
-                <div className="space-y-3 mb-5">
+                <div className="space-y-2 mb-4">
                   {sheets.map((s) => (
                     <div
                       key={s.spreadsheet_url}
-                      className="rounded-2xl border border-gray-100 bg-white p-4"
+                      className="rounded border border-gray-200 bg-white p-3"
                     >
                       <div className="flex items-start gap-3">
-                        <span
-                          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: "#16A34A14", color: "#16A34A" }}
-                        >
-                          <BsFileEarmarkSpreadsheet size={18} />
+                        <span className="w-9 h-9 rounded bg-gray-100 text-gray-500 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                          <BsFileEarmarkSpreadsheet size={15} />
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-gray-800 truncate">
+                            <p className="text-[13px] font-semibold text-gray-900 truncate">
                               Inventory ({s.item_count} items)
                             </p>
                             {s.is_syncing ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
-                                <FiCheckCircle size={11} /> Connected & Syncing
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-500 flex-shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Syncing
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
-                                <FiXCircle size={11} /> Disconnected
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 flex-shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" /> Disconnected
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 bg-[#f7f8fc] rounded-lg px-3 py-1.5 mt-2">
-                            <FiLink2 size={12} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-xs text-gray-500 truncate">
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <FiLink2 size={11} className="text-gray-300 flex-shrink-0" />
+                            <span className="text-[11px] text-gray-400 truncate">
                               {s.spreadsheet_url}
                             </span>
                           </div>
@@ -562,7 +607,7 @@ const SettingsModal = () => {
                                 });
                               }}
                               disabled={unlinking}
-                              className="flex items-center justify-center gap-1.5 text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                              className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded flex-shrink-0 disabled:opacity-50 transition-colors"
                             >
                               <LuUnplug size={13} /> Disconnect
                             </button>
@@ -586,7 +631,7 @@ const SettingsModal = () => {
                                   });
                                 }}
                                 disabled={unlinking}
-                                className="flex items-center justify-center text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                                className="flex items-center justify-center text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded flex-shrink-0 disabled:opacity-50 transition-colors"
                               >
                                 Delete
                               </button>
@@ -600,7 +645,7 @@ const SettingsModal = () => {
                                   }
                                 }}
                                 disabled={resyncing}
-                                className="flex items-center justify-center text-xs font-medium text-brand border border-brand/30 hover:bg-[#f0f0fd] px-3 py-2 rounded-lg flex-shrink-0 disabled:opacity-50"
+                                className="flex items-center justify-center text-[11px] font-medium text-gray-900 border border-gray-300 hover:bg-gray-50 px-2.5 py-1.5 rounded flex-shrink-0 disabled:opacity-50 transition-colors"
                               >
                                 Connect
                               </button>
@@ -614,92 +659,83 @@ const SettingsModal = () => {
               )}
 
               {/* Add Spreadsheet Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 mb-8">
+              <div className="flex flex-col sm:flex-row gap-2 mb-6">
                 <button
                   onClick={() => loginWithGoogle()}
-                  className="flex-1 bg-white text-gray-700 border border-gray-200 text-sm font-semibold py-3 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm flex items-center justify-center gap-2"
+                  className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"
                 >
-                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
+                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
                   Connect with Google
                 </button>
                 <button
                   onClick={() => setPublicLinkModalOpen(true)}
-                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-sm font-medium py-3 rounded-xl hover:bg-gray-50 transition-all shadow-sm flex items-center justify-center"
+                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-xs font-medium py-2.5 rounded hover:bg-gray-50 transition-colors flex items-center justify-center"
                 >
                   Add Public Link
                 </button>
               </div>
 
               {/* Bol.com credentials */}
-              <div className="flex items-center justify-between mb-3 pt-4 border-t border-gray-100">
-                <p className="text-sm font-bold text-gray-700">
+              <div className="flex items-center justify-between mb-2 pt-4 border-t border-gray-100">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Bol.com API Accounts
                 </p>
                 {!bolEditOpen && (
                   <button
                     onClick={() => {
                       bolForm.resetFields();
+                      bolForm.setFieldsValue({ price_multiplier: 2.5 });
                       setBolEditOpen(true);
                     }}
-                    className="text-sm font-semibold text-brand bg-brand/10 hover:bg-brand/20 px-3 py-1.5 rounded-lg transition-colors"
+                    className="text-[11px] font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors"
                   >
-                    + Add Account
+                    Add account
                   </button>
                 )}
               </div>
-              
-              <div className="space-y-3 mb-4">
+
+              <div className="space-y-2 mb-4">
                   {bolCreds.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-400 bg-gray-50/50">
+                    <div className="rounded border border-dashed border-gray-200 px-4 py-6 text-center text-xs text-gray-400">
                       No Bol accounts connected.
                     </div>
                   ) : (
                     bolCreds.map((cred) => (
-                      <div key={cred.account_id} className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-all group">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div className="flex items-center gap-4">
-                            <span
-                              className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bol-logo text-sm font-bold shadow-inner"
-                              style={{ backgroundColor: "#1B17E010", color: "#1B17E0" }}
-                            >
-                              bol.
-                            </span>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="text-base font-bold text-gray-800 truncate">
-                                  {cred.account_name}
-                                </p>
-                                {cred.is_secret_set ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                    <FiCheckCircle size={10} /> Active
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                    <FiXCircle size={10} /> Incomplete
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-1">
-                                <p>Client ID: <span className="font-mono text-gray-500">{cred.client_id || "—"}</span></p>
-                                {cred.economic_operator_id && (
-                                  <p className="bg-purple-50 border border-purple-200 text-purple-700 px-2 py-0.5 rounded font-mono text-[11px] font-semibold">
-                                    Operator: {cred.economic_operator_id.slice(0, 8)}...
-                                  </p>
-                                )}
-                                {cred.manufacturer_email && (
-                                  <p className="bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-mono text-[11px] font-semibold">
-                                    Support: {cred.manufacturer_email}
-                                  </p>
-                                )}
-                                {cred.manufacturer_name && (
-                                  <p className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[11px] font-semibold">
-                                    Mfg: {cred.manufacturer_name}
-                                  </p>
-                                )}
-                              </div>
+                      <div key={cred.account_id} className="rounded border border-gray-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-[13px] font-semibold text-gray-900 truncate">
+                                {cred.account_name}
+                              </p>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 flex-shrink-0">
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    cred.is_secret_set ? "bg-green-500" : "bg-amber-400"
+                                  }`}
+                                />
+                                {cred.is_secret_set ? "Active" : "Incomplete"}
+                              </span>
                             </div>
+
+                            <p className="text-[11px] text-gray-400 font-mono truncate mt-0.5">
+                              {cred.client_id || "—"}
+                            </p>
+
+                            {(cred.manufacturer_name || cred.manufacturer_email) && (
+                              <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                                {[cred.manufacturer_name, cred.manufacturer_email]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <MultiplierQuickEdit
+                              accountId={cred.account_id}
+                              value={cred.price_multiplier ?? 2.5}
+                            />
                             <button
                               onClick={() => {
                                 bolForm.setFieldsValue({
@@ -711,17 +747,18 @@ const SettingsModal = () => {
                                   manufacturer_address: cred.manufacturer_address,
                                   economic_operator_id: cred.economic_operator_id,
                                   fulfilment_profile_id: cred.fulfilment_profile_id,
+                                  price_multiplier: cred.price_multiplier ?? 2.5,
                                 });
                                 setBolEditOpen(true);
                               }}
-                              className="text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-lg transition-colors"
+                              className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors"
                             >
-                              Update
+                              Edit
                             </button>
                             <button
                               onClick={() => handleDeleteBol(cred.account_id)}
                               disabled={deletingCreds}
-                              className="text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 px-4 py-2 rounded-lg transition-colors"
+                              className="text-[11px] font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1 rounded transition-colors disabled:opacity-50"
                             >
                               Delete
                             </button>
@@ -737,7 +774,7 @@ const SettingsModal = () => {
                   form={bolForm}
                   layout="vertical"
                   onFinish={onSaveBol}
-                  className="rounded-2xl border border-gray-100 bg-white p-4 space-y-1"
+                  className="rounded border border-gray-200 bg-white p-4 space-y-1"
                 >
                   <Form.Item name="account_id" hidden>
                     <Input />
@@ -749,7 +786,7 @@ const SettingsModal = () => {
                       rules={[{ required: true, message: "Required" }]}
                       className="mb-2"
                     >
-                      <Input className="h-10 rounded-lg" placeholder="e.g. Main Account" />
+                      <Input className="h-9" placeholder="e.g. Main Account" />
                     </Form.Item>
                     <Form.Item
                       name="client_id"
@@ -757,7 +794,7 @@ const SettingsModal = () => {
                       rules={[{ required: true, message: "Required" }]}
                       className="mb-2"
                     >
-                      <Input className="h-10 rounded-lg font-mono text-xs" placeholder="Bol.com Client ID" />
+                      <Input className="h-9 font-mono text-xs" placeholder="Bol.com Client ID" />
                     </Form.Item>
                   </div>
                   <Form.Item
@@ -767,22 +804,59 @@ const SettingsModal = () => {
                     className="mb-2"
                   >
                     <Input.Password
-                      className="h-10 rounded-lg font-mono text-xs"
+                      className="h-9 font-mono text-xs"
                       placeholder="Bol.com Client Secret"
                     />
                   </Form.Item>
 
-                  <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-3 my-2 text-xs text-blue-800 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">⚡ Auto-Discovered from Bol.com</p>
-                      <p className="text-blue-600 text-[11px] mt-0.5">Economic Operator (EU GPSR), address & support email will be fetched automatically via API upon saving.</p>
-                    </div>
+                  <Form.Item
+                    name="price_multiplier"
+                    label="Price Multiplier"
+                    tooltip="Markup applied to the Amazon purchase price for listings on this account. Each Bol account keeps its own value."
+                    rules={[
+                      {
+                        type: "number",
+                        min: 0.1,
+                        max: 100,
+                        message: "Must be between 0.1 and 100",
+                      },
+                    ]}
+                    className="mb-2"
+                  >
+                    <InputNumber
+                      className="h-9 w-full"
+                      step={0.1}
+                      min={0.1}
+                      max={100}
+                      precision={2}
+                      addonBefore="×"
+                      placeholder="2.5"
+                    />
+                  </Form.Item>
+                  <Form.Item shouldUpdate noStyle>
+                    {({ getFieldValue }) => {
+                      const m = Number(getFieldValue("price_multiplier")) || 2.5;
+                      // Mirrors calculate_selling_price() on the backend so the seller can
+                      // see what a multiplier actually produces before saving it.
+                      const preview = (amazon) =>
+                        Math.max(39.95, Math.floor((amazon * m) / 10) * 10 + 9.95).toFixed(2);
+                      return (
+                        <p className="text-[11px] text-gray-400 -mt-1 mb-3">
+                          Selling price = Amazon price × {m}, rounded down to the nearest ×9.95,
+                          never below €39.95. e.g. €19.99 → €{preview(19.99)} · €49.00 → €
+                          {preview(49)}
+                        </p>
+                      );
+                    }}
+                  </Form.Item>
+
+                  <div className="flex justify-end my-2">
                     <button
                       type="button"
                       onClick={() => setShowAdvancedBol(!showAdvancedBol)}
-                      className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 underline whitespace-nowrap ml-3"
+                      className="text-[11px] font-semibold text-gray-500 hover:text-gray-800 transition-colors"
                     >
-                      {showAdvancedBol ? "Hide Overrides" : "+ Custom Overrides"}
+                      {showAdvancedBol ? "Hide advanced fields" : "+ Advanced fields"}
                     </button>
                   </div>
 
@@ -795,7 +869,7 @@ const SettingsModal = () => {
                           tooltip="Brand or company name sent to Bol.com for EU GPSR mandatory compliance (e.g. Warmara Trading B.V.)"
                           className="mb-2"
                         >
-                          <Input className="h-10 rounded-lg" placeholder="e.g. Warmara Trading B.V." />
+                          <Input className="h-9" placeholder="e.g. Warmara Trading B.V." />
                         </Form.Item>
                         <Form.Item
                           name="manufacturer_email"
@@ -803,7 +877,7 @@ const SettingsModal = () => {
                           tooltip="Support email address or contact form sent to Bol.com for EU GPSR mandatory Manufacturer Email"
                           className="mb-2"
                         >
-                          <Input className="h-10 rounded-lg font-mono text-xs" placeholder="e.g. support@warmara.nl" />
+                          <Input className="h-9 font-mono text-xs" placeholder="e.g. support@warmara.nl" />
                         </Form.Item>
                       </div>
                       <Form.Item
@@ -812,7 +886,7 @@ const SettingsModal = () => {
                         tooltip="Official business address sent to Bol.com for EU GPSR mandatory Manufacturer Address"
                         className="mb-2"
                       >
-                        <Input className="h-10 rounded-lg text-xs" placeholder="e.g. Keizersgracht 123, 1015 CJ Amsterdam, Netherlands" />
+                        <Input className="h-9 text-xs" placeholder="e.g. Keizersgracht 123, 1015 CJ Amsterdam, Netherlands" />
                       </Form.Item>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <Form.Item
@@ -821,7 +895,7 @@ const SettingsModal = () => {
                           tooltip="UUID of your registered Economic Operator / Verantwoordelijke persoon in Bol.com"
                           className="mb-3"
                         >
-                          <Input className="h-10 rounded-lg font-mono text-xs" placeholder="e.g. 82a254a0-3ecf-4d82-abc3-8ad0355ccc92" />
+                          <Input className="h-9 font-mono text-xs" placeholder="e.g. 82a254a0-3ecf-4d82-abc3-8ad0355ccc92" />
                         </Form.Item>
                         <Form.Item
                           name="fulfilment_profile_id"
@@ -829,7 +903,7 @@ const SettingsModal = () => {
                           tooltip="Bol.com Delivery Promise Profile ID (UUID) if you use predefined shipping profiles"
                           className="mb-3"
                         >
-                          <Input className="h-10 rounded-lg font-mono text-xs" placeholder="e.g. 0c6573a2-a80c-48b7-a03e-d5939f1173f1" />
+                          <Input className="h-9 font-mono text-xs" placeholder="e.g. 0c6573a2-a80c-48b7-a03e-d5939f1173f1" />
                         </Form.Item>
                       </div>
                     </div>
@@ -841,14 +915,14 @@ const SettingsModal = () => {
                         setBolEditOpen(false);
                         bolForm.resetFields();
                       }}
-                      className="h-9 px-4 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="h-8 px-3 rounded border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={savingCreds}
-                      className="h-9 px-5 rounded-lg button-color text-sm font-semibold disabled:opacity-60"
+                      className="h-8 px-4 rounded button-color text-xs font-semibold disabled:opacity-60"
                     >
                       {savingCreds ? "Saving..." : "Save"}
                     </button>
@@ -856,131 +930,17 @@ const SettingsModal = () => {
                 </Form>
               )}
 
-              {/* Amazon.nl fulfillment account */}
-              <div className="pt-8 pb-2">
-                <p className="text-sm font-bold text-gray-700">
-                  Amazon Fulfillment <span className="text-xs font-normal text-gray-400 ml-1">(Dropshipping)</span>
-                </p>
-              </div>
-              
-              {!amazonEditOpen ? (
-                <div className="rounded-2xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <span
-                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-inner"
-                        style={{ backgroundColor: "#FF990010", color: "#FF9900" }}
-                      >
-                        <TbBrandAmazon size={24} />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-base font-bold text-gray-800 truncate">
-                            Buying Account
-                          </p>
-                        {amazonCreds?.is_secret_set ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                            <FiCheckCircle size={11} /> Connected
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                            <FiXCircle size={11} /> Not Set
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        Email:{" "}
-                        <span className="text-gray-600">
-                          {amazonCreds?.email || "—"}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setAmazonEditOpen(true)}
-                    className="text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-4 py-2 rounded-lg transition-colors flex-shrink-0"
-                    >
-                      {amazonCreds?.is_secret_set ? "Update" : "Set up"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <Form
-                  form={amazonForm}
-                  layout="vertical"
-                  onFinish={onSaveAmazon}
-                  className="rounded-2xl border border-gray-100 bg-white p-4"
-                >
-                  <Form.Item
-                    name="email"
-                    label="amazon.nl Email"
-                    rules={[{ required: true, message: "Required" }]}
-                    className="mb-3"
-                  >
-                    <Input className="h-10 rounded-lg" placeholder="you@email.com" />
-                  </Form.Item>
-                  <Form.Item
-                    name="password"
-                    label="Password"
-                    rules={[{ required: true, message: "Required" }]}
-                    className="mb-3"
-                  >
-                    <Input.Password className="h-10 rounded-lg" placeholder="••••••••" />
-                  </Form.Item>
-                  <Form.Item
-                    name="totp_secret"
-                    label="TOTP Secret (optional, for 2FA)"
-                    className="mb-3"
-                  >
-                    <Input className="h-10 rounded-lg" placeholder="Base32 secret" />
-                  </Form.Item>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAmazonEditOpen(false)}
-                      className="h-9 px-4 rounded-lg border border-gray-200 text-sm text-gray-600"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={savingAmazon}
-                      className="h-9 px-5 rounded-lg button-color text-sm font-semibold disabled:opacity-60"
-                    >
-                      {savingAmazon ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </Form>
-              )}
-
-              {/* Register Bol order webhook */}
-              <div className="mt-8 pt-6 border-t border-gray-100">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-800">Bol.com Order Webhook</h4>
-                    <p className="text-xs text-gray-500 mt-1 max-w-sm">Registers your backend to receive instant real-time order notifications directly from Bol.com.</p>
-                  </div>
-                  <button
-                    onClick={onRegisterWebhook}
-                    disabled={registering}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-brand hover:border-brand/30 shadow-sm text-sm font-semibold rounded-xl px-5 py-2.5 transition-all disabled:opacity-60 whitespace-nowrap"
-                  >
-                    <FiLink2 size={16} />
-                    {registering ? "Registering..." : "Sync Webhook"}
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 
           {/* Privacy & Security */}
           {settingsTab === "privacy" && !showChangePassword && (
             <div>
-              <h3 className="text-base font-bold">Privacy &amp; Security</h3>
-              <p className="text-xs text-gray-400 mb-5">Manage your security</p>
+              <h3 className="text-sm font-semibold text-gray-900">Privacy &amp; Security</h3>
+              <p className="text-xs text-gray-500 mb-5">Manage your security</p>
               <button
                 onClick={() => setShowChangePassword(true)}
-                className="w-full flex items-center justify-between bg-[#f7f8fc] rounded-xl px-4 py-4 text-sm font-medium hover:bg-gray-100"
+                className="w-full flex items-center justify-between border border-gray-200 rounded px-4 py-3 text-[13px] font-medium text-gray-800 hover:bg-gray-50 transition-colors"
               >
                 Change Password <FiArrowRight />
               </button>
@@ -1084,7 +1044,7 @@ const SettingsModal = () => {
         {fetchingUserSheets ? (
           <div className="space-y-3 animate-pulse py-2">
             {[1, 2, 3].map(i => (
-              <div key={i} className="w-full p-4 border border-gray-100 rounded-xl bg-gray-50 flex items-center gap-3">
+              <div key={i} className="w-full p-3 border border-gray-200 rounded bg-gray-50 flex items-center gap-3">
                 <div className="w-5 h-5 rounded bg-gray-200"></div>
                 <div className="h-4 bg-gray-200 rounded w-1/2"></div>
               </div>
@@ -1122,7 +1082,7 @@ const SettingsModal = () => {
         {fetchingTabs ? (
           <div className="space-y-3 animate-pulse py-2">
             {[1, 2, 3].map(i => (
-              <div key={i} className="w-full p-4 border border-gray-100 rounded-xl bg-gray-50 flex items-center justify-between">
+              <div key={i} className="w-full p-3 border border-gray-200 rounded bg-gray-50 flex items-center justify-between">
                 <div className="h-4 bg-gray-200 rounded w-1/3"></div>
                 <div className="w-4 h-4 rounded bg-gray-200"></div>
               </div>

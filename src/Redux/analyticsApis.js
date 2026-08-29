@@ -30,6 +30,13 @@ const analyticsApis = baseApis.injectEndpoints({
       providesTags: ["Analytics"],
     }),
 
+    // GET /analytics/product-lookup?q= → unified view of one EAN/ASIN across
+    // catalog, needs-review, live Bol offer and orders.
+    getProductLookup: builder.query({
+      query: (q) => `/analytics/product-lookup?q=${encodeURIComponent(q)}`,
+      providesTags: ["Analytics"],
+    }),
+
     // GET /analytics/orders?page=&limit=
     getBolOrders: builder.query({
       query: ({ page = 1, limit = 50 } = {}) =>
@@ -62,6 +69,7 @@ export const {
   useGetKpisQuery,
   useGetPerformanceQuery,
   useGetSalesAnalysisQuery,
+  useLazyGetProductLookupQuery,
   useGetBolOrdersQuery,
   useSyncNowMutation,
   useShipBolOrderMutation,
