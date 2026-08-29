@@ -31,7 +31,20 @@ const connectionApis = baseApis.injectEndpoints({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: ["Connection", "BolOffers", "Analytics"],
+      // "Products" matters because the account's price multiplier feeds the catalog's
+      // selling price — saving a new multiplier has to refetch those rows.
+      invalidatesTags: ["Connection", "BolOffers", "Analytics", "Products", "Drafts"],
+    }),
+
+    // PATCH /users/bol-credentials/{account_id}/multiplier
+    // Quick markup change from the account list — no client secret required.
+    updateBolMultiplier: builder.mutation({
+      query: ({ accountId, price_multiplier }) => ({
+        url: `/users/bol-credentials/${accountId}/multiplier`,
+        method: "PATCH",
+        body: { price_multiplier },
+      }),
+      invalidatesTags: ["Connection", "Products", "Drafts"],
     }),
 
     // DELETE /users/bol-credentials/{account_id}
@@ -108,6 +121,7 @@ export const {
   useUnlinkSheetMutation,
   useGetBolCredentialsQuery,
   useSaveBolCredentialsMutation,
+  useUpdateBolMultiplierMutation,
   useDeleteBolCredentialsMutation,
   useGetAmazonCredentialsQuery,
   useSaveAmazonCredentialsMutation,

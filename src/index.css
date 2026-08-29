@@ -83,13 +83,13 @@ body {
 /* Antd overrides */
 .ant-popover-inner {
   padding: 0 !important;
-  border-radius: 16px !important;
+  border-radius: 8px !important;
   font-family: 'Poppins';
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08) !important;
 }
 
 .ant-modal-content {
-  border-radius: 18px !important;
+  border-radius: 10px !important;
   font-family: 'Poppins';
 }
 

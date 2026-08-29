@@ -19,6 +19,7 @@ import BolListing from "../Pages/bolListing/BolListing";
 import AmazonAffiliateAccounts from "../Pages/amazonAffiliateAccounts/AmazonAffiliateAccounts";
 import AmazonLookup from "../Pages/amazonLookup/AmazonLookup";
 import NeedsReview from "../Pages/needsReview/NeedsReview";
+import LowStockAlerts from "../Pages/lowStock/LowStockAlerts";
 
 const router = createBrowserRouter([
   {
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
       { path: "/amazon-affiliates", element: <AmazonAffiliateAccounts /> },
       { path: "/amazon-lookup", element: <AmazonLookup /> },
       { path: "/needs-review", element: <NeedsReview /> },
+      { path: "/low-stock", element: <LowStockAlerts /> },
     ],
   },
   { path: "/login", element: <Login /> },

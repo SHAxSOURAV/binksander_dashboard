@@ -18,7 +18,9 @@ createRoot(document.getElementById("root")).render(
         token: {
           colorPrimary: "#14149C",
           fontFamily: "Poppins, sans-serif",
-          borderRadius: 10,
+          // Matches the tightened Tailwind radius scale so Ant Design controls
+          // (Select, Input, Tag, Table) sit flush with our own cards.
+          borderRadius: 6,
         },
       }}
     >
