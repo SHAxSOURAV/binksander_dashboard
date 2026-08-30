@@ -27,6 +27,11 @@ const Dashboard = () => {
       if (event.data === "SPREADSHEET_UPDATED") {
         // Trigger silent re-fetch of the product table
         dispatch(baseApis.util.invalidateTags(["Products"]));
+      } else if (event.data === "BOL_OFFERS_UPDATED") {
+        // Emitted by the scheduled Bol offer sync, and only when the offer set
+        // actually changed — so the Offers page refreshes itself the same way the
+        // spreadsheet-backed pages do.
+        dispatch(baseApis.util.invalidateTags(["BolOffers"]));
       }
     };
 
@@ -39,7 +44,7 @@ const Dashboard = () => {
     <UIProvider>
       <div className="flex h-screen overflow-hidden bg-[#f7f7f8] font-poppins">
         {/* Sidebar — desktop */}
-        <aside className="hidden lg:block w-[260px] flex-shrink-0 border-r border-gray-100">
+        <aside className="hidden lg:block w-[216px] flex-shrink-0 border-r border-gray-100">
           <Sidebar />
         </aside>
 
@@ -50,7 +55,7 @@ const Dashboard = () => {
               className="absolute inset-0 bg-black/40"
               onClick={() => setMobileOpen(false)}
             />
-            <aside className="absolute left-0 top-0 h-full w-[260px] bg-white shadow-xl">
+            <aside className="absolute left-0 top-0 h-full w-[216px] bg-white shadow-xl">
               <Sidebar onNavigate={() => setMobileOpen(false)} />
             </aside>
           </div>

@@ -147,15 +147,17 @@ const Orders = () => {
       )}
 
       {rows.length > 0 && (
-        <Pagination 
-          current={page} 
-          total={totalPages} 
-          onChange={setPage} 
-          pageSize={limit}
-          onPageSizeChange={setLimit}
-          totalItems={total}
-          pageSizeOptions={[24, 50, 100, 200]}
-        />
+        <div className="mt-5 pt-4 border-t border-gray-100">
+          <Pagination
+            current={page}
+            total={totalPages}
+            onChange={setPage}
+            pageSize={limit}
+            onPageSizeChange={setLimit}
+            totalItems={total}
+            pageSizeOptions={[24, 50, 100, 200]}
+          />
+        </div>
       )}
 
       {/* Order detail */}

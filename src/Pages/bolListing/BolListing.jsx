@@ -1,23 +1,30 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   useGetBolOffersQuery, 
   useSyncBolOffersMutation,
+  useGetBolProductImagesBatchQuery,
+  useGetBolOfferInsightsBatchQuery,
   useBulkDeleteBolOffersMutation,
   useBulkUpdateBolOfferStockMutation,
   useBulkUpdateBolOfferStatusMutation,
   useRevalidateProductsContentMutation
 } from "../../Redux/productApis";
-import { Empty, Spin, Tag, Input, Drawer, Select, Button, Slider, Rate, Popover, Checkbox, Modal, InputNumber, Radio } from "antd";
+import { Empty, Spin, Tag, Input, Drawer, Select, Button, Slider, Rate, Popover, Checkbox, Modal, InputNumber, Radio, Tooltip } from "antd";
 import { LuRefreshCw, LuUnplug, LuBoxes, LuTrash2, LuCheck, LuPause, LuSparkles } from "react-icons/lu";
 import { FiSearch, FiFilter, FiEye, FiLink, FiCopy, FiAlertCircle, FiX } from "react-icons/fi";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import toast from "react-hot-toast";
 import Pagination from "../../components/shared/Pagination";
 import BolProductImage from "./BolProductImage";
+import OfferInsights from "./components/OfferInsights";
 import OfferDetailsModal from "./components/OfferDetailsModal";
 import OfferActionMenu from "./components/OfferActionMenu";
 import { useUI } from "../../Provider/ContextProvider";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
+
+// Columns that exist in state but are never offered in the toggle: the row actions
+// are always on, and For Sale / Not For Sale already shows as a badge on every card.
+const HIDDEN_OFFER_COLUMNS = ["action", "status"];
 
 const BolListing = () => {
   const [view, setView] = useState("grid");
@@ -50,7 +57,7 @@ const BolListing = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const [columns, setColumns] = useState({
-    ean: true, title: true, condition: true, price: true, stock: true, status: false, action: true
+    ean: true, title: true, condition: false, price: true, stock: true, status: false, action: true
   });
 
   const { data: bolCreds = [], isLoading: credsLoading } = useGetBolCredentialsQuery();
@@ -125,10 +132,36 @@ const BolListing = () => {
     }
   };
 
-  const offers = data?.data || [];
+  // Memoised so the batch-request args below keep a stable identity between renders.
+  const offers = useMemo(() => data?.data || [], [data]);
   const brands = data?.brands || [];
   const totalItems = data?.total_items || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+
+  // Resolve every card's image and Bol metrics in two requests rather than two per
+  // card. Args are memoised so RTK Query doesn't refetch on unrelated re-renders.
+  const pageEans = useMemo(() => offers.map((o) => o.ean).filter(Boolean), [offers]);
+  const pageInsightArgs = useMemo(
+    () =>
+      offers
+        .filter((o) => o.offerId)
+        .map((o) => ({
+          offer_id: o.offerId,
+          ean: o.ean,
+          price: o.pricing?.bundlePrices?.[0]?.unitPrice,
+        })),
+    [offers],
+  );
+
+  const { data: imagesRes } = useGetBolProductImagesBatchQuery(pageEans, {
+    skip: pageEans.length === 0,
+  });
+  const { data: insightsRes } = useGetBolOfferInsightsBatchQuery(pageInsightArgs, {
+    skip: pageInsightArgs.length === 0,
+  });
+
+  const imageMap = imagesRes?.images || {};
+  const insightMap = insightsRes?.insights || {};
 
   const handlePageSizeChange = (size) => {
     setLimit(size);
@@ -144,6 +177,30 @@ const BolListing = () => {
       return Boolean(offer.store.visible);
     }
     return !offer?.onHoldByRetailer;
+  };
+
+  const handleCopyEan = async (text) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(String(text));
+    } catch {
+      // navigator.clipboard is undefined on a non-HTTPS origin (e.g. a LAN IP).
+      const ta = document.createElement("textarea");
+      ta.value = String(text);
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        toast.error("Could not copy");
+        return;
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    toast.success(`Copied ${text}`);
   };
 
   // Selection handlers
@@ -223,83 +280,57 @@ const BolListing = () => {
 
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-28 relative">
-      <div className="bg-white rounded-2xl p-5 card-shadow">
+      <div className="bg-white rounded-lg p-4 card-shadow">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold text-gray-700">
-              {totalItems} Offers
-            </h2>
-            {offers.length > 0 && (
-              <label className="flex items-center gap-1.5 text-xs text-gray-500 font-medium cursor-pointer ml-1 bg-gray-50 hover:bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200 transition-colors">
-                <Checkbox
-                  checked={allSelected}
-                  indeterminate={selectedOffers.length > 0 && !allSelected}
-                  onChange={toggleSelectAll}
-                />
-                <span>Select All ({offers.length})</span>
-              </label>
-            )}
-
-            {/* Inline Quick Action Buttons when items are selected */}
-            {selectedOffers.length > 0 && (
-              <div className="flex items-center gap-2 ml-2 pl-3 border-l border-gray-200 flex-wrap">
-                <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-md">
-                  {selectedOffers.length} selected
-                </span>
-                <Button
-                  size="small"
-                  onClick={handleBulkRevalidate}
-                  loading={isRevalidatingContent}
-                  className="text-xs h-7 flex items-center gap-1 font-medium bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                >
-                  <LuSparkles size={13} className="text-blue-600" />
-                  Re-enrich & Fix ({selectedOffers.length})
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => setStockModalOpen(true)}
-                  className="text-xs h-7 flex items-center gap-1 font-medium border-gray-300 text-gray-700 hover:text-black"
-                >
-                  <LuBoxes size={13} className="text-blue-600" />
-                  Stock
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => handleBulkStatusChange(false)}
-                  loading={isBulkUpdatingStatus}
-                  className="text-xs h-7 flex items-center gap-1 font-medium bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                >
-                  <LuCheck size={13} />
-                  For Sale
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => handleBulkStatusChange(true)}
-                  loading={isBulkUpdatingStatus}
-                  className="text-xs h-7 flex items-center gap-1 font-medium bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
-                >
-                  <LuPause size={13} />
-                  Pause
-                </Button>
-                <Button
-                  size="small"
-                  danger
-                  type="primary"
-                  onClick={() => setDeleteConfirmOpen(true)}
-                  className="text-xs h-7 flex items-center gap-1 font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
-                >
-                  <LuTrash2 size={13} />
-                  Delete Selected ({selectedOffers.length})
-                </Button>
-                <button
-                  onClick={() => setSelectedOffers([])}
-                  className="text-xs text-gray-400 hover:text-gray-700 ml-1 font-medium"
-                >
-                  Clear
-                </button>
+            {/* Square Bol-connection status, same language as the spreadsheet tile on
+                Inventory Catalog. Replaces the old "Connected Retailer Account" strip. */}
+            <Tooltip
+              title={
+                isNotConnected
+                  ? "No Bol account connected"
+                  : `${activeCred?.account_name || "Bol account"} · Retailer API v11`
+              }
+            >
+              <div
+                className={`relative w-10 h-10 rounded border flex items-center justify-center shrink-0 ${
+                  isNotConnected
+                    ? "border-dashed border-gray-300 text-gray-400"
+                    : "border-gray-200 bg-gray-50 text-gray-500"
+                }`}
+              >
+                <FiLink size={15} />
+                {!isNotConnected && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white bg-green-500" />
+                )}
               </div>
-            )}
+            </Tooltip>
+
+            <div className="leading-none">
+              <h2 className="text-[22px] font-semibold text-gray-900 tracking-tight tabular-nums">
+                {totalItems.toLocaleString()}
+                <span className="text-[13px] font-medium text-gray-400 ml-1.5">Offers</span>
+              </h2>
+              <div className="flex items-center gap-2.5 mt-1">
+                <p className="text-[11px] text-gray-400">
+                  {isNotConnected
+                    ? "No Bol account connected"
+                    : `Live from ${activeCred?.account_name || "Bol.com"}`}
+                </p>
+                {/* Only meaningful once a selection exists — until then it is noise
+                    competing with the offer count. */}
+                {selectedOffers.length > 0 && !allSelected && (
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline underline-offset-2 transition-colors"
+                  >
+                    Select all {offers.length}
+                  </button>
+                )}
+              </div>
+            </div>
+
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -314,16 +345,16 @@ const BolListing = () => {
               onClick={handleRefresh}
               disabled={isSyncing || isFetching}
               title="Refresh from Bol.com"
-              className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand disabled:opacity-50 transition-colors"
+              className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition-colors"
             >
-              <LuRefreshCw size={16} className={isSyncing || isFetching ? "animate-spin text-brand" : ""} />
+              <LuRefreshCw size={16} className={isSyncing || isFetching ? "animate-spin" : ""} />
             </button>
 
             <Popover
               content={
                 <div className="flex flex-col gap-2 p-2">
                   {Object.keys(columns)
-                    .filter(col => col !== 'action')
+                    .filter(col => !HIDDEN_OFFER_COLUMNS.includes(col))
                     .map(col => (
                       <Checkbox
                         key={col}
@@ -342,7 +373,7 @@ const BolListing = () => {
             >
               <button
                 title="View columns"
-                className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:text-brand"
+                className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
               >
                 <FiEye size={16} />
               </button>
@@ -353,14 +384,14 @@ const BolListing = () => {
               title="Filter offers"
               className={`h-10 px-3 rounded-lg border flex items-center gap-2 transition-colors ${
                 activeFilterCount > 0
-                  ? 'border-brand text-brand bg-brand/5 font-semibold' 
-                  : 'border-gray-200 text-gray-600 hover:text-brand hover:border-gray-300'
+                  ? 'border-gray-900 text-gray-900 bg-gray-100 font-medium' 
+                  : 'border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300'
               }`}
             >
               <FiFilter size={16} />
               <span className="text-xs font-medium">Filter</span>
               {activeFilterCount > 0 && (
-                <span className="bg-brand text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                <span className="bg-gray-900 text-white text-[10px] w-4 h-4 rounded flex items-center justify-center font-semibold">
                   {activeFilterCount}
                 </span>
               )}
@@ -408,7 +439,7 @@ const BolListing = () => {
           <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100 flex-wrap">
             <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider mr-1">Active Filters:</span>
             {activeFilters.filter_status && (
-              <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-lg border border-blue-200/60 font-medium">
+              <span className="inline-flex items-center gap-1.5 text-gray-700 text-[11px] px-2 py-0.5 rounded border border-gray-200 font-medium">
                 Status: {activeFilters.filter_status === "for_sale" ? "For Sale (Live)" : "Not For Sale (Paused)"}
                 <button onClick={() => removeSingleFilter("filter_status")} className="hover:text-blue-900"><FiX size={12} /></button>
               </span>
@@ -420,7 +451,7 @@ const BolListing = () => {
               </span>
             )}
             {activeFilters.filter_stock && (
-              <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs px-2.5 py-1 rounded-lg border border-emerald-200/60 font-medium">
+              <span className="inline-flex items-center gap-1.5 text-gray-700 text-[11px] px-2 py-0.5 rounded border border-gray-200 font-medium">
                 Stock: {activeFilters.filter_stock === "Yes" ? "In Stock" : "Out of Stock"}
                 <button onClick={() => removeSingleFilter("filter_stock")} className="hover:text-emerald-900"><FiX size={12} /></button>
               </span>
@@ -440,17 +471,6 @@ const BolListing = () => {
           </div>
         )}
 
-        {/* Connected Integration Card Banner */}
-        <div className="flex items-center gap-3 p-3 bg-[#f8f9fc] rounded-xl border border-gray-100 mb-5 text-sm">
-          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-            <FiLink size={15} />
-          </div>
-          <div>
-            <div className="font-semibold text-xs text-gray-800">Connected Retailer Account</div>
-            <div className="text-[11px] text-blue-600 font-medium">Bol.com Retailer API v11</div>
-          </div>
-        </div>
-
       {/* Main Content Area */}
       <div>
 
@@ -458,10 +478,10 @@ const BolListing = () => {
         <div className="overflow-x-auto thin-scrollbar">
           {isLoading || (isFetching && !data) || credsLoading ? (
             view === "grid" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {[...Array(10)].map((_, i) => (
-                  <div key={i} className="bg-white rounded-2xl border border-gray-100 p-3.5 h-[280px] flex flex-col">
-                    <div className="bg-gray-100 rounded-xl h-40 w-full mb-4 animate-pulse"></div>
+                  <div key={i} className="bg-white rounded-md border border-gray-200 p-2.5 h-[240px] flex flex-col">
+                    <div className="bg-gray-100 rounded h-24 w-full mb-2 animate-pulse"></div>
                     <div className="h-4 bg-gray-100 rounded w-3/4 mb-2 animate-pulse"></div>
                     <div className="h-3 bg-gray-100 rounded w-1/2 mb-4 animate-pulse"></div>
                     <div className="h-5 bg-gray-100 rounded w-1/3 mt-auto animate-pulse"></div>
@@ -471,7 +491,7 @@ const BolListing = () => {
             ) : (
               <div className="flex flex-col gap-3">
                 {[...Array(8)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 bg-white border border-gray-50 rounded-xl p-3 animate-pulse">
+                  <div key={i} className="flex items-center gap-3 bg-white border border-gray-100 rounded p-2 animate-pulse">
                     <div className="w-10 h-10 bg-gray-100 rounded"></div>
                     <div className="flex-1 flex flex-col gap-2">
                       <div className="h-4 bg-gray-100 rounded w-1/3"></div>
@@ -484,15 +504,15 @@ const BolListing = () => {
               </div>
             )
           ) : isError || isNotConnected ? (
-            <div className="flex flex-col justify-center items-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 my-4 mx-2">
-              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+            <div className="flex flex-col justify-center items-center py-16 rounded border border-dashed border-gray-200 my-4">
+              <div className="w-12 h-12 border border-red-200 text-red-500 rounded flex items-center justify-center mb-4">
                 <LuUnplug size={32} />
               </div>
               <h3 className="text-gray-800 text-lg font-semibold mb-2">Bol.com Not Connected</h3>
               <p className="text-gray-500 text-sm mb-6 max-w-md text-center">
                 Please connect your Bol.com Retailer API credentials to view, manage, and sync your live offers.
               </p>
-              <Button type="primary" onClick={() => openSettings("connection")} className="bg-brand">
+              <Button type="primary" onClick={() => openSettings("connection")} className="bg-gray-900">
                 Connect Bol.com
               </Button>
             </div>
@@ -508,82 +528,118 @@ const BolListing = () => {
             </div>
           ) : view === "grid" ? (
             /* Grid View */
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
               {offers.map((offer) => {
                 const isSelected = selectedOffers.some(o => o.offerId === offer.offerId);
+                const forSale = isOfferForSale(offer);
+                const title =
+                  offer.store?.productTitle || offer.unknownProductTitle || "Unknown product";
+                const unitPrice = offer.pricing?.bundlePrices?.[0]?.unitPrice;
+                const stockAmount = offer.stock?.amount ?? 0;
                 return (
                   <div
                     key={offer.offerId}
                     onClick={() => setSelectedOffer(offer)}
-                    className={`cursor-pointer text-left bg-white rounded-2xl border p-3.5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300 flex flex-col group h-full relative ${
-                      isSelected ? "border-brand ring-2 ring-brand/20 bg-brand/[0.02]" : "border-gray-100/80 hover:border-brand/20"
+                    className={`cursor-pointer text-left bg-white rounded-md border p-2.5 transition-colors flex flex-col group h-full ${
+                      isSelected ? "border-gray-900" : "border-gray-200 hover:border-gray-400"
                     }`}
                   >
-                    <div className="bg-[#f8f9fc] rounded-xl h-40 flex items-center justify-center mb-4 overflow-hidden relative group-hover:bg-[#f0f2f8] transition-colors w-full">
-                      {/* Checkbox and Status Badge on Top-Left */}
-                      <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {/* Image well — checkbox top-left, stock top-right, exactly as the
+                        Inventory Catalog card. */}
+                    <div className="bg-gray-50 rounded h-24 flex items-center justify-center mb-2 overflow-hidden relative w-full">
+                      <div className="absolute top-1.5 left-1.5 z-20" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={isSelected}
                           onChange={() => toggleSelectOffer(offer)}
-                          className="scale-125 bg-white/90 rounded-md backdrop-blur-sm shadow-sm"
+                          className="bg-white/90 rounded backdrop-blur-sm"
                         />
-                        {isOfferForSale(offer) ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-emerald-500 text-white flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                            For Sale
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm backdrop-blur-md bg-rose-500 text-white flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-200"></span>
-                            Not For Sale
-                          </span>
-                        )}
                       </div>
 
-                      {/* Stock and Action Menu on Top-Right */}
-                      <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 items-end z-10">
+                      <div className="absolute top-1.5 right-1.5 flex items-center gap-1 z-10">
                         {columns.stock && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm bg-emerald-50 text-emerald-700 border border-emerald-200/60 backdrop-blur-md">
-                            {offer.stock?.amount || 0} in stock
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-semibold backdrop-blur-md border ${
+                              stockAmount === 0
+                                ? "border-red-200 bg-red-50/90 text-red-600"
+                                : stockAmount <= 2
+                                  ? "border-amber-200 bg-amber-50/90 text-amber-700"
+                                  : "border-gray-200 bg-white/90 text-gray-600"
+                            }`}
+                          >
+                            {stockAmount} in stock
                           </span>
                         )}
                         {columns.action && (
-                          <div className="mt-1" onClick={e => e.stopPropagation()}>
+                          <div onClick={(e) => e.stopPropagation()}>
                             <OfferActionMenu offer={offer} />
                           </div>
                         )}
                       </div>
 
-                      <BolProductImage 
-                        ean={offer.ean} 
-                        className="h-[85%] w-[85%] object-contain rounded-lg group-hover:scale-105 transition-transform duration-500 bg-transparent" 
+                      <BolProductImage
+                        ean={offer.ean}
+                        src={imageMap[offer.ean]}
+                        className="h-[86%] w-[86%] object-contain bg-transparent"
                       />
                     </div>
-                    
+
                     <div className="flex flex-col flex-grow w-full">
                       {columns.title && (
-                        <p className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-snug mb-1.5" title={offer.store?.productTitle || offer.unknownProductTitle}>
-                          {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
+                        <p
+                          className="text-[12px] font-medium text-gray-900 line-clamp-2 leading-snug mb-1 min-h-[2.2em]"
+                          title={title}
+                        >
+                          {title}
                         </p>
                       )}
-                      {columns.condition && (
-                        <div className="mb-2">
-                          <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium truncate max-w-full">
+
+                      {/* Chip row — the catalog's category/brand slot. For-sale state
+                          reads as an outline chip with a dot rather than a filled pill. */}
+                      <div className="flex items-center gap-1 flex-wrap mb-1.5">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-gray-200 text-gray-600 rounded text-[9px] font-semibold uppercase tracking-wide">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              forSale ? "bg-green-500" : "bg-gray-300"
+                            }`}
+                          />
+                          {forSale ? "For sale" : "Paused"}
+                        </span>
+                        {columns.condition && (
+                          <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-600 rounded text-[9px] font-semibold uppercase tracking-wide truncate max-w-full">
                             {offer.condition?.category || "NEW"}
                           </span>
+                        )}
+                      </div>
+
+                      {columns.price && (
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <p className="text-[15px] font-semibold text-gray-900 tabular-nums">
+                            {unitPrice != null ? `€${unitPrice.toFixed(2)}` : "—"}
+                          </p>
                         </div>
                       )}
-                      {columns.price && (
-                        <p className="text-base font-bold text-brand mb-2">
-                          {offer.pricing?.bundlePrices?.[0]?.unitPrice ? `€${offer.pricing.bundlePrices[0].unitPrice.toFixed(2)}` : "—"}
-                        </p>
-                      )}
+
+                      <OfferInsights insights={insightMap[offer.offerId]} />
                     </div>
-                    {columns.ean && (
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50 w-full">
-                        <span className="text-[10px] text-gray-400 font-mono truncate bg-gray-50 px-1.5 py-0.5 rounded">
-                          EAN: {offer.ean}
-                        </span>
+
+                    {/* Footer mirrors the catalog's copyable identifier chips. */}
+                    {columns.ean && offer.ean && (
+                      <div className="flex flex-wrap items-center gap-1 mt-auto pt-2 border-t border-gray-100 w-full">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyEan(offer.ean);
+                          }}
+                          title="Copy EAN"
+                          className="flex items-center gap-1 px-1 py-0.5 rounded group/copy border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-[9px] font-semibold text-gray-400 tracking-wide">EAN</span>
+                          <span className="text-[10px] text-gray-700 font-mono truncate max-w-[85px]">
+                            {offer.ean}
+                          </span>
+                          <FiCopy size={9} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -592,24 +648,25 @@ const BolListing = () => {
             </div>
           ) : (
             /* List / Table View */
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-400 bg-[#f9fafc] [&>th]:font-medium">
-                  <th className="py-3 px-2 w-10">
+                  <th className="py-2 px-2 w-10">
                     <Checkbox
                       checked={allSelected}
                       indeterminate={selectedOffers.length > 0 && !allSelected}
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th className="py-3 px-2 w-10">#</th>
-                  {columns.title && <th className="py-3 px-2">Product</th>}
-                  {columns.ean && <th className="py-3 px-2">EAN</th>}
-                  {columns.price && <th className="py-3 px-2">Price</th>}
-                  {columns.stock && <th className="py-3 px-2">Stock</th>}
-                  {columns.condition && <th className="py-3 px-2">Condition</th>}
-                  {columns.status && <th className="py-3 px-2">Live Status</th>}
-                  {columns.action && <th className="py-3 px-2 text-right">Actions</th>}
+                  <th className="py-2 px-2 w-10">#</th>
+                  {columns.title && <th className="py-2 px-2">Product</th>}
+                  {columns.ean && <th className="py-2 px-2">EAN</th>}
+                  {columns.price && <th className="py-2 px-2">Price</th>}
+                  {columns.stock && <th className="py-2 px-2">Stock</th>}
+                  {columns.condition && <th className="py-2 px-2">Condition</th>}
+                  <th className="py-2 px-2 text-left">Bol metrics</th>
+                  {columns.status && <th className="py-2 px-2">Live Status</th>}
+                  {columns.action && <th className="py-2 px-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -620,22 +677,22 @@ const BolListing = () => {
                       key={offer.offerId} 
                       onClick={() => setSelectedOffer(offer)}
                       className={`border-b border-gray-50 hover:bg-gray-50/60 cursor-pointer ${
-                        isSelected ? "bg-brand/[0.03]" : ""
+                        isSelected ? "bg-gray-50" : ""
                       }`}
                     >
-                      <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
+                      <td className="py-2 px-2" onClick={e => e.stopPropagation()}>
                         <Checkbox
                           checked={isSelected}
                           onChange={() => toggleSelectOffer(offer)}
                         />
                       </td>
-                      <td className="py-3 px-2 text-gray-500 text-xs">
+                      <td className="py-2 px-2 text-gray-500 text-xs">
                         {(page - 1) * limit + index + 1}
                       </td>
                       {columns.title && (
-                        <td className="py-3 px-2 text-gray-700">
+                        <td className="py-2 px-2 text-gray-700">
                           <div className="flex items-center gap-2">
-                            <BolProductImage ean={offer.ean} className="w-8 h-8 rounded object-cover" />
+                            <BolProductImage ean={offer.ean} src={imageMap[offer.ean]} className="w-8 h-8 rounded object-cover" />
                             <span className="text-gray-700 font-semibold line-clamp-1 max-w-[200px]" title={offer.store?.productTitle || offer.unknownProductTitle}>
                               {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
                             </span>
@@ -643,44 +700,47 @@ const BolListing = () => {
                         </td>
                       )}
                       {columns.ean && (
-                        <td className="py-3 px-2 text-gray-500 font-mono text-xs">
+                        <td className="py-2 px-2 text-gray-500 font-mono text-xs">
                           {offer.ean}
                         </td>
                       )}
                       {columns.price && (
-                        <td className="py-3 px-2 font-semibold text-brand">
+                        <td className="py-2 px-2 text-[12px] font-semibold text-gray-900 tabular-nums">
                           €{offer.pricing?.bundlePrices?.[0]?.unitPrice?.toFixed(2) || "—"}
                         </td>
                       )}
                       {columns.stock && (
-                        <td className="py-3 px-2 text-gray-700 font-medium">
+                        <td className="py-2 px-2 text-gray-700 font-medium">
                           {offer.stock?.amount || 0} in stock
                         </td>
                       )}
                       {columns.condition && (
-                        <td className="py-3 px-2">
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-medium">
+                        <td className="py-2 px-2">
+                          <span className="px-1.5 py-0.5 border border-gray-200 text-gray-600 text-[10px] rounded font-medium">
                             {offer.condition?.category || "NEW"}
                           </span>
                         </td>
                       )}
+                      <td className="py-2 px-2">
+                        <OfferInsights insights={insightMap[offer.offerId]} />
+                      </td>
                       {columns.status && (
-                        <td className="py-3 px-2">
+                        <td className="py-2 px-2">
                           {isOfferForSale(offer) ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold text-gray-600 border border-gray-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                               For Sale (Live)
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200/60">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold text-gray-500 border border-gray-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
                               Not For Sale
                             </span>
                           )}
                         </td>
                       )}
                       {columns.action && (
-                        <td className="py-3 px-2 text-right" onClick={e => e.stopPropagation()}>
+                        <td className="py-2 px-2 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex justify-end pr-2">
                             <OfferActionMenu offer={offer} />
                           </div>
@@ -696,7 +756,7 @@ const BolListing = () => {
 
         {/* Pagination */}
         {!isLoading && !isError && offers.length > 0 && (
-          <div className="border-t border-gray-100 mt-4 pt-2">
+          <div className="mt-5 pt-4 border-t border-gray-100">
             <Pagination 
               current={page} 
               total={totalPages} 
@@ -712,53 +772,65 @@ const BolListing = () => {
 
       {/* Sticky Bulk Action Bar */}
       {selectedOffers.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white px-6 py-3.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.18)] border border-gray-200 flex items-center gap-5 z-50 animate-fade-in-up">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-4 py-2.5 rounded-md shadow-lg border border-gray-200 flex items-center gap-3 z-50 animate-fade-in-up">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-brand text-white flex items-center justify-center font-bold text-sm shadow-sm">
+            <div className="h-6 w-6 rounded bg-gray-900 text-white flex items-center justify-center font-semibold text-[11px] tabular-nums">
               {selectedOffers.length}
             </div>
-            <span className="text-sm font-semibold text-gray-800">Offers Selected</span>
+            <span className="text-[12px] font-medium text-gray-600">selected</span>
           </div>
-          <div className="h-6 w-px bg-gray-200"></div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <Button onClick={() => setSelectedOffers([])} type="text" className="text-gray-500 hover:text-gray-800 font-medium">
-              Cancel
+          <div className="h-5 w-px bg-gray-200"></div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              size="small"
+              onClick={handleBulkRevalidate}
+              loading={isRevalidatingContent}
+              className="h-8 px-3 text-xs font-medium text-gray-700 border-gray-200 hover:bg-gray-50 flex items-center gap-1.5"
+            >
+              <LuSparkles size={13} />
+              Re-enrich
             </Button>
             <Button
-              type="default"
-              className="border-gray-300 text-gray-700 hover:text-black font-semibold h-9 px-3.5 flex items-center gap-1.5 rounded-xl"
+              size="small"
               onClick={() => setStockModalOpen(true)}
+              className="h-8 px-3 text-xs font-medium text-gray-700 border-gray-200 hover:bg-gray-50 flex items-center gap-1.5"
             >
-              <LuBoxes size={15} className="text-blue-600" />
-              Update Stock
+              <LuBoxes size={13} />
+              Stock
             </Button>
             <Button
-              type="default"
+              size="small"
               loading={isBulkUpdatingStatus}
-              className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold h-9 px-3.5 flex items-center gap-1.5 rounded-xl"
               onClick={() => handleBulkStatusChange(false)}
+              className="h-8 px-3 text-xs font-medium text-gray-700 border-gray-200 hover:bg-gray-50 flex items-center gap-1.5"
             >
-              <LuCheck size={14} />
-              Set For Sale
+              <LuCheck size={13} />
+              For sale
             </Button>
             <Button
-              type="default"
+              size="small"
               loading={isBulkUpdatingStatus}
-              className="border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold h-9 px-3.5 flex items-center gap-1.5 rounded-xl"
               onClick={() => handleBulkStatusChange(true)}
+              className="h-8 px-3 text-xs font-medium text-gray-700 border-gray-200 hover:bg-gray-50 flex items-center gap-1.5"
             >
-              <LuPause size={14} />
-              Pause (Not For Sale)
+              <LuPause size={13} />
+              Pause
             </Button>
             <Button
+              size="small"
               danger
-              type="primary"
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold h-9 px-4 flex items-center gap-1.5 rounded-xl shadow-sm"
               onClick={() => setDeleteConfirmOpen(true)}
+              className="h-8 px-3 text-xs font-medium flex items-center gap-1.5"
             >
-              <LuTrash2 size={15} />
-              Delete Selected ({selectedOffers.length})
+              <LuTrash2 size={13} />
+              Delete ({selectedOffers.length})
             </Button>
+            <button
+              onClick={() => setSelectedOffers([])}
+              className="text-[11px] text-gray-400 hover:text-gray-900 font-medium ml-1 transition-colors"
+            >
+              Clear
+            </button>
           </div>
         </div>
       )}
@@ -826,7 +898,7 @@ const BolListing = () => {
         extra={
           <div className="flex items-center gap-2">
             <Button onClick={clearAllFilters} size="small">Reset</Button>
-            <Button type="primary" size="small" onClick={applyFilters} className="bg-brand">Apply</Button>
+            <Button type="primary" size="small" onClick={applyFilters} className="bg-gray-900">Apply</Button>
           </div>
         }
         width={340}

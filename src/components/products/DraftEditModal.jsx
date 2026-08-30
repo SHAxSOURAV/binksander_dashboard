@@ -27,6 +27,9 @@ const Field = ({ label, children, required }) => (
   </div>
 );
 
+// Despite the name this only parses the draft's already-computed bol_price into a
+// number (falling back to the floor for junk input) — the markup was applied on the
+// backend with the account's multiplier before the draft was ever created.
 const calcSellingPrice = (val) => {
   if (val == null || val === "" || isNaN(val)) return 39.95;
   const num = parseFloat(String(val).replace(/[^\d.,]/g, "").replace(",", "."));
@@ -738,7 +741,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                         </Field>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-3.5 rounded-xl border border-gray-200/80">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-3.5 rounded border border-gray-200/80">
                         <Field label="Bol.com Product Group (Chunk ID)" required>
                           {form.chunk_recommendations?.length > 0 ? (
                             <Select
@@ -877,7 +880,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       {/* Product Description */}
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                          <label className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
                             Product Description <span className="text-red-500">*</span>
                           </label>
                           <div className="flex items-center gap-2.5">
@@ -888,7 +891,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                 handleChange("description", cleaned);
                                 toast.success("Description formatted & cleaned for Bol.com!");
                               }}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-blue-600 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200/80 rounded-lg transition-all active:scale-95 shadow-2xs cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-lg transition-all active:scale-95 shadow-2xs cursor-pointer"
                               title="Strip Asian brackets 【】, remove Amazon terms, replace competitor brands, and format for Bol.com"
                             >
                               🪄 Clean for Bol.com
@@ -902,17 +905,17 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           value={form.description}
                           onChange={(e) => handleChange("description", e.target.value)}
                           rows={6}
-                          className="rounded-xl text-[13px] text-slate-800 leading-relaxed thin-scrollbar p-3.5 border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                          className="rounded text-[13px] text-slate-800 leading-relaxed thin-scrollbar p-3.5 border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                           placeholder="Rich Dutch product description for Bol.com..."
                         />
                       </div>
 
                       {/* Bol.com Data Model v10 Specifications Container */}
-                      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs">
+                      <div className="bg-white border border-slate-200/90 rounded-md overflow-hidden shadow-xs">
                         {/* Clean Top Header */}
-                        <div className="px-5 py-4 bg-slate-50/80 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
+                        <div className="px-5 py-4 bg-gray-50/80 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 text-base font-bold shadow-2xs">
+                            <div className="w-9 h-9 rounded bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-500 text-base font-bold shadow-2xs">
                               🏷️
                             </div>
                             <div>
@@ -920,7 +923,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                 <h3 className="text-sm font-bold text-slate-800 tracking-tight">
                                   Bol.com Data Model Specifications
                                 </h3>
-                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100/70 text-blue-800 border border-blue-200">
+                                <span className="px-2.5 py-0.5 rounded text-[11px] font-semibold border border-gray-200 text-gray-600">
                                   {bolPreviewData?.chunk_name || form.chunk_name || "General Category"} ({form.chunk_id || "Auto"})
                                 </span>
                               </div>
@@ -932,7 +935,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
                           <div className="flex items-center gap-2.5">
                             {/* View Switcher Segmented Control */}
-                            <div className="flex bg-slate-200/70 p-1 rounded-xl text-xs font-semibold">
+                            <div className="flex bg-slate-200/70 p-1 rounded text-xs font-semibold">
                               <button
                                 type="button"
                                 onClick={() => setSpecViewMode("categorized")}
@@ -973,7 +976,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                     Required English Attribute Keys & Dutch Values
                                   </span>
                                 </div>
-                                <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                <span className="text-[11px] font-bold text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
                                   {bolPreviewData?.mandatory_attributes?.filter(a => Boolean(form.attributes?.[a.id] || a.value)).length || 0} of {bolPreviewData?.mandatory_attributes?.length || 0} Ready
                                 </span>
                               </div>
@@ -988,10 +991,10 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                     return (
                                       <div
                                         key={attr.id}
-                                        className={`p-3.5 rounded-xl border transition-all ${
+                                        className={`p-3.5 rounded border transition-all ${
                                           hasValue
-                                            ? "bg-slate-50/60 border-slate-200/90 hover:border-slate-300"
-                                            : "bg-amber-50/50 border-amber-300/80 shadow-2xs"
+                                            ? "bg-gray-50/60 border-slate-200/90 hover:border-slate-300"
+                                            : "bg-amber-50/40 border-amber-200"
                                         }`}
                                       >
                                         <div className="flex items-center justify-between mb-1.5">
@@ -1000,18 +1003,18 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                               {attr.id}
                                             </span>
                                             <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
-                                              attr.level === 0 ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"
+                                              attr.level === 0 ? "border border-gray-300 text-gray-700" : "border border-gray-200 text-gray-500"
                                             }`}>
                                               Level {attr.level}
                                             </span>
                                           </div>
                                           {hasValue ? (
-                                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            <span className="text-[10px] font-bold text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 flex items-center gap-1">
+                                              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                                               Ready
                                             </span>
                                           ) : (
-                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 animate-pulse">
+                                            <span className="text-[10px] font-bold text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1 animate-pulse">
                                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                               Required
                                             </span>
@@ -1050,7 +1053,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                     if (["DESCRIPTION", "BESCHRIJVING"].includes(rawK.toUpperCase())) return null;
 
                                     return (
-                                      <div key={k} className="p-3 bg-slate-50/80 border border-slate-200/90 rounded-xl">
+                                      <div key={k} className="p-3 bg-gray-50/80 border border-slate-200/90 rounded">
                                         <span className="text-[11px] font-bold text-slate-600 block mb-1">
                                           {rawK}
                                         </span>
@@ -1070,17 +1073,17 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                             {bolPreviewData?.optional_attributes?.length > 0 && (
                               <div className="pt-2">
                                 <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
-                                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                                  <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
                                     Additional Category Specifications (Optional)
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                                   {bolPreviewData.optional_attributes.map((attr) => (
-                                    <div key={attr.id} className="p-2.5 bg-slate-50/50 border border-slate-200/70 rounded-xl">
+                                    <div key={attr.id} className="p-2.5 bg-gray-50/50 border border-slate-200/70 rounded">
                                       <span className="text-[10px] font-bold text-slate-400 uppercase block truncate" title={attr.id}>
                                         {attr.id}
                                       </span>
-                                      <span className="text-[12px] font-medium text-slate-700 block truncate mt-0.5" title={String(attr.value)}>
+                                      <span className="text-[12px] font-medium text-gray-700 block truncate mt-0.5" title={String(attr.value)}>
                                         {String(attr.value)}
                                       </span>
                                     </div>
@@ -1099,7 +1102,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                   onClick={() => setPayloadType("content")}
                                   className={`px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
                                     payloadType === "content"
-                                      ? "bg-blue-600 text-white shadow-xs"
+                                      ? "bg-gray-900 text-white"
                                       : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                                   }`}
                                 >
@@ -1110,7 +1113,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                   onClick={() => setPayloadType("offer")}
                                   className={`px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
                                     payloadType === "offer"
-                                      ? "bg-blue-600 text-white shadow-xs"
+                                      ? "bg-gray-900 text-white"
                                       : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                                   }`}
                                 >
@@ -1137,7 +1140,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                               </button>
                             </div>
 
-                            <pre className="p-3.5 bg-slate-900 rounded-xl overflow-x-auto text-[11px] text-emerald-400 max-h-96 thin-scrollbar border border-slate-800/80">
+                            <pre className="p-3.5 bg-slate-900 rounded overflow-x-auto text-[11px] text-emerald-400 max-h-96 thin-scrollbar border border-slate-800/80">
                               {JSON.stringify(
                                 payloadType === "content"
                                   ? (liveContentPayload || { status: "Generating content payload..." })
@@ -1159,12 +1162,12 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       <span>Media Gallery</span>
                       {!isBulkMode && (
                         hasUntranslatedImages ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold text-amber-700 border border-amber-200 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                             {untranslatedCount > 0 ? `${untranslatedCount} Untranslated` : "Select Image"}
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold text-gray-600 border border-gray-200 flex items-center gap-1">
                             <span>✓</span>
                             <span>{selectedCount}/{selectedCount}</span>
                           </span>
@@ -1180,7 +1183,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           type="button"
                           onClick={handleTranslateAllImages}
                           disabled={translatingAll || !form.photos?.length}
-                          className="px-3.5 py-1.5 bg-brand hover:bg-brand-dark text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                          className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-700 text-white rounded text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
                           title="Translate all Dutch text in product pictures using AI"
                         >
                           {translatingAll ? (
@@ -1200,7 +1203,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {/* Upload custom image dropzone card */}
-                        <label className="relative aspect-square bg-slate-50 border-2 border-dashed border-slate-300 hover:border-brand rounded-2xl flex flex-col items-center justify-center p-3 cursor-pointer hover:bg-brand/5 transition-all duration-200 group shadow-sm">
+                        <label className="relative aspect-square bg-gray-50 border border-dashed border-gray-300 hover:border-gray-400 rounded flex flex-col items-center justify-center p-3 cursor-pointer hover:bg-gray-50 transition-all duration-200 group shadow-sm">
                           <input 
                             type="file" 
                             accept="image/*" 
@@ -1211,25 +1214,25 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           {uploadingImage ? (
                             <Spin size="small" />
                           ) : (
-                            <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-200 flex items-center justify-center text-brand group-hover:scale-110 transition-transform mb-2">
+                            <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-200 flex items-center justify-center text-gray-400 transition-transform mb-2">
                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                               </svg>
                             </div>
                           )}
-                          <span className="text-[12px] font-semibold text-slate-700">Upload Image</span>
+                          <span className="text-[12px] font-semibold text-gray-700">Upload Image</span>
                           <span className="text-[10px] text-slate-400 font-medium mt-0.5">JPG / PNG</span>
                         </label>
 
                         {form.photos?.length > 0 && form.photos.map((src, i) => (
                           <div 
                             key={i} 
-                            className={`relative aspect-square bg-white border rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center p-2 group ${selectedPhotos.includes(i) ? 'border-brand ring-2 ring-brand/10' : 'border-slate-200/80 hover:border-slate-300'}`}
+                            className={`relative aspect-square bg-white border rounded-md overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center p-2 group ${selectedPhotos.includes(i) ? 'border-brand ring-2 ring-brand/10' : 'border-gray-200 hover:border-slate-300'}`}
                           >
                              {translatingIndex === i || revertingIndex === i ? (
                                <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
                                  <Spin size="small" />
-                                 <span className="text-[11px] text-brand font-semibold mt-2">
+                                 <span className="text-[11px] text-gray-500 font-medium mt-2">
                                    {revertingIndex === i ? "Reverting..." : "Translating..."}
                                  </span>
                                </div>
@@ -1241,7 +1244,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                              {isPhotoTranslated(i, src) ? (
                                 <>
                                   <div className="absolute top-2.5 left-2.5 z-10">
-                                    <span className={`px-2.5 py-0.5 backdrop-blur-md text-white rounded-full text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border ${(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? 'bg-emerald-600/90 border-emerald-400/30' : customUploadedUrls.has(src) ? 'bg-blue-600/90 border-blue-400/30' : 'bg-teal-600/90 border-teal-400/30'}`}>
+                                    <span className={`px-2.5 py-0.5 backdrop-blur-md text-white rounded text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border ${(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? 'bg-gray-900/85 border-white/20' : customUploadedUrls.has(src) ? 'bg-gray-700/85 border-white/20' : 'bg-gray-500/85 border-white/20'}`}>
                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-white">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                       </svg>
@@ -1255,7 +1258,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                         type="button"
                                         title="Undo translation & revert to original photo"
                                         onClick={(e) => handleRevertImage(i, e)}
-                                        className="px-2.5 py-1 bg-slate-900/85 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded-xl text-[10px] font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                                        className="px-2.5 py-1 bg-slate-900/85 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded text-[10px] font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
                                       >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
                                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -1271,7 +1274,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                    type="button"
                                    title="Translate Image"
                                    onClick={(e) => handleTranslateImage(i, e)}
-                                   className="px-2.5 py-1 bg-white/95 hover:bg-brand hover:text-white backdrop-blur-md border border-slate-200/80 rounded-xl text-[10px] font-semibold text-slate-700 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                   className="px-2.5 py-1 bg-white/95 hover:bg-gray-900 hover:text-white backdrop-blur-md border border-gray-200 rounded text-[10px] font-semibold text-gray-700 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                                  >
                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
                                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
@@ -1302,7 +1305,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
               {/* Left side: Dynamic translation / validation status banner */}
               <div className="flex items-center gap-2">
                 {!isBulkMode && hasUntranslatedImages ? (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-800 text-xs font-semibold">
                     <span>⚠️</span>
                     <span>
                       {selectedCount === 0
@@ -1314,7 +1317,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                         type="button"
                         onClick={handleTranslateAllImages}
                         disabled={translatingAll}
-                        className="ml-1 px-2 py-0.5 bg-brand text-white rounded font-bold hover:bg-brand-dark cursor-pointer disabled:opacity-50"
+                        className="ml-1 px-2 py-0.5 bg-gray-900 text-white rounded font-semibold hover:bg-gray-700 cursor-pointer disabled:opacity-50"
                       >
                         {translatingAll ? "Translating..." : "Translate All"}
                       </button>
@@ -1326,7 +1329,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                     <span>Valid 13-digit EAN required.</span>
                   </div>
                 ) : !isBulkMode ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-semibold">
                     <span>✓</span>
                     <span>All {selectedCount} images ready & translated</span>
                   </div>
@@ -1343,7 +1346,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   onClick={handlePublish}
                   loading={publishing || updating}
                   disabled={isPublishDisabled}
-                  className="h-10 px-6 rounded-lg font-semibold bg-brand text-white shadow-sm disabled:!bg-gray-200 disabled:!text-gray-400 disabled:!border-gray-200 disabled:!cursor-not-allowed cursor-pointer transition-all"
+                  className="h-10 px-6 rounded-lg font-semibold bg-gray-900 text-white disabled:!bg-gray-200 disabled:!text-gray-400 disabled:!border-gray-200 disabled:!cursor-not-allowed cursor-pointer transition-all"
                   title={
                     hasUntranslatedImages && !isBulkMode
                       ? "All product images must be translated to Dutch before publishing."
@@ -1385,11 +1388,11 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
            color: #9ca3af;
         }
         .custom-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
-           color: #4f46e5 !important;
+           color: #111827 !important;
         }
         .custom-tabs .ant-tabs-ink-bar {
-           background: #4f46e5;
-           height: 3px !important;
+           background: #111827;
+           height: 2px !important;
            border-radius: 3px 3px 0 0;
         }
       `}} />
