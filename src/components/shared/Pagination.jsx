@@ -1,4 +1,4 @@
-import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiChevronDown } from "react-icons/fi";
 
 /**
  * Compact page list with a fixed-width window around the current page:
@@ -64,45 +64,61 @@ const Pagination = ({
 
   const pages = buildPages(activeCurrent, activeTotal, siblings);
 
+  const from = (activeCurrent - 1) * pageSize + 1;
+  const to = Math.min(activeCurrent * pageSize, totalItems);
+
   const navBtn =
-    "w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 " +
-    "hover:text-gray-900 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-30 " +
-    "disabled:hover:bg-transparent disabled:hover:border-gray-200 disabled:cursor-not-allowed transition-colors";
+    "w-8 h-8 rounded flex items-center justify-center text-gray-400 " +
+    "hover:text-gray-900 hover:bg-gray-100 disabled:opacity-30 " +
+    "disabled:hover:bg-transparent disabled:hover:text-gray-400 disabled:cursor-not-allowed transition-colors";
 
   return (
     <div
       className={`flex flex-col sm:flex-row items-center justify-between gap-3 w-full ${className}`}
     >
-      {/* Page size + range summary */}
+      {/* Rows-per-page + range. The native select carries its own chevron and
+          platform height, which never matched the rest of the controls — it is
+          stripped with appearance-none and given ours. */}
       {(onPageSizeChange || typeof totalItems === "number") && (
-        <div className="flex items-center gap-2 text-xs text-gray-500 order-2 sm:order-1">
+        <div className="flex items-center gap-3 order-2 sm:order-1">
           {onPageSizeChange && (
-            <>
-              <span>Rows</span>
-              <select
-                value={pageSize}
-                onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                className="h-8 rounded-md border border-gray-200 px-2 text-xs text-gray-700 bg-white focus:outline-none focus:border-gray-400 cursor-pointer font-medium"
-              >
-                {pageSizeOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-400">Rows</span>
+              <div className="relative">
+                <select
+                  value={pageSize}
+                  onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                  aria-label="Rows per page"
+                  className="appearance-none h-8 rounded border border-gray-200 pl-2.5 pr-7 text-[12px] font-medium text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:border-gray-900 cursor-pointer transition-colors tabular-nums"
+                >
+                  {pageSizeOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown
+                  size={13}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
+            </div>
           )}
+
           {typeof totalItems === "number" && totalItems > 0 && pageSize > 0 && (
-            <span className="text-gray-400">
-              {(activeCurrent - 1) * pageSize + 1}–
-              {Math.min(activeCurrent * pageSize, totalItems)} of{" "}
-              {totalItems.toLocaleString()}
+            <span className="text-[11px] text-gray-400 tabular-nums whitespace-nowrap">
+              <span className="text-gray-600 font-medium">
+                {from.toLocaleString()}–{to.toLocaleString()}
+              </span>{" "}
+              of {totalItems.toLocaleString()}
             </span>
           )}
         </div>
       )}
 
-      <div className="flex items-center gap-1 order-1 sm:order-2 sm:ml-auto">
+      {/* Page numbers sit in one bordered group so the control reads as a single
+          object rather than a row of loose buttons. */}
+      <div className="flex items-center gap-0.5 order-1 sm:order-2 sm:ml-auto border border-gray-200 rounded p-0.5">
         <button
           onClick={() => go(activeCurrent - 1)}
           className={navBtn}
@@ -116,7 +132,7 @@ const Pagination = ({
           typeof p === "string" ? (
             <span
               key={p}
-              className="w-7 h-8 flex items-end justify-center text-gray-300 text-xs pb-1.5 select-none"
+              className="w-6 h-8 flex items-center justify-center text-gray-300 text-[11px] select-none"
             >
               ···
             </span>
@@ -125,7 +141,7 @@ const Pagination = ({
               key={p}
               onClick={() => go(p)}
               aria-current={p === activeCurrent ? "page" : undefined}
-              className={`min-w-8 h-8 px-2 rounded-md text-xs font-semibold transition-colors ${
+              className={`min-w-8 h-8 px-2 rounded text-[12px] font-medium tabular-nums transition-colors ${
                 p === activeCurrent
                   ? "bg-gray-900 text-white"
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"

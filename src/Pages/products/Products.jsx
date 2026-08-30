@@ -40,6 +40,12 @@ const ProcessPoller = ({ processId }) => {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
+// Columns that exist in state but are never offered in the toggle: either handled
+// elsewhere (serial/action/status) or retired from the UI (delivery, sheet source).
+const HIDDEN_COLUMN_TOGGLES = [
+  "serial", "action", "purchasePrice", "status", "delivery", "sheetSource",
+];
+
 const DATE_FILTER_OPTIONS = [
   { key: "today", label: "Today" },
   { key: "tomorrow", label: "Tomorrow" },
@@ -89,9 +95,9 @@ const Products = () => {
   };
 
   const [columns, setColumns] = useState({
-    serial: false, asin: false, ean: true, title: false, sheetTitle: true, category: true, brand: true,
+    serial: false, asin: true, ean: true, title: false, sheetTitle: true, category: true, brand: true,
     purchasePrice: false, price: true, delivery: false,
-    sheetSource: false, ratings: false, stock: true, status: false, action: true, publishAction: false
+    sheetSource: false, ratings: false, stock: true, status: false, action: true, publishAction: true
   });
 
   // Adopt a search term coming from the URL (e.g. the global navbar search).
@@ -406,7 +412,7 @@ const Products = () => {
               content={
                 <div className="flex flex-col gap-2 p-2">
                   {Object.keys(columns)
-                    .filter(col => col !== 'serial' && col !== 'action' && col !== 'purchasePrice' && col !== 'status')
+                    .filter(col => !HIDDEN_COLUMN_TOGGLES.includes(col))
                     .map(col => (
                       <Checkbox
                         key={col}
@@ -657,7 +663,7 @@ const Products = () => {
                       📝 {p.spreadsheetTitle}
                     </p>
                   )}
-                  {columns.category && (
+                  {columns.category && p.category && (
                     <div className="mb-1.5">
                       <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-500 rounded text-[9px] font-medium truncate max-w-full">
                         {p.category}
@@ -796,10 +802,10 @@ const Products = () => {
         ) : (
           /* List view */
           <div className="overflow-x-auto thin-scrollbar">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-gray-400 font-medium">
-                  <th className="py-3 px-2 w-8">
+                <tr className="border-b border-gray-200 text-gray-400">
+                  <th className="py-2 px-2 w-8">
                     <Checkbox
                       checked={selectedProducts.length > 0 && selectedProducts.length === products.filter(p => !p.scrapePending && p.title).length}
                       indeterminate={selectedProducts.length > 0 && selectedProducts.length < products.filter(p => !p.scrapePending && p.title).length}
@@ -812,141 +818,205 @@ const Products = () => {
                       }}
                     />
                   </th>
-                  {columns.asin && <th className="py-3 px-2">ASIN</th>}
-                  {columns.ean && <th className="py-3 px-2">EAN</th>}
-                  {columns.title && <th className="py-3 px-2">Title</th>}
-                  {columns.sheetTitle && <th className="py-3 px-2">Sheet Title</th>}
-                  {columns.category && <th className="py-3 px-2">Category</th>}
-                  {columns.brand && <th className="py-3 px-2">Brand</th>}
-                  {columns.purchasePrice && <th className="py-3 px-2">Purchase</th>}
-                  {columns.price && <th className="py-3 px-2">Bol Price</th>}
-                  {columns.delivery && <th className="py-3 px-2">Delivery</th>}
-                  {columns.sheetSource && <th className="py-3 px-2">Sheet Source</th>}
-                  {columns.ratings && <th className="py-3 px-2">Rating</th>}
-                  {columns.stock && <th className="py-3 px-2">Live Stock</th>}
-                  {columns.status && <th className="py-3 px-2">Status</th>}
-                  {columns.publishAction && <th className="py-3 px-2">Action</th>}
+                  <th className="py-2 px-2 w-12" />
+                  <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider">Product</th>
+                  {columns.ean && <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider w-40">EAN</th>}
+                  {columns.category && <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider w-32">Category</th>}
+                  {columns.price && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-24">Price</th>}
+                  {columns.stock && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-20">Stock</th>}
+                  {columns.ratings && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-20">Rating</th>}
+                  {columns.publishAction && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-40">Action</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {products.map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => setSelected(p)}
-                    className="hover:bg-gray-50/50 cursor-pointer transition-colors"
-                  >
-                    <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selectedProducts.some(item => item.id === p.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedProducts(prev => [...prev, p]);
-                          } else {
-                            setSelectedProducts(prev => prev.filter(item => item.id !== p.id));
-                          }
-                        }}
-                      />
-                    </td>
-                    {columns.asin && (
-                      <td className="py-3 px-2 text-gray-600">
-                        {p.asin ? (
-                          <button
-                            type="button"
-                            onClick={(e) => handleCopy(e, p.asin)}
-                            title="Copy ASIN"
-                            className="group/copy inline-flex items-center gap-1.5 font-mono hover:text-gray-900 transition-colors"
-                          >
-                            {p.asin}
-                            <FiCopy size={11} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
-                          </button>
+              <tbody className="divide-y divide-gray-100">
+                {products.map((p) => {
+                  // Respect the Title / Sheet Title toggles, but collapse them into one
+                  // "Product" cell instead of spending two columns on near-identical text.
+                  const displayName =
+                    (columns.title ? p.title : null) ||
+                    p.spreadsheetTitle ||
+                    p.title ||
+                    p.asin ||
+                    "—";
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => setSelected(p)}
+                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedProducts.some(item => item.id === p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProducts(prev => [...prev, p]);
+                            } else {
+                              setSelectedProducts(prev => prev.filter(item => item.id !== p.id));
+                            }
+                          }}
+                        />
+                      </td>
+
+                      <td className="py-2 px-2">
+                        {p.image ? (
+                          <img
+                            src={p.image}
+                            alt={displayName}
+                            className="w-9 h-9 object-contain rounded border border-gray-200 bg-white"
+                          />
                         ) : (
-                          "—"
+                          <div className="w-9 h-9 rounded border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 text-[9px]">
+                            —
+                          </div>
                         )}
                       </td>
-                    )}
-                    {columns.ean && (
-                      <td className="py-3 px-2 text-gray-600">
-                        {p.ean ? (
-                          <button
-                            type="button"
-                            onClick={(e) => handleCopy(e, p.ean)}
-                            title="Copy EAN"
-                            className="group/copy inline-flex items-center gap-1.5 font-mono hover:text-gray-900 transition-colors"
-                          >
-                            {p.ean}
-                            <FiCopy size={11} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
-                          </button>
-                        ) : (
-                          "—"
+
+                      <td className="py-2 px-2">
+                        <p className="text-[12px] font-medium text-gray-900 line-clamp-1">
+                          {displayName}
+                        </p>
+                        {/* Brand and ASIN ride under the name rather than taking columns
+                            of their own — same information, far less horizontal space. */}
+                        {(columns.brand || columns.asin) && (
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {columns.brand && p.product_brand && (
+                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide truncate max-w-[120px]">
+                                {p.product_brand}
+                              </span>
+                            )}
+                            {columns.asin && p.asin && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopy(e, p.asin)}
+                                title="Copy ASIN"
+                                className="group/copy inline-flex items-center gap-1 text-[10px] font-mono text-gray-400 hover:text-gray-900 transition-colors"
+                              >
+                                {p.asin}
+                                <FiCopy size={9} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
-                    )}
-                    {columns.title && <td className="py-3 px-2 max-w-[200px] truncate">{p.title}</td>}
-                    {columns.sheetTitle && <td className="py-3 px-2 text-gray-600">{p.spreadsheetTitle || "—"}</td>}
-                    {columns.category && <td className="py-3 px-2 text-gray-600">{p.category || "—"}</td>}
-                    {columns.brand && <td className="py-3 px-2 text-gray-600">{p.product_brand || "—"}</td>}
-                    {columns.purchasePrice && <td className="py-3 px-2 text-gray-600">€{p.purchasePrice?.toFixed(2) || "0.00"}</td>}
-                    {columns.price && <td className="py-3 px-2 font-bold text-brand">€{p.price?.toFixed(2) || "0.00"}</td>}
-                    {columns.delivery && <td className="py-3 px-2 text-gray-600">{p.deliveryTime || "—"}</td>}
-                    {columns.sheetSource && <td className="py-3 px-2 text-gray-600">{p.spreadsheetUrl ? "Yes" : "—"}</td>}
-                    {columns.ratings && <td className="py-3 px-2 text-gray-600">{p.rating || "—"}</td>}
-                    {columns.stock && <td className="py-3 px-2 text-gray-600">{p.stockQuantity ?? "—"}</td>}
-                    {columns.status && <td className="py-3 px-2 text-gray-600">{p.status || "—"}</td>}
-                    {columns.publishAction && (
-                      <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1.5">
-                          <Tooltip title="Quality Re-validate (EAN, Brand, Rating)">
+
+                      {columns.ean && (
+                        <td className="py-2 px-2 text-gray-600">
+                          {p.ean ? (
                             <button
                               type="button"
-                              disabled={revalidatingItemId === (p.itemId || p.id)}
-                              onClick={(e) => handleSingleRevalidate(e, p)}
-                              className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 transition-all flex items-center justify-center disabled:opacity-50"
+                              onClick={(e) => handleCopy(e, p.ean)}
+                              title="Copy EAN"
+                              className="group/copy inline-flex items-center gap-1.5 text-[11px] font-mono hover:text-gray-900 transition-colors"
                             >
-                              <LuShieldCheck size={13} className={revalidatingItemId === (p.itemId || p.id) ? "animate-spin text-blue-600" : ""} />
+                              {p.ean}
+                              <FiCopy size={10} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
                             </button>
-                          </Tooltip>
-                          {p.publishStatus === 'published' ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-green-50 text-green-600 border border-green-200 cursor-default">
-                                Published
-                              </span>
-                              <OfferActionMenu offer={{ offerId: p.bol_offer_id, ean: p.ean, draftId: p.id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
-                            </div>
-                          ) : p.publishStatus === 'failed' ? (
-                            <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      )}
+
+                      {columns.category && (
+                        <td className="py-2 px-2">
+                          {p.category ? (
+                            <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-600 rounded text-[10px] font-medium truncate max-w-full">
+                              {p.category}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300 text-[11px]">—</span>
+                          )}
+                        </td>
+                      )}
+
+                      {columns.price && (
+                        <td className="py-2 px-2 text-right text-[12px] font-semibold text-gray-900 tabular-nums">
+                          €{p.price?.toFixed(2) || "0.00"}
+                        </td>
+                      )}
+
+                      {columns.stock && (
+                        <td className="py-2 px-2 text-right">
+                          {p.stockQuantity == null ? (
+                            <span className="text-gray-300 text-[11px]">—</span>
+                          ) : (
+                            <span
+                              className={`text-[11px] font-semibold tabular-nums ${
+                                p.stockQuantity === 0
+                                  ? "text-red-600"
+                                  : p.stockQuantity <= 2
+                                    ? "text-amber-700"
+                                    : "text-gray-700"
+                              }`}
+                            >
+                              {p.stockQuantity}
+                            </span>
+                          )}
+                        </td>
+                      )}
+
+                      {columns.ratings && (
+                        <td className="py-2 px-2 text-right text-[11px] text-gray-500 tabular-nums">
+                          {p.rating || "—"}
+                        </td>
+                      )}
+
+                      {columns.publishAction && (
+                        <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            <Tooltip title="Quality Re-validate (EAN, Brand, Rating)">
+                              <button
+                                type="button"
+                                disabled={revalidatingItemId === (p.itemId || p.id)}
+                                onClick={(e) => handleSingleRevalidate(e, p)}
+                                className="p-1 rounded border border-gray-200 text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors flex items-center justify-center disabled:opacity-50"
+                              >
+                                <LuShieldCheck size={12} className={revalidatingItemId === (p.itemId || p.id) ? "animate-spin" : ""} />
+                              </button>
+                            </Tooltip>
+                            {p.publishStatus === 'published' ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 cursor-default">
+                                  Published
+                                </span>
+                                <OfferActionMenu offer={{ offerId: p.bol_offer_id, ean: p.ean, draftId: p.id, onHoldByRetailer: p.bol_on_hold, stock: { amount: p.bol_stock } }} />
+                              </div>
+                            ) : p.publishStatus === 'failed' ? (
+                              <Tooltip title={p.publishError || "Publishing to Bol.com failed. Click to re-try."}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelected(p);
+                                  }}
+                                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  Failed
+                                </button>
+                              </Tooltip>
+                            ) : (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelected(p);
                                 }}
-                                className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center gap-1"
+                                className="text-[9px] font-semibold px-2 py-0.5 rounded border border-gray-300 text-gray-800 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
                               >
-                                Failed
+                                Publish
                               </button>
-                            </Tooltip>
-                          ) : (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelected(p);
-                              }}
-                              className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-brand/10 text-brand hover:bg-brand hover:text-white transition-all"
-                            >
-                              Publish
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
 
         {/* Footer / Pagination */}
-        <div className="mt-6 border-t border-gray-100 pt-4">
+        <div className="mt-5 pt-4 border-t border-gray-100">
           <Pagination
             current={page}
             total={totalPages}

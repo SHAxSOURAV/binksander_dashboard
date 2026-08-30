@@ -150,7 +150,7 @@ const LowStockAlerts = () => {
               ))}
             </div>
 
-            <div className="pt-4 mt-2 border-t border-gray-100">
+            <div className="mt-5 pt-4 border-t border-gray-100">
               <Pagination
                 current={page}
                 total={totalPages}

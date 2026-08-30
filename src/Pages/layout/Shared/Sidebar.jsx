@@ -49,13 +49,13 @@ const Sidebar = ({ onNavigate }) => {
   return (
     <div className="h-full bg-white flex flex-col font-poppins">
       {/* Logo */}
-      <div className="px-8 py-7">
+      <div className="px-5 py-5">
         <Logo />
       </div>
 
       {/* Nav Items */}
-      <nav className="flex-1 px-4">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-300 px-4 mb-2">
+      <nav className="flex-1 px-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-300 px-3 mb-1.5">
           Menu
         </p>
         {menuItems.map((item, index) =>
@@ -66,10 +66,10 @@ const Sidebar = ({ onNavigate }) => {
               target="_blank"
               rel="noopener noreferrer"
               onClick={onNavigate}
-              className="group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-all duration-150"
+              className="group flex items-center gap-2.5 px-3 py-2 rounded my-0.5 text-[13px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors"
             >
-              <span>{item.icon}</span>
-              <span>{item.name}</span>
+              <span className="text-gray-400 group-hover:text-gray-600 shrink-0">{item.icon}</span>
+              <span className="leading-tight">{item.name}</span>
             </a>
           ) : (
             <NavLink
@@ -78,14 +78,20 @@ const Sidebar = ({ onNavigate }) => {
               end={item.end}
               onClick={onNavigate}
               className={({ isActive }) =>
-                `group relative flex items-center gap-3 px-4 py-3 rounded-xl my-1 text-sm font-medium transition-all duration-150 ${isActive
-                  ? "text-white bg-gray-900 shadow-[0_8px_20px_rgba(0,0,0,0.15)]"
-                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                `group flex items-center gap-2.5 px-3 py-2 rounded my-0.5 text-[13px] font-medium transition-colors ${isActive
+                  ? "text-white bg-gray-900"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                 }`
               }
             >
-              <span>{item.icon}</span>
-              <span>{item.name}</span>
+              {({ isActive }) => (
+                <>
+                  <span className={`shrink-0 ${isActive ? "text-white" : "text-gray-400 group-hover:text-gray-600"}`}>
+                    {item.icon}
+                  </span>
+                  <span className="leading-tight">{item.name}</span>
+                </>
+              )}
             </NavLink>
           )
         )}

@@ -135,7 +135,15 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
     const sheetTitle = product?.spreadsheetTitle || amazonTitle;
     const finalTitle = useSheetTitle ? sheetTitle : amazonTitle;
 
-    const calculatedPrice = calcSellingPrice(amazonNum, 2.5);
+    // The catalog row already carries the price the backend computed with this
+    // account's multiplier — prefer it so the modal can't disagree with the card.
+    // Only fall back to a local calculation (using the same multiplier) when the
+    // row has no server price, e.g. an unscraped item.
+    const serverPrice = parsePrice(product?.price);
+    const calculatedPrice =
+      serverPrice && serverPrice > 0
+        ? serverPrice
+        : calcSellingPrice(amazonNum, product?.priceMultiplier ?? 2.5);
 
     return {
       amazonTitle,
@@ -218,21 +226,21 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
       <div className="font-poppins pt-1 pb-2">
         
         {/* Header Section */}
-        <div className="flex items-start justify-between border-b border-gray-100 pb-5 mb-6">
+        <div className="flex items-start justify-between border-b border-gray-100 pb-3 mb-4">
           <div className="pr-4 w-full">
             <div className="flex items-center gap-3 mb-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-               <span className="bg-gray-100 px-2 py-0.5 rounded">{view.brand || "Brand"}</span>
+               <span className="border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded">{view.brand || "Brand"}</span>
                <span className="text-gray-300">•</span>
                <span className="text-gray-400">ASIN: {product?.asin}</span>
             </div>
             <div className="flex items-start justify-between gap-4 pr-2">
-              <h2 className="text-lg font-semibold text-gray-800 leading-snug mb-3">
+              <h2 className="text-[15px] font-semibold text-gray-900 leading-snug mb-2">
                 {view.title || "Product Details"}
               </h2>
               {view.amazonTitle && view.sheetTitle && view.amazonTitle !== view.sheetTitle && (
                 <button
                   onClick={() => setUseSheetTitle(!useSheetTitle)}
-                  className="flex items-center gap-1.5 flex-shrink-0 text-[10px] font-bold text-gray-500 bg-white border border-gray-200 hover:border-brand hover:text-brand shadow-sm px-2.5 py-1 rounded-full transition-all mt-0.5"
+                  className="flex items-center gap-1.5 flex-shrink-0 text-[10px] font-medium text-gray-500 border border-gray-200 hover:border-gray-400 hover:text-gray-900 px-2 py-0.5 rounded transition-colors mt-0.5"
                   title="Swap Title Source"
                 >
                   <FiRefreshCw size={11} />
@@ -241,12 +249,12 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
               )}
             </div>
             <div className="flex items-center gap-5 text-sm">
-               <div className="flex items-center gap-1.5 bg-yellow-50 text-yellow-700 px-2.5 py-1 rounded-md font-bold text-xs">
-                  <FaStar className="text-yellow-500 mb-[1px]" size={13} />
+               <div className="flex items-center gap-1 text-gray-600 text-[11px] font-medium">
+                  <FaStar className="text-gray-400 mb-[1px]" size={11} />
                   <span>{view.rating || "—"}</span>
                </div>
-               <span className="text-gray-500 font-medium text-xs bg-gray-50 px-2.5 py-1 rounded-md">
-                 {view.reviews} Reviews
+               <span className="text-gray-400 text-[11px]">
+                 {view.reviews} reviews
                </span>
                
                {product?.asin && (
@@ -260,9 +268,9 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                     }
                   }}
                   disabled={isSyncing}
-                  className="flex items-center gap-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-100 transition-colors disabled:opacity-50 font-bold bg-blue-50 px-3 py-1 rounded-md text-xs ml-auto"
+                  className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 transition-colors disabled:opacity-50 font-medium px-2.5 py-1 rounded text-[11px] ml-auto"
                 >
-                  <FiRefreshCw className={isSyncing ? "animate-spin" : ""} size={14} />
+                  <FiRefreshCw className={isSyncing ? "animate-spin" : ""} size={12} />
                   {isSyncing ? "Syncing..." : "Sync Latest Data"}
                 </button>
               )}
@@ -271,7 +279,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
         </div>
         
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
            
            {/* Left Column: Tabs for Details */}
            <div className="md:col-span-7 lg:col-span-8 flex flex-col">
@@ -286,12 +294,11 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                        <div className="space-y-6 mt-4">
                          
                          {/* Pricing Setup */}
-                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex flex-col sm:flex-row gap-6 justify-between items-center relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-                            <div className="relative z-10 w-full sm:w-auto">
-                              <p className="text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">AMAZON PRICE</p>
+                         <div className="p-3 rounded border border-gray-200 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                            <div className="w-full sm:w-auto">
+                              <p className="text-[10px] font-semibold text-gray-400 mb-1 uppercase tracking-wider">Amazon price</p>
                               <div className="flex items-end gap-2.5">
-                                 <span className="text-2xl font-bold text-gray-800">
+                                 <span className="text-xl font-semibold text-gray-900 tabular-nums">
                                    {view.amazonPrice ? `€${view.amazonPrice}` : "—"}
                                  </span>
                                  {view.originalPrice && (
@@ -299,27 +306,27 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                                  )}
                               </div>
                             </div>
-                            <div className="w-px h-10 bg-gray-200 hidden sm:block relative z-10"></div>
-                            <div className="flex-1 w-full sm:w-auto relative z-10">
-                              <p className="text-[11px] font-semibold text-brand mb-1.5 uppercase tracking-wide">YOUR SELLING PRICE (€)</p>
+                            <div className="w-px h-8 bg-gray-200 hidden sm:block"></div>
+                            <div className="flex-1 w-full sm:w-auto">
+                              <p className="text-[10px] font-semibold text-gray-400 mb-1 uppercase tracking-wider">Your selling price</p>
                               <Input
                                 value={yourPrice ? `€${yourPrice}` : ""}
                                 onChange={(e) => setYourPrice(e.target.value.replace(/^€/, ""))}
-                                className="h-10 rounded-lg text-base font-bold text-brand bg-white border-brand/20 hover:border-brand/50 focus:border-brand shadow-sm px-4"
+                                className="h-9 text-[15px] font-semibold text-gray-900 tabular-nums px-3"
                               />
                             </div>
                          </div>
                          
                          {/* Delivery & Logistics */}
-                         <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                            <h3 className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">LOGISTICS & RETURNS</h3>
+                         <div className="border border-gray-200 rounded p-3">
+                            <h3 className="text-[10px] font-semibold text-gray-400 mb-2.5 uppercase tracking-wider">LOGISTICS & RETURNS</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                <div className="flex items-start gap-3">
-                                 <div className="mt-0.5 text-blue-500 bg-blue-50 p-1.5 rounded-lg"><FaTruck size={14} /></div>
+                                 <div className="mt-0.5 text-gray-400"><FaTruck size={13} /></div>
                                  <div>
                                    <div className="flex items-center gap-2 mb-1">
                                       <p className="text-[13px] font-semibold text-gray-800">Delivery Details</p>
-                                      <span className="inline-flex px-2 py-0.5 bg-blue-100 text-blue-700 font-bold text-[11px] rounded-md">
+                                      <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-600 font-medium text-[10px] rounded">
                                         {view.deliveryDays}
                                       </span>
                                    </div>
@@ -327,7 +334,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                                  </div>
                                </div>
                                <div className="flex items-start gap-3">
-                                 <div className="mt-0.5 text-green-500 bg-green-50 p-1.5 rounded-lg"><FaUndoAlt size={14} /></div>
+                                 <div className="mt-0.5 text-gray-400"><FaUndoAlt size={13} /></div>
                                  <div>
                                    <p className="text-[13px] font-semibold text-gray-800">Return Policy</p>
                                    <p className="text-xs font-medium text-gray-500 mt-1 leading-relaxed">{view.returnPolicy || "FREE 30-day refund/replacement"}</p>
@@ -337,13 +344,13 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                          </div>
                          
                          {/* Category & Bullet Features */}
-                         <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-                            <h3 className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">CATEGORY & HIGHLIGHTS</h3>
+                         <div className="border border-gray-200 rounded p-3">
+                            <h3 className="text-[10px] font-semibold text-gray-400 mb-2.5 uppercase tracking-wider">CATEGORY & HIGHLIGHTS</h3>
                             <div className="mb-4">
                                <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Internal Mapped Category</p>
                                <Select
                                  defaultValue={view.category}
-                                 className="w-full h-10"
+                                 className="w-full h-9"
                                  options={[{ value: view.category, label: view.category }]}
                                />
                             </div>
@@ -354,7 +361,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                                 <ul className="space-y-2.5">
                                   {view.features.slice(0, 5).map((feat, i) => (
                                     <li key={i} className="text-[13px] text-gray-700 flex items-start gap-2.5 leading-snug">
-                                       <FaCheckCircle className="text-green-500 mt-0.5 flex-shrink-0" size={14} />
+                                       <FaCheckCircle className="text-gray-300 mt-0.5 flex-shrink-0" size={12} />
                                        <span className="font-medium text-gray-600">{feat}</span>
                                     </li>
                                   ))}
@@ -369,7 +376,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                      key: '2',
                      label: 'Specifications',
                      children: (
-                       <div className="mt-4 bg-white border border-gray-100 rounded-xl p-4 shadow-[0_2px_10px_rgb(0,0,0,0.02)] grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                       <div className="mt-3 border border-gray-200 rounded p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2.5">
                           {Object.entries(view.specs).map(([k, v]) => (
                             <div key={k} className="border-b border-gray-50 pb-3">
                               <p className="text-[11px] font-bold text-gray-400 mb-1 uppercase">{k}</p>
@@ -386,7 +393,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                      key: '3',
                      label: 'Description',
                      children: (
-                       <div className="mt-4 bg-[#f8f9fa] border border-gray-100 p-5 rounded-xl text-[12px] text-gray-700 font-medium whitespace-pre-wrap max-h-[450px] overflow-y-auto thin-scrollbar leading-relaxed">
+                       <div className="mt-3 border border-gray-200 p-4 rounded text-[12px] text-gray-600 whitespace-pre-wrap max-h-[420px] overflow-y-auto thin-scrollbar leading-relaxed">
                          {view.description || "No detailed description available."}
                        </div>
                      )
@@ -398,7 +405,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
            {/* Right Column: Imagery & Actions */}
            <div className="md:col-span-5 lg:col-span-4 flex flex-col gap-4 relative">
               
-              <div className="bg-white rounded-2xl p-4 relative overflow-hidden border border-gray-100 shadow-[0_2px_15px_rgb(0,0,0,0.03)] h-64 flex items-center justify-center">
+              <div className="bg-gray-50 rounded p-3 relative overflow-hidden border border-gray-200 h-56 flex items-center justify-center">
                  {/* Floating Badges */}
                  <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
                    {view.isAmazonChoice && (
@@ -414,8 +421,9 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                  </div>
                  
                  {loadingDetails && !details && (
-                   <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm z-10">
-                     <Spin size="large" />
+                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/85 backdrop-blur-sm z-10">
+                     <Spin size="small" />
+                     <span className="text-[10px] text-gray-400">Fetching from Amazon…</span>
                    </div>
                  )}
                  
@@ -423,7 +431,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                    <img
                      src={mainImage}
                      alt={view.title}
-                     className="max-w-full max-h-full object-contain rounded-xl cursor-zoom-in transition-transform duration-500 ease-out hover:scale-110"
+                     className="max-w-full max-h-full object-contain"
                    />
                  ) : (
                    <div className="text-gray-300 font-medium">No Image</div>
@@ -438,13 +446,13 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                       key={`${src}-${i}`}
                       type="button"
                       onClick={() => setActiveImage(src)}
-                      className={`flex-shrink-0 rounded-xl overflow-hidden transition-all bg-white ${
+                      className={`flex-shrink-0 rounded overflow-hidden transition-colors bg-white ${
                         mainImage === src
-                          ? "border-2 border-brand shadow-md scale-105"
-                          : "border border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100"
+                          ? "border border-gray-900"
+                          : "border border-gray-200 hover:border-gray-400 opacity-70 hover:opacity-100"
                       }`}
                     >
-                      <img src={src} alt="" className="w-14 h-14 object-cover" />
+                      <img src={src} alt="" className="w-12 h-12 object-contain" />
                     </button>
                   ))}
                 </div>
@@ -458,18 +466,19 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                          href={safeAmazonUrl}
                          target="_blank"
                          rel="noreferrer"
-                         className="w-full h-10 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 font-semibold text-[12px] flex items-center justify-center gap-2 hover:bg-gray-100 hover:text-black transition-colors"
+                         className="w-full h-9 rounded border border-gray-200 text-gray-700 font-medium text-[12px] flex items-center justify-center gap-2 hover:bg-gray-50 hover:text-black transition-colors"
                        >
-                         <FaAmazon className="text-[#FF9900]" size={14} /> View Original on Amazon
+                         <FaAmazon className="text-gray-400" size={13} /> View Original on Amazon
                        </a>
                     ) : null;
                   })()}
                  <button
                    onClick={handlePublish}
                    disabled={busy}
-                   className="w-full h-11 rounded-lg bg-brand text-white font-semibold text-[13px] shadow-[0_4px_12px_rgba(79,70,229,0.2)] hover:shadow-[0_6px_16px_rgba(79,70,229,0.3)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-none"
+                   className="w-full h-10 rounded bg-gray-900 text-white font-semibold text-[13px] hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                  >
-                   {busy ? "Publishing to Bol.com..." : "Publish to Bol.com"}
+                   {busy && <FiRefreshCw className="animate-spin" size={13} />}
+                   {drafting ? "Preparing draft…" : publishing ? "Publishing…" : "Publish to Bol.com"}
                  </button>
               </div>
            </div>
@@ -479,15 +488,15 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
       {/* Small custom CSS injection for tabs styling to match the aesthetic */}
       <style dangerouslySetInnerHTML={{__html: `
         .product-modal .ant-modal-content {
-           border-radius: 24px;
-           padding: 24px 32px;
+           border-radius: 8px;
+           padding: 20px 24px;
         }
         .custom-tabs .ant-tabs-nav::before {
            border-bottom: 2px solid #f3f4f6;
         }
         .custom-tabs .ant-tabs-tab {
-           padding: 12px 0;
-           margin: 0 32px 0 0;
+           padding: 8px 0;
+           margin: 0 24px 0 0;
         }
         .custom-tabs .ant-tabs-tab-btn {
            font-weight: 600;
@@ -495,12 +504,12 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
            color: #9ca3af;
         }
         .custom-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
-           color: #4f46e5 !important;
+           color: #111827 !important;
         }
         .custom-tabs .ant-tabs-ink-bar {
-           background: #4f46e5;
-           height: 3px !important;
-           border-radius: 3px 3px 0 0;
+           background: #111827;
+           height: 2px !important;
+           border-radius: 0;
         }
       `}} />
     </Modal>

@@ -27,7 +27,14 @@ const mapItem = (it, i) => ({
   title: it.product_title || (it.asin ? `ASIN ${it.asin}` : "Syncing…"),
   brand: it.brand || it.product_brand || "",
   product_brand: it.product_brand || it.brand || "",
-  category: it["Product category"] || it["Product notes"] || it.country || "—",
+  // The backend normalises every spelling of the sheet's category column into
+  // "Product category". Deliberately no `it.country` fallback — that is what made every
+  // card show "NL" as its category when the column wasn't being read.
+  category:
+    it["Product category"] ||
+    it["PRODUCT CATEGORY"] ||
+    it.category ||
+    "",
   subcategory: "",
   amazonPrice: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
   // The backend computes this with the selected Bol account's own multiplier, so the
@@ -499,6 +506,39 @@ const productApis = baseApis.injectEndpoints({
       keepUnusedDataFor: 3600,
     }),
 
+    // POST /bol/product-images/batch → { ean: url } for a whole page in one request.
+    getBolProductImagesBatch: builder.query({
+      query: (eans) => ({
+        url: "/bol/product-images/batch",
+        method: "POST",
+        body: { eans },
+      }),
+      keepUnusedDataFor: 3600,
+    }),
+
+    // POST /bol/offer-insights/batch → { offerId: insights } for a whole page.
+    getBolOfferInsightsBatch: builder.query({
+      query: (offers) => ({
+        url: "/bol/offer-insights/batch",
+        method: "POST",
+        body: { offers },
+      }),
+      keepUnusedDataFor: 3600,
+    }),
+
+    // GET /bol/offer-insights/{offerId} → buy box, visits, rating, commission.
+    // Fetched lazily per card; the backend caches per (account, offer) for 6h.
+    getBolOfferInsights: builder.query({
+      query: ({ offerId, ean, price }) => {
+        const params = new URLSearchParams();
+        if (ean) params.set("ean", ean);
+        if (price) params.set("price", price);
+        const qs = params.toString();
+        return `/bol/offer-insights/${offerId}${qs ? `?${qs}` : ""}`;
+      },
+      keepUnusedDataFor: 3600,
+    }),
+
     // GET /bol/product-assets/{ean}
     getBolProductAssets: builder.query({
       query: (ean) => `/bol/product-assets/${ean}`,
@@ -728,6 +768,9 @@ export const {
   useGetBolOffersQuery,
   useSyncBolOffersMutation,
   useGetBolProductImageQuery,
+  useGetBolOfferInsightsQuery,
+  useGetBolProductImagesBatchQuery,
+  useGetBolOfferInsightsBatchQuery,
   useGetBolProductAssetsQuery,
   useGetGtinToAsinQuery,
   useUpdateBolOfferStatusMutation,
