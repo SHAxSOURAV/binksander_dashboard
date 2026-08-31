@@ -56,6 +56,9 @@ const mapItem = (it, i) => ({
   rating: parseFloat(it.product_star_rating) || 0,
   reviews: parseInt(it.product_num_ratings, 10) || 0,
   image: it.product_photo || "",
+  // Small S3 companion object for list views; falls back to the full-size photo for
+  // products scraped before thumbnails existed.
+  thumbnail: it.product_photo_thumb || it.product_photo || "",
   productUrl: it.product_url || "",
   ean: it.spreadsheet_ean || "",
   stock: it.STOCK || "",
