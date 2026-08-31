@@ -637,10 +637,14 @@ const Products = () => {
                       </button>
                     )}
                   </div>
-                  {p.image ? (
+                  {p.thumbnail ? (
                     <img
-                      src={p.image}
+                      src={p.thumbnail}
                       alt={p.title}
+                      width={160}
+                      height={96}
+                      loading="lazy"
+                      decoding="async"
                       className="h-[86%] w-[86%] object-contain"
                     />
                   ) : p.scrapePending ? (
@@ -858,10 +862,14 @@ const Products = () => {
                       </td>
 
                       <td className="py-2 px-2">
-                        {p.image ? (
+                        {p.thumbnail ? (
                           <img
-                            src={p.image}
+                            src={p.thumbnail}
                             alt={displayName}
+                            width={36}
+                            height={36}
+                            loading="lazy"
+                            decoding="async"
                             className="w-9 h-9 object-contain rounded border border-gray-200 bg-white"
                           />
                         ) : (
