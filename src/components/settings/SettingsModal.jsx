@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Modal, Input, InputNumber, Form, Button, Spin, Checkbox } from "antd";
+import { Modal, Input, Form, Button, Spin, Checkbox } from "antd";
 import toast from "react-hot-toast";
 import {
   FiUser,
@@ -11,6 +11,7 @@ import {
   FiCamera,
   FiEdit2,
 } from "react-icons/fi";
+import BolAccountsSection from "./BolAccountsSection";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { LuUnplug } from "react-icons/lu";
 import { useUI } from "../../Provider/ContextProvider";
@@ -25,7 +26,6 @@ import {
   useUnlinkSheetMutation,
   useGetBolCredentialsQuery,
   useSaveBolCredentialsMutation,
-  useUpdateBolMultiplierMutation,
   useDeleteBolCredentialsMutation,
   useImportPublicSheetMutation,
   useImportOAuthSheetMutation,
@@ -49,82 +49,10 @@ const tabs = [
  * through the dedicated PATCH endpoint so no client secret is needed — the full edit form
  * requires one, which makes it the wrong tool for nudging a markup.
  */
-const MultiplierQuickEdit = ({ accountId, value }) => {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [updateMultiplier, { isLoading }] = useUpdateBolMultiplierMutation();
-
-  // Follow the server value whenever it changes underneath us (refetch, other edit).
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  const commit = async () => {
-    const next = Number(draft);
-    if (!Number.isFinite(next) || next <= 0 || next > 100) {
-      toast.error("Multiplier must be between 0.1 and 100");
-      setDraft(value);
-      setEditing(false);
-      return;
-    }
-    if (next === Number(value)) {
-      setEditing(false);
-      return;
-    }
-    try {
-      await updateMultiplier({ accountId, price_multiplier: next }).unwrap();
-      toast.success(`Multiplier set to ×${next}`);
-      setEditing(false);
-    } catch (err) {
-      toast.error(err?.data?.detail || "Failed to update multiplier");
-      setDraft(value);
-    }
-  };
-
-  if (!editing) {
-    return (
-      <button
-        onClick={() => setEditing(true)}
-        title="Click to change the price multiplier"
-        className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors tabular-nums"
-      >
-        ×{value}
-      </button>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      <InputNumber
-        autoFocus
-        size="small"
-        value={draft}
-        onChange={setDraft}
-        onPressEnter={commit}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        disabled={isLoading}
-        step={0.1}
-        min={0.1}
-        max={100}
-        controls={false}
-        prefix="×"
-        className="w-[70px]"
-      />
-    </span>
-  );
-};
-
 const SettingsModal = () => {
   const { settingsOpen, setSettingsOpen, settingsTab, setSettingsTab } = useUI();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [bolEditOpen, setBolEditOpen] = useState(false);
-  const [showAdvancedBol, setShowAdvancedBol] = useState(false);
 
   const { data: profile, isLoading: loadingProfile } = useGetProfileQuery(
     undefined,
@@ -675,260 +603,16 @@ const SettingsModal = () => {
                 </button>
               </div>
 
-              {/* Bol.com credentials */}
-              <div className="flex items-center justify-between mb-2 pt-4 border-t border-gray-100">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Bol.com API Accounts
-                </p>
-                {!bolEditOpen && (
-                  <button
-                    onClick={() => {
-                      bolForm.resetFields();
-                      bolForm.setFieldsValue({ price_multiplier: 2.5 });
-                      setBolEditOpen(true);
-                    }}
-                    className="text-[11px] font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors"
-                  >
-                    Add account
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-2 mb-4">
-                  {bolCreds.length === 0 ? (
-                    <div className="rounded border border-dashed border-gray-200 px-4 py-6 text-center text-xs text-gray-400">
-                      No Bol accounts connected.
-                    </div>
-                  ) : (
-                    bolCreds.map((cred) => (
-                      <div key={cred.account_id} className="rounded border border-gray-200 bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="text-[13px] font-semibold text-gray-900 truncate">
-                                {cred.account_name}
-                              </p>
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 flex-shrink-0">
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    cred.is_secret_set ? "bg-green-500" : "bg-amber-400"
-                                  }`}
-                                />
-                                {cred.is_secret_set ? "Active" : "Incomplete"}
-                              </span>
-                            </div>
-
-                            <p className="text-[11px] text-gray-400 font-mono truncate mt-0.5">
-                              {cred.client_id || "—"}
-                            </p>
-
-                            {(cred.manufacturer_name || cred.manufacturer_email) && (
-                              <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                                {[cred.manufacturer_name, cred.manufacturer_email]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <MultiplierQuickEdit
-                              accountId={cred.account_id}
-                              value={cred.price_multiplier ?? 2.5}
-                            />
-                            <button
-                              onClick={() => {
-                                bolForm.setFieldsValue({
-                                  account_id: cred.account_id,
-                                  account_name: cred.account_name,
-                                  client_id: cred.client_id,
-                                  manufacturer_name: cred.manufacturer_name,
-                                  manufacturer_email: cred.manufacturer_email,
-                                  manufacturer_address: cred.manufacturer_address,
-                                  economic_operator_id: cred.economic_operator_id,
-                                  fulfilment_profile_id: cred.fulfilment_profile_id,
-                                  price_multiplier: cred.price_multiplier ?? 2.5,
-                                });
-                                setBolEditOpen(true);
-                              }}
-                              className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBol(cred.account_id)}
-                              disabled={deletingCreds}
-                              className="text-[11px] font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1 rounded transition-colors disabled:opacity-50"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-              {bolEditOpen && (
-                <Form
-                  form={bolForm}
-                  layout="vertical"
-                  onFinish={onSaveBol}
-                  className="rounded border border-gray-200 bg-white p-4 space-y-1"
-                >
-                  <Form.Item name="account_id" hidden>
-                    <Input />
-                  </Form.Item>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Form.Item
-                      name="account_name"
-                      label="Account Name"
-                      rules={[{ required: true, message: "Required" }]}
-                      className="mb-2"
-                    >
-                      <Input className="h-9" placeholder="e.g. Main Account" />
-                    </Form.Item>
-                    <Form.Item
-                      name="client_id"
-                      label="Client ID"
-                      rules={[{ required: true, message: "Required" }]}
-                      className="mb-2"
-                    >
-                      <Input className="h-9 font-mono text-xs" placeholder="Bol.com Client ID" />
-                    </Form.Item>
-                  </div>
-                  <Form.Item
-                    name="client_secret"
-                    label="Client Secret"
-                    rules={[{ required: true, message: "Required" }]}
-                    className="mb-2"
-                  >
-                    <Input.Password
-                      className="h-9 font-mono text-xs"
-                      placeholder="Bol.com Client Secret"
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    name="price_multiplier"
-                    label="Price Multiplier"
-                    tooltip="Markup applied to the Amazon purchase price for listings on this account. Each Bol account keeps its own value."
-                    rules={[
-                      {
-                        type: "number",
-                        min: 0.1,
-                        max: 100,
-                        message: "Must be between 0.1 and 100",
-                      },
-                    ]}
-                    className="mb-2"
-                  >
-                    <InputNumber
-                      className="h-9 w-full"
-                      step={0.1}
-                      min={0.1}
-                      max={100}
-                      precision={2}
-                      addonBefore="×"
-                      placeholder="2.5"
-                    />
-                  </Form.Item>
-                  <Form.Item shouldUpdate noStyle>
-                    {({ getFieldValue }) => {
-                      const m = Number(getFieldValue("price_multiplier")) || 2.5;
-                      // Mirrors calculate_selling_price() on the backend so the seller can
-                      // see what a multiplier actually produces before saving it.
-                      const preview = (amazon) =>
-                        Math.max(39.95, Math.floor((amazon * m) / 10) * 10 + 9.95).toFixed(2);
-                      return (
-                        <p className="text-[11px] text-gray-400 -mt-1 mb-3">
-                          Selling price = Amazon price × {m}, rounded down to the nearest ×9.95,
-                          never below €39.95. e.g. €19.99 → €{preview(19.99)} · €49.00 → €
-                          {preview(49)}
-                        </p>
-                      );
-                    }}
-                  </Form.Item>
-
-                  <div className="flex justify-end my-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedBol(!showAdvancedBol)}
-                      className="text-[11px] font-semibold text-gray-500 hover:text-gray-800 transition-colors"
-                    >
-                      {showAdvancedBol ? "Hide advanced fields" : "+ Advanced fields"}
-                    </button>
-                  </div>
-
-                  {showAdvancedBol && (
-                    <div className="pt-2 border-t border-gray-100 space-y-1 animate-fadeIn">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Form.Item
-                          name="manufacturer_name"
-                          label="Manufacturer / Company Name"
-                          tooltip="Brand or company name sent to Bol.com for EU GPSR mandatory compliance (e.g. Warmara Trading B.V.)"
-                          className="mb-2"
-                        >
-                          <Input className="h-9" placeholder="e.g. Warmara Trading B.V." />
-                        </Form.Item>
-                        <Form.Item
-                          name="manufacturer_email"
-                          label="Support Email / Contact URL"
-                          tooltip="Support email address or contact form sent to Bol.com for EU GPSR mandatory Manufacturer Email"
-                          className="mb-2"
-                        >
-                          <Input className="h-9 font-mono text-xs" placeholder="e.g. support@warmara.nl" />
-                        </Form.Item>
-                      </div>
-                      <Form.Item
-                        name="manufacturer_address"
-                        label="Manufacturer Address (EU GPSR)"
-                        tooltip="Official business address sent to Bol.com for EU GPSR mandatory Manufacturer Address"
-                        className="mb-2"
-                      >
-                        <Input className="h-9 text-xs" placeholder="e.g. Keizersgracht 123, 1015 CJ Amsterdam, Netherlands" />
-                      </Form.Item>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Form.Item
-                          name="economic_operator_id"
-                          label="Economic Operator ID (EU GPSR / DSA)"
-                          tooltip="UUID of your registered Economic Operator / Verantwoordelijke persoon in Bol.com"
-                          className="mb-3"
-                        >
-                          <Input className="h-9 font-mono text-xs" placeholder="e.g. 82a254a0-3ecf-4d82-abc3-8ad0355ccc92" />
-                        </Form.Item>
-                        <Form.Item
-                          name="fulfilment_profile_id"
-                          label="Fulfilment Profile ID (Optional)"
-                          tooltip="Bol.com Delivery Promise Profile ID (UUID) if you use predefined shipping profiles"
-                          className="mb-3"
-                        >
-                          <Input className="h-9 font-mono text-xs" placeholder="e.g. 0c6573a2-a80c-48b7-a03e-d5939f1173f1" />
-                        </Form.Item>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBolEditOpen(false);
-                        bolForm.resetFields();
-                      }}
-                      className="h-8 px-3 rounded border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={savingCreds}
-                      className="h-8 px-4 rounded button-color text-xs font-semibold disabled:opacity-60"
-                    >
-                      {savingCreds ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </Form>
-              )}
+              <BolAccountsSection
+                accounts={bolCreds}
+                form={bolForm}
+                editOpen={bolEditOpen}
+                setEditOpen={setBolEditOpen}
+                onSave={onSaveBol}
+                onDelete={handleDeleteBol}
+                saving={savingCreds}
+                deleting={deletingCreds}
+              />
 
             </div>
           )}
