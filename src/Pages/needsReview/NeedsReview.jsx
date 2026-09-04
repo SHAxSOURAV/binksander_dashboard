@@ -19,10 +19,13 @@ import {
 } from "../../Redux/productApis";
 import Pagination from "../../components/shared/Pagination";
 import ValidationFailureModal from "../../components/needsReview/ValidationFailureModal";
+import SpreadsheetSelector from "../../components/shared/SpreadsheetSelector";
+import { useUI } from "../../Provider/ContextProvider";
 
 import { getSafeAmazonUrl } from "../../utils/urlUtils";
 
 const NeedsReview = () => {
+  const { selectedSpreadsheetUrl } = useUI();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [filterBrand, setFilterBrand] = useState(null);
@@ -47,10 +50,19 @@ const NeedsReview = () => {
   }, [search]);
 
   const { data, isLoading } = useGetNeedsReviewItemsQuery(
-    { page, limit, filter_brand: filterBrand, filter_reason: filterReason, search: debouncedSearch },
+    {
+      page,
+      limit,
+      filter_brand: filterBrand,
+      filter_reason: filterReason,
+      search: debouncedSearch,
+      spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+    },
     { pollingInterval: 30000 }
   );
-  const { data: filtersMeta } = useGetFiltersMetaQuery();
+  const { data: filtersMeta } = useGetFiltersMetaQuery(
+    selectedSpreadsheetUrl !== "all" ? { spreadsheet_url: selectedSpreadsheetUrl } : undefined
+  );
   const [revalidateItem] = useRevalidateItemMutation();
   const [revalidateInventoryItems, { isLoading: isRevalidatingBulk }] = useRevalidateInventoryItemsMutation();
   const [deleteItem, { isLoading: isDeletingSingle }] = useDeleteNeedsReviewItemMutation();
@@ -283,6 +295,7 @@ const NeedsReview = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <SpreadsheetSelector onSelectChange={() => setPage(1)} />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
