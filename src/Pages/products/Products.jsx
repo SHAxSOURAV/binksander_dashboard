@@ -24,6 +24,8 @@ import productApis, {
 } from "../../Redux/productApis";
 import toast from "react-hot-toast";
 import OfferActionMenu from "../bolListing/components/OfferActionMenu";
+import { useUI } from "../../Provider/ContextProvider";
+import SpreadsheetSelector from "../../components/shared/SpreadsheetSelector";
 
 const ProcessPoller = ({ processId }) => {
   const dispatch = useDispatch();
@@ -69,6 +71,7 @@ const Products = () => {
   const [selected, setSelected] = useState(null);
   const [editingDraftId, setEditingDraftId] = useState(null);
   const [connectOpen, setConnectOpen] = useState(false);
+  const { setSettingsOpen, setSettingsTab, selectedSpreadsheetUrl } = useUI();
 
   const [filters, setFilters] = useState({});
   const [activeFilters, setActiveFilters] = useState({});
@@ -135,6 +138,7 @@ const Products = () => {
     title_source: titleSource,
     sortBy,
     sortOrder,
+    spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
     ...activeFilters
   }, {
     pollingInterval
@@ -164,9 +168,11 @@ const Products = () => {
 
   useEffect(() => {
     setScrapePollCount(0);
-  }, [page, limit, debouncedSearch, activeFilters]);
+  }, [page, limit, debouncedSearch, activeFilters, selectedSpreadsheetUrl]);
 
-  const { data: filtersMeta } = useGetFiltersMetaQuery();
+  const { data: filtersMeta } = useGetFiltersMetaQuery(
+    selectedSpreadsheetUrl !== "all" ? { spreadsheet_url: selectedSpreadsheetUrl } : undefined
+  );
   const { data: connectionData } = useGetConnectionQuery();
   // /spreadsheet/connected returns { connected_sheets: [...] } — the old code read
   // connectionData.spreadsheet_url / .spreadsheet_name, which never existed, so the
@@ -340,13 +346,19 @@ const Products = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            {/* Square spreadsheet-connection status. The dot is the whole status
-                language: green = webhook active, grey = imported but not syncing,
-                dashed tile = nothing connected. */}
+            {/* Square spreadsheet-connection status with sleek rounded-[4px] geometry. */}
             <Tooltip
               title={
                 connectedSheet
-                  ? `${connectedSheet.item_count} items imported · ${connectedSheet.is_syncing ? "auto-syncing" : "not syncing"}`
+                  ? connectedSheet.status === "EXPIRED_AUTH"
+                    ? "Google authorization expired · Click Reconnect below or in Settings"
+                    : `${connectedSheet.item_count} items imported · ${
+                        connectedSheet.sync_mode === "auto_polling_60s"
+                          ? "auto-syncing every 60s"
+                          : connectedSheet.is_syncing
+                          ? "live push syncing"
+                          : "sync paused"
+                      }`
                   : "No spreadsheet connected"
               }
             >
@@ -355,19 +367,23 @@ const Products = () => {
                   href={connectedSheet.spreadsheet_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="relative w-10 h-10 rounded border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300 flex items-center justify-center text-gray-500 transition-colors shrink-0"
+                  className="relative w-10 h-10 rounded-[4px] border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300 flex items-center justify-center text-gray-500 transition-colors shrink-0"
                 >
                   <BsFileEarmarkSpreadsheet size={16} />
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
-                      connectedSheet.is_syncing ? "bg-green-500" : "bg-gray-300"
+                      connectedSheet.status === "EXPIRED_AUTH"
+                        ? "bg-amber-500 animate-pulse"
+                        : connectedSheet.is_syncing
+                        ? "bg-emerald-500"
+                        : "bg-gray-300"
                     }`}
                   />
                 </a>
               ) : (
                 <button
                   onClick={() => setConnectOpen(true)}
-                  className="relative w-10 h-10 rounded border border-dashed border-gray-300 hover:bg-gray-50 flex items-center justify-center text-gray-400 transition-colors shrink-0"
+                  className="relative w-10 h-10 rounded-[4px] border border-dashed border-gray-300 hover:bg-gray-50 flex items-center justify-center text-gray-400 transition-colors shrink-0"
                 >
                   <BsFileEarmarkSpreadsheet size={16} />
                 </button>
@@ -383,14 +399,19 @@ const Products = () => {
               </h2>
               <p className="text-[11px] text-gray-400 mt-1">
                 {connectedSheet
-                  ? connectedSheet.is_syncing
-                    ? "Spreadsheet connected & syncing"
+                  ? connectedSheet.status === "EXPIRED_AUTH"
+                    ? "Authorization expired (sync paused)"
+                    : connectedSheet.is_syncing
+                    ? connectedSheet.sync_mode === "auto_polling_60s"
+                      ? "Spreadsheet auto-syncing (60s)"
+                      : "Spreadsheet live syncing"
                     : "Spreadsheet connected"
                   : "No spreadsheet connected"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <SpreadsheetSelector onSelectChange={() => setPage(1)} />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -489,6 +510,27 @@ const Products = () => {
             </div>
           </div>
         </div>
+
+        {/* Google OAuth Expired Banner */}
+        {connectedSheet?.status === "EXPIRED_AUTH" && (
+          <div className="mb-4 flex items-center justify-between gap-3 px-3.5 py-2.5 bg-amber-50/90 border border-amber-200 text-amber-900 rounded-[4px] text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+              <span>
+                <strong>Google Authorization Expired:</strong> Synchronization for this spreadsheet is currently paused. Please reconnect to resume automatic inventory sync.
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setSettingsTab?.("connection");
+                setSettingsOpen?.(true);
+              }}
+              className="px-2.5 py-1 bg-white border border-amber-300 hover:border-amber-400 text-amber-900 hover:bg-amber-50 rounded-[4px] text-[11px] font-medium transition-colors flex-shrink-0 shadow-2xs"
+            >
+              Reconnect Sheet
+            </button>
+          </div>
+        )}
 
         {/* Active Filter Chips (if any filter is selected) */}
         {Object.keys(activeFilters).length > 0 && (

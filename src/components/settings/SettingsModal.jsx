@@ -13,7 +13,7 @@ import {
 } from "react-icons/fi";
 import BolAccountsSection from "./BolAccountsSection";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
-import { LuUnplug } from "react-icons/lu";
+import { LuUnplug, LuRefreshCw } from "react-icons/lu";
 import { useUI } from "../../Provider/ContextProvider";
 import { getUser, setUser } from "../../utils/session";
 import {
@@ -89,6 +89,8 @@ const SettingsModal = () => {
   const [tabsList, setTabsList] = useState([]);
   const [selectedSheetUrl, setSelectedSheetUrl] = useState("");
   const [isPublicTabSelect, setIsPublicTabSelect] = useState(false); // To know if we should call importPublic or importOAuth
+  const [importingTabId, setImportingTabId] = useState(null); // tab row currently being imported
+  const [loadingSheetId, setLoadingSheetId] = useState(null); // spreadsheet row currently fetching its tabs
 
   const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
   const [disconnectSheetUrl, setDisconnectSheetUrl] = useState("");
@@ -115,6 +117,8 @@ const SettingsModal = () => {
   }, [settingsOpen]);
 
   const sheets = connected?.connected_sheets || [];
+  const importingTab = importingTabId !== null || importingPublic || importingOAuth;
+  const loadingSheetTabs = loadingSheetId !== null;
   const account = profile || getUser() || {};
 
   // Persist any profile change and keep localStorage (navbar) in sync.
@@ -281,6 +285,7 @@ const SettingsModal = () => {
 
   const handleSelectOauthSheet = async (sheet) => {
     const sheetUrl = sheet.webViewLink;
+    setLoadingSheetId(sheet.id);
     try {
       const res = await getSpreadsheetTabs({ spreadsheet_url: sheetUrl, access_token: oauthToken }).unwrap();
       setTabsList(res.tabs || []);
@@ -290,10 +295,13 @@ const SettingsModal = () => {
       setTabsModalOpen(true);
     } catch (err) {
       toast.error("Failed to fetch tabs for this sheet");
+    } finally {
+      setLoadingSheetId(null);
     }
   };
 
   const handleImportSheet = async (sheetId) => {
+    setImportingTabId(sheetId);
     try {
       if (isPublicTabSelect) {
         await importPublicSheet({ spreadsheet_url: selectedSheetUrl, sheet_id: sheetId }).unwrap();
@@ -306,6 +314,8 @@ const SettingsModal = () => {
       setPublicLinkUrl("");
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to import sheet");
+    } finally {
+      setImportingTabId(null);
     }
   };
 
@@ -479,110 +489,156 @@ const SettingsModal = () => {
               {loadingSheets ? (
                 <Spin />
               ) : sheets.length === 0 ? (
-                <div className="rounded border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-4">
+                <div className="rounded-[4px] border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-4">
                   No spreadsheet connected. Please add one below.
                 </div>
               ) : (
                 <div className="space-y-2 mb-4">
-                  {sheets.map((s) => (
-                    <div
-                      key={s.spreadsheet_url}
-                      className="rounded border border-gray-200 bg-white p-3"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="w-9 h-9 rounded bg-gray-100 text-gray-500 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                          <BsFileEarmarkSpreadsheet size={15} />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-[13px] font-semibold text-gray-900 truncate">
-                              Inventory ({s.item_count} items)
-                            </p>
-                            {s.is_syncing ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-500 flex-shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Syncing
+                  {sheets.map((s) => {
+                    const isAuthExpired = s.status === "EXPIRED_AUTH";
+                    const isPublic = s.import_type === "public" || s.sync_mode === "auto_polling_60s";
+
+                    return (
+                      <div
+                        key={s.spreadsheet_url}
+                        className="rounded-[4px] border border-gray-200 bg-white p-3.5 transition-all hover:border-gray-300"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="w-8 h-8 rounded-[4px] bg-gray-50 text-gray-600 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                            <BsFileEarmarkSpreadsheet size={15} />
+                          </span>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-[13px] font-semibold text-gray-900 truncate">
+                                {s.title || "Inventory Sheet"} ({s.item_count} {s.item_count === 1 ? "item" : "items"})
+                              </p>
+
+                              {isAuthExpired ? (
+                                <span
+                                  title={s.last_error || "Google OAuth authorization expired. Please reconnect."}
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Auth Expired
+                                </span>
+                              ) : s.is_syncing ? (
+                                <span
+                                  title={isPublic ? "Public Google Sheet: changes automatically sync every 60 seconds." : "Google Drive push notifications actively streaming changes."}
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  {isPublic ? "Auto-Syncing (60s)" : "Live Syncing"}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200 flex-shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                  Disconnected
+                                </span>
+                              )}
+
+                              <span className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">
+                                {s.import_type === "oauth" ? "OAuth" : "Public Link"}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 flex-shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" /> Disconnected
-                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <FiLink2 size={11} className="text-gray-400 flex-shrink-0" />
+                              <a
+                                href={s.spreadsheet_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-gray-500 hover:text-gray-900 truncate underline-offset-2 hover:underline"
+                                title={s.spreadsheet_url}
+                              >
+                                {s.spreadsheet_url}
+                              </a>
+                            </div>
+
+                            {isAuthExpired && (
+                              <p className="text-[11px] text-amber-600 mt-1.5">
+                                Google authorization expired. Click Reconnect below to restore synchronization.
+                              </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <FiLink2 size={11} className="text-gray-300 flex-shrink-0" />
-                            <span className="text-[11px] text-gray-400 truncate">
-                              {s.spreadsheet_url}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {s.is_syncing ? (
-                            <button
-                              onClick={() => {
-                                Modal.confirm({
-                                  title: "Disconnect Syncing?",
-                                  content: "Your products will remain in the dashboard, but will no longer automatically sync from Google Sheets.",
-                                  okText: "Disconnect",
-                                  okType: "danger",
-                                  onOk: async () => {
-                                    try {
-                                      await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: false }).unwrap();
-                                      toast.success("Disconnected from Google Sheet");
-                                    } catch (err) {
-                                      toast.error(err?.data?.detail || "Failed to disconnect");
-                                    }
-                                  }
-                                });
-                              }}
-                              disabled={unlinking}
-                              className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded flex-shrink-0 disabled:opacity-50 transition-colors"
-                            >
-                              <LuUnplug size={13} /> Disconnect
-                            </button>
-                          ) : (
-                            <div className="flex gap-2">
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {isAuthExpired ? (
+                              <button
+                                onClick={() => loginWithGoogle()}
+                                className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 rounded-[4px] transition-colors shadow-xs"
+                              >
+                                <LuRefreshCw size={12} /> Reconnect
+                              </button>
+                            ) : s.is_syncing ? (
                               <button
                                 onClick={() => {
                                   Modal.confirm({
-                                    title: "Delete All Data?",
-                                    content: "Are you sure you want to delete all products imported from this sheet? This action cannot be undone.",
-                                    okText: "Delete",
+                                    title: "Disconnect Syncing?",
+                                    content: "Your products will remain in the dashboard, but will no longer automatically sync from Google Sheets.",
+                                    okText: "Disconnect",
                                     okType: "danger",
                                     onOk: async () => {
                                       try {
-                                        await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: true }).unwrap();
-                                        toast.success("Sheet and products deleted");
+                                        await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: false }).unwrap();
+                                        toast.success("Disconnected from Google Sheet");
                                       } catch (err) {
-                                        toast.error(err?.data?.detail || "Failed to delete sheet data");
+                                        toast.error(err?.data?.detail || "Failed to disconnect");
                                       }
                                     }
                                   });
                                 }}
                                 disabled={unlinking}
-                                className="flex items-center justify-center text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded flex-shrink-0 disabled:opacity-50 transition-colors"
+                                className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
                               >
-                                Delete
+                                <LuUnplug size={13} /> Disconnect
                               </button>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await resyncInventory().unwrap();
-                                    toast.success("Successfully connected and synced");
-                                  } catch (err) {
-                                    toast.error(err?.data?.detail || "Failed to sync");
-                                  }
-                                }}
-                                disabled={resyncing}
-                                className="flex items-center justify-center text-[11px] font-medium text-gray-900 border border-gray-300 hover:bg-gray-50 px-2.5 py-1.5 rounded flex-shrink-0 disabled:opacity-50 transition-colors"
-                              >
-                                Connect
-                              </button>
-                            </div>
-                          )}
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    Modal.confirm({
+                                      title: "Delete All Data?",
+                                      content: "Are you sure you want to delete all products imported from this sheet? This action cannot be undone.",
+                                      okText: "Delete",
+                                      okType: "danger",
+                                      onOk: async () => {
+                                        try {
+                                          await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: true }).unwrap();
+                                          toast.success("Sheet and products deleted");
+                                        } catch (err) {
+                                          toast.error(err?.data?.detail || "Failed to delete sheet data");
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  disabled={unlinking}
+                                  className="flex items-center justify-center text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await resyncInventory().unwrap();
+                                      toast.success("Successfully connected and synced");
+                                    } catch (err) {
+                                      toast.error(err?.data?.detail || "Failed to sync");
+                                    }
+                                  }}
+                                  disabled={resyncing}
+                                  className="flex items-center justify-center text-[11px] font-medium text-gray-900 border border-gray-300 hover:bg-gray-50 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
+                                >
+                                  Sync
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -590,14 +646,14 @@ const SettingsModal = () => {
               <div className="flex flex-col sm:flex-row gap-2 mb-6">
                 <button
                   onClick={() => loginWithGoogle()}
-                  className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"
                 >
                   <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
                   Connect with Google
                 </button>
                 <button
                   onClick={() => setPublicLinkModalOpen(true)}
-                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-xs font-medium py-2.5 rounded hover:bg-gray-50 transition-colors flex items-center justify-center"
+                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center"
                 >
                   Add Public Link
                 </button>
@@ -719,7 +775,9 @@ const SettingsModal = () => {
     {/* OAuth Sheets Modal */}
     <Modal
       open={oauthSheetsModalOpen}
-      onCancel={() => setOauthSheetsModalOpen(false)}
+      onCancel={() => { if (!loadingSheetTabs) setOauthSheetsModalOpen(false); }}
+      closable={!loadingSheetTabs}
+      maskClosable={!loadingSheetTabs}
       title="Select Spreadsheet"
       footer={null}
       zIndex={1050}
@@ -738,16 +796,28 @@ const SettingsModal = () => {
           <p className="text-sm text-gray-500">No spreadsheets found.</p>
         ) : (
           <div className="space-y-2">
-            {oauthSheetsList.map(sheet => (
-              <button 
-                key={sheet.id}
-                onClick={() => handleSelectOauthSheet(sheet)}
-                className="w-full text-left p-3 border border-gray-100 rounded-lg hover:bg-gray-50 flex items-center gap-3"
-              >
-                <BsFileEarmarkSpreadsheet className="text-green-600" size={18} />
-                <span className="text-sm font-medium text-gray-800 truncate">{sheet.name}</span>
-              </button>
-            ))}
+            {oauthSheetsList.map(sheet => {
+              const isLoading = loadingSheetId === sheet.id;
+              return (
+                <button 
+                  key={sheet.id}
+                  onClick={() => handleSelectOauthSheet(sheet)}
+                  disabled={loadingSheetTabs}
+                  className={`w-full text-left p-3 border rounded-lg flex items-center gap-3 transition-colors ${
+                    isLoading ? "border-gray-300 bg-gray-50" : "border-gray-100 hover:bg-gray-50"
+                  } ${loadingSheetTabs && !isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <BsFileEarmarkSpreadsheet className="text-green-600" size={18} />
+                  <span className="text-sm font-medium text-gray-800 truncate">{sheet.name}</span>
+                  {isLoading && (
+                    <span className="ml-auto flex items-center gap-2 text-xs text-gray-500 shrink-0">
+                      Loading tabs
+                      <Spin size="small" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -756,13 +826,19 @@ const SettingsModal = () => {
     {/* Sheet Tabs Modal */}
     <Modal
       open={tabsModalOpen}
-      onCancel={() => setTabsModalOpen(false)}
+      onCancel={() => { if (!importingTab) setTabsModalOpen(false); }}
+      closable={!importingTab}
+      maskClosable={!importingTab}
       title="Select Tab"
       footer={null}
       zIndex={1050}
     >
       <div className="py-4">
-        <p className="text-sm text-gray-500 mb-4">Select the specific tab to import from the spreadsheet.</p>
+        <p className="text-sm text-gray-500 mb-4">
+          {importingTab
+            ? "Importing your products. Large sheets can take a moment — please keep this window open."
+            : "Select the specific tab to import from the spreadsheet."}
+        </p>
         {fetchingTabs ? (
           <div className="space-y-3 animate-pulse py-2">
             {[1, 2, 3].map(i => (
@@ -776,17 +852,29 @@ const SettingsModal = () => {
           <p className="text-sm text-gray-500">No tabs found.</p>
         ) : (
           <div className="space-y-2">
-            {tabsList.map(tab => (
-              <button 
-                key={tab.sheet_id}
-                onClick={() => handleImportSheet(tab.sheet_id)}
-                disabled={importingPublic || importingOAuth}
-                className="w-full text-left p-3 border border-gray-100 rounded-lg hover:bg-gray-50 flex items-center justify-between"
-              >
-                <span className="text-sm font-medium text-gray-800">{tab.title}</span>
-                <FiArrowRight className="text-gray-400" />
-              </button>
-            ))}
+            {tabsList.map(tab => {
+              const isImporting = importingTabId === tab.sheet_id;
+              return (
+                <button 
+                  key={tab.sheet_id}
+                  onClick={() => handleImportSheet(tab.sheet_id)}
+                  disabled={importingTab}
+                  className={`w-full text-left p-3 border rounded-lg flex items-center justify-between gap-3 transition-colors ${
+                    isImporting ? "border-gray-300 bg-gray-50" : "border-gray-100 hover:bg-gray-50"
+                  } ${importingTab && !isImporting ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <span className="text-sm font-medium text-gray-800 truncate">{tab.title}</span>
+                  {isImporting ? (
+                    <span className="flex items-center gap-2 text-xs text-gray-500 shrink-0">
+                      Importing
+                      <Spin size="small" />
+                    </span>
+                  ) : (
+                    <FiArrowRight className="text-gray-400 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

@@ -110,7 +110,8 @@ const productApis = baseApis.injectEndpoints({
         filter_min_rating,
         filter_max_rating,
         sortBy,
-        sortOrder
+        sortOrder,
+        spreadsheet_url,
       } = {}) => {
         const query = new URLSearchParams();
         query.append("page", page);
@@ -134,6 +135,7 @@ const productApis = baseApis.injectEndpoints({
         if (filter_max_rating) query.append("filter_max_rating", filter_max_rating);
         if (sortBy) query.append("sort_by", sortBy);
         if (sortOrder) query.append("sort_order", sortOrder);
+        if (spreadsheet_url && spreadsheet_url !== "all") query.append("spreadsheet_url", spreadsheet_url);
         
         return `/spreadsheet/scrape-items?${query.toString()}`;
       },
@@ -149,20 +151,31 @@ const productApis = baseApis.injectEndpoints({
     }),
 
     getFiltersMeta: builder.query({
-      query: () => "/spreadsheet/filters-meta",
+      query: (params = {}) => {
+        const sheetUrl = typeof params === "string" ? params : params?.spreadsheet_url;
+        if (sheetUrl && sheetUrl !== "all") {
+          return `/spreadsheet/filters-meta?spreadsheet_url=${encodeURIComponent(sheetUrl)}`;
+        }
+        return "/spreadsheet/filters-meta";
+      },
       providesTags: ["Products"],
     }),
 
     // GET /spreadsheet/items?page&limit  → raw spreadsheet rows (fast, no scrape)
     getRawItems: builder.query({
-      query: ({ page = 1, limit = 50 } = {}) =>
-        `/spreadsheet/items?page=${page}&limit=${limit}`,
+      query: ({ page = 1, limit = 50, spreadsheet_url } = {}) => {
+        let url = `/spreadsheet/items?page=${page}&limit=${limit}`;
+        if (spreadsheet_url && spreadsheet_url !== "all") {
+          url += `&spreadsheet_url=${encodeURIComponent(spreadsheet_url)}`;
+        }
+        return url;
+      },
       providesTags: ["Products"],
     }),
 
-    // GET /spreadsheet/needs-review?page&limit&filter_brand&filter_reason&search
+    // GET /spreadsheet/needs-review?page&limit&filter_brand&filter_reason&search&spreadsheet_url
     getNeedsReviewItems: builder.query({
-      query: ({ page = 1, limit = 50, filter_brand, filter_reason, search } = {}) => {
+      query: ({ page = 1, limit = 50, filter_brand, filter_reason, search, spreadsheet_url } = {}) => {
         let url = `/spreadsheet/needs-review?page=${page}&limit=${limit}`;
         if (filter_brand) {
           url += `&filter_brand=${encodeURIComponent(filter_brand)}`;
@@ -172,6 +185,9 @@ const productApis = baseApis.injectEndpoints({
         }
         if (search) {
           url += `&search=${encodeURIComponent(search)}`;
+        }
+        if (spreadsheet_url && spreadsheet_url !== "all") {
+          url += `&spreadsheet_url=${encodeURIComponent(spreadsheet_url)}`;
         }
         return url;
       },

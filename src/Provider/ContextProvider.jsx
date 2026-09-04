@@ -29,6 +29,20 @@ export const UIProvider = ({ children }) => {
     dispatch(baseApis.util.resetApiState());
   };
 
+  const [selectedSpreadsheetUrl, setSelectedSpreadsheetUrlState] = useState(() => {
+    return localStorage.getItem("selectedSpreadsheetUrl") || "all";
+  });
+
+  const setSelectedSpreadsheetUrl = (url) => {
+    const val = url || "all";
+    setSelectedSpreadsheetUrlState(val);
+    if (val && val !== "all") {
+      localStorage.setItem("selectedSpreadsheetUrl", val);
+    } else {
+      localStorage.removeItem("selectedSpreadsheetUrl");
+    }
+  };
+
   const openSettings = (tab = "account") => {
     setSettingsTab(tab);
     setSettingsOpen(true);
@@ -48,6 +62,8 @@ export const UIProvider = ({ children }) => {
         setSupportOpen,
         activeBolAccountId,
         setActiveBolAccountId,
+        selectedSpreadsheetUrl,
+        setSelectedSpreadsheetUrl,
       }}
     >
       {children}
