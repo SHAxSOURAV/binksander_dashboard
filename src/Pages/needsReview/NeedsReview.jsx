@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Empty, Checkbox, message, Tooltip, Button, Select, Input, Modal } from "antd";
+import { Empty, Checkbox, message, Tooltip, Button, Select, Input, Modal, Dropdown } from "antd";
 import { 
   FiAlertCircle, FiCopy, FiExternalLink, FiCheck, 
   FiCheckCircle, FiSearch, FiTrash2 
 } from "react-icons/fi";
-import { LuRefreshCw, LuShieldCheck } from "react-icons/lu";
+import { LuRefreshCw, LuShieldCheck, LuDownload } from "react-icons/lu";
+import { SiGooglesheets } from "react-icons/si";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import { 
   useGetNeedsReviewItemsQuery, 
@@ -15,7 +16,8 @@ import {
   useSyncConnectedSheetMutation,
   useForcePassItemMutation,
   useForcePassBulkMutation,
-  useGetFiltersMetaQuery
+  useGetFiltersMetaQuery,
+  useGetConnectionQuery
 } from "../../Redux/productApis";
 import Pagination from "../../components/shared/Pagination";
 import ValidationFailureModal from "../../components/needsReview/ValidationFailureModal";
@@ -23,9 +25,13 @@ import SpreadsheetSelector from "../../components/shared/SpreadsheetSelector";
 import { useUI } from "../../Provider/ContextProvider";
 
 import { getSafeAmazonUrl } from "../../utils/urlUtils";
+import { url } from "../../Redux/main/server";
+import { getToken } from "../../utils/session";
+import { createAndPopulateGoogleSheet } from "../../utils/googleDrive";
 
 const NeedsReview = () => {
   const { selectedSpreadsheetUrl } = useUI();
+  const { data: connectionData } = useGetConnectionQuery();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [filterBrand, setFilterBrand] = useState(null);
@@ -39,6 +45,8 @@ const NeedsReview = () => {
   // Modal states for delete confirmation
   const [itemToDelete, setItemToDelete] = useState(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [createdSheetInfo, setCreatedSheetInfo] = useState(null);
 
   // Debounce the search input
   useEffect(() => {
@@ -125,6 +133,146 @@ const NeedsReview = () => {
       }
     } catch (err) {
       message.error("Failed to sync spreadsheet");
+    }
+  };
+
+  const buildExportQuery = (format = "json") => {
+    const query = new URLSearchParams();
+    if (selectedRowKeys.length > 0) {
+      // Specifically selected products via checkboxes
+      query.append("item_ids", selectedRowKeys.join(","));
+    } else {
+      // Export all products belonging to selected sheet
+      if (selectedSpreadsheetUrl && selectedSpreadsheetUrl !== "all") {
+        query.append("spreadsheet_url", selectedSpreadsheetUrl);
+      }
+      if (filterBrand && filterBrand !== "all") {
+        query.append("filter_brand", filterBrand);
+      }
+      if (filterReason && filterReason !== "all") {
+        query.append("filter_reason", filterReason);
+      }
+      if (debouncedSearch) {
+        query.append("search", debouncedSearch);
+      }
+    }
+    query.append("format", format);
+    return query;
+  };
+
+  const handleExportGoogleSheet = async () => {
+    try {
+      setIsDownloading(true);
+      const query = buildExportQuery("json");
+
+      const token = getToken();
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${url}/spreadsheet/needs-review/export?${query.toString()}`, {
+        headers,
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to export items from database");
+      }
+
+      const data = await res.json();
+      if (!data.rows || data.rows.length === 0) {
+        message.warning("No products found to export.");
+        return;
+      }
+
+      const activeSheetObj = (connectionData?.connected_sheets || []).find(
+        (s) => s.spreadsheet_url === selectedSpreadsheetUrl
+      );
+      const sheetName = activeSheetObj?.title || activeSheetObj?.name || (selectedSpreadsheetUrl !== "all" ? "Sheet" : "All Products");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const sheetTitle = selectedRowKeys.length > 0
+        ? `Needs Review - Selected (${selectedRowKeys.length}) - ${dateStr}`
+        : `Needs Review - ${sheetName} - ${dateStr}`;
+
+      message.loading({
+        content: `Creating Google Spreadsheet with ${data.rows.length} product(s)...`,
+        key: "exporting_sheet",
+        duration: 0,
+      });
+
+      const created = await createAndPopulateGoogleSheet({
+        title: sheetTitle,
+        headers: data.headers || ["EAN", "PRODUCT CATEGORY", "SUPPLIER LINK", "PRODUCT TITLE"],
+        rows: data.rows,
+      });
+
+      setCreatedSheetInfo({
+        url: created.spreadsheetUrl,
+        title: sheetTitle,
+        rowCount: data.rows.length,
+        headers: data.headers || ["EAN", "PRODUCT CATEGORY", "SUPPLIER LINK", "PRODUCT TITLE"],
+      });
+
+      message.success({
+        content: `Google Spreadsheet created with ${data.rows.length} product(s)!`,
+        key: "exporting_sheet",
+        duration: 3,
+      });
+
+      if (created?.spreadsheetUrl) {
+        window.open(created.spreadsheetUrl, "_blank");
+      }
+    } catch (err) {
+      console.error("Google Sheet Export error:", err);
+      message.error({
+        content: err?.message || "Failed to create Google Spreadsheet",
+        key: "exporting_sheet",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadCsv = async () => {
+    try {
+      setIsDownloading(true);
+      const query = buildExportQuery("csv");
+
+      const token = getToken();
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${url}/spreadsheet/needs-review/export?${query.toString()}`, {
+        headers,
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to export items");
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.download = `needs_review_products_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      message.success(
+        selectedRowKeys.length > 0
+          ? `Downloaded ${selectedRowKeys.length} selected item(s) as CSV!`
+          : "Needs Review CSV downloaded successfully!"
+      );
+    } catch (err) {
+      console.error(err);
+      message.error("Failed to download CSV");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -309,10 +457,52 @@ const NeedsReview = () => {
               onClick={handleSyncSpreadsheet}
               disabled={isSyncingSheet}
               title="Sync from spreadsheet"
-              className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition-colors cursor-pointer"
             >
               <LuRefreshCw size={16} className={isSyncingSheet ? "animate-spin" : ""} />
             </button>
+
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: "google_sheet",
+                    icon: <SiGooglesheets className="text-emerald-600" size={15} />,
+                    label: selectedRowKeys.length > 0
+                      ? `Create Google Sheet (${selectedRowKeys.length} selected)`
+                      : "Create Google Sheet (All items)",
+                    onClick: handleExportGoogleSheet,
+                  },
+                  {
+                    key: "csv",
+                    icon: <LuDownload size={15} className="text-gray-500" />,
+                    label: selectedRowKeys.length > 0
+                      ? `Download CSV (${selectedRowKeys.length} selected)`
+                      : "Download CSV (All items)",
+                    onClick: handleDownloadCsv,
+                  },
+                ],
+              }}
+              placement="bottomRight"
+            >
+              <button
+                onClick={handleExportGoogleSheet}
+                disabled={isDownloading}
+                title={
+                  selectedRowKeys.length > 0
+                    ? `Create Google Spreadsheet with ${selectedRowKeys.length} selected item(s)`
+                    : "Create Google Spreadsheet with all Needs Review items"
+                }
+                className="h-9 px-3 rounded border border-gray-200 flex items-center justify-center gap-1.5 text-gray-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50/50 disabled:opacity-50 transition-colors cursor-pointer text-xs font-semibold"
+              >
+                {isDownloading ? (
+                  <LuRefreshCw size={14} className="animate-spin text-emerald-600" />
+                ) : (
+                  <SiGooglesheets size={15} className="text-emerald-600" />
+                )}
+                <span>Google Sheet</span>
+              </button>
+            </Dropdown>
 
             <Select
               value={filterBrand || "all"}
@@ -617,6 +807,34 @@ const NeedsReview = () => {
               <FiTrash2 size={13} />
               Delete ({selectedRowKeys.length})
             </Button>
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: "google_sheet",
+                    icon: <SiGooglesheets className="text-emerald-600" size={14} />,
+                    label: `Google Spreadsheet (${selectedRowKeys.length})`,
+                    onClick: handleExportGoogleSheet,
+                  },
+                  {
+                    key: "csv",
+                    icon: <LuDownload size={14} />,
+                    label: `Download CSV (${selectedRowKeys.length})`,
+                    onClick: handleDownloadCsv,
+                  },
+                ],
+              }}
+              placement="topRight"
+            >
+              <Button
+                className="h-8 px-3 text-xs font-medium border-emerald-300 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 cursor-pointer bg-white shadow-sm"
+                loading={isDownloading}
+                onClick={handleExportGoogleSheet}
+              >
+                <SiGooglesheets className="text-emerald-600" size={14} />
+                Google Sheet ({selectedRowKeys.length})
+              </Button>
+            </Dropdown>
           </div>
         </div>
       )}
@@ -697,6 +915,70 @@ const NeedsReview = () => {
                 onClick={handleDeleteBulk}
               >
                 Delete Selected ({selectedRowKeys.length})
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Google Spreadsheet Link Modal */}
+        <Modal
+          open={!!createdSheetInfo}
+          onCancel={() => setCreatedSheetInfo(null)}
+          footer={null}
+          centered
+          width={500}
+          className="rounded-xl overflow-hidden"
+        >
+          <div className="p-4 text-center">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+              <SiGooglesheets size={24} />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">
+              Google Spreadsheet Ready!
+            </h3>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Successfully stored <span className="font-semibold text-gray-800">{createdSheetInfo?.rowCount?.toLocaleString()} product(s)</span> in your Google Spreadsheet with headers:
+              <br />
+              <span className="font-mono text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded mt-1 inline-block">
+                [EAN, PRODUCT CATEGORY, SUPPLIER LINK, PRODUCT TITLE]
+              </span>
+            </p>
+
+            <div className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-lg mb-4 text-left">
+              <input
+                type="text"
+                readOnly
+                value={createdSheetInfo?.url || ""}
+                className="bg-transparent border-0 text-xs text-gray-700 flex-1 outline-none font-mono truncate"
+              />
+              <Button
+                size="small"
+                icon={<FiCopy size={13} />}
+                onClick={() => {
+                  navigator.clipboard.writeText(createdSheetInfo?.url || "");
+                  message.success("Spreadsheet link copied to clipboard!");
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                className="h-9 px-4 text-xs font-medium"
+                onClick={() => setCreatedSheetInfo(null)}
+              >
+                Close
+              </Button>
+              <Button
+                type="primary"
+                className="h-9 px-5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5"
+                onClick={() => {
+                  window.open(createdSheetInfo?.url, "_blank");
+                }}
+              >
+                <FiExternalLink size={14} />
+                Open Google Spreadsheet
               </Button>
             </div>
           </div>
