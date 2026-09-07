@@ -10,8 +10,10 @@ import {
   FiArrowLeft,
   FiCamera,
   FiEdit2,
+  FiUsers,
 } from "react-icons/fi";
 import BolAccountsSection from "./BolAccountsSection";
+import TeamSection from "./TeamSection";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { LuUnplug, LuRefreshCw } from "react-icons/lu";
 import { useUI } from "../../Provider/ContextProvider";
@@ -53,6 +55,33 @@ const SettingsModal = () => {
   const { settingsOpen, setSettingsOpen, settingsTab, setSettingsTab } = useUI();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [bolEditOpen, setBolEditOpen] = useState(false);
+
+  const currentUser = getUser();
+  const isSubUser = Boolean(currentUser?.owner_id);
+  const userRole = currentUser?.role || "seller";
+  const canManageTeam =
+    !isSubUser ||
+    [
+      "manager",
+      "admin",
+      "seller",
+      "order_processor_manager",
+      "product_lister_manager",
+    ].includes(userRole);
+  const canAccessConnection =
+    !isSubUser || ["manager", "admin", "seller"].includes(userRole);
+
+  const visibleTabs = [
+    { key: "account", label: "Account", icon: <FiUser size={16} /> },
+    ...(canAccessConnection
+      ? [{ key: "connection", label: "Connection", icon: <FiLink2 size={16} /> }]
+      : []),
+    ...(canManageTeam
+      ? [{ key: "team", label: "Team", icon: <FiUsers size={16} /> }]
+      : []),
+    { key: "privacy", label: "Privacy & Security", icon: <FiShield size={16} /> },
+  ];
+
 
   const { data: profile, isLoading: loadingProfile } = useGetProfileQuery(
     undefined,
@@ -337,7 +366,7 @@ const SettingsModal = () => {
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 font-poppins mt-1 min-h-[420px]">
         {/* Tabs */}
         <div className="sm:w-44 flex sm:flex-col gap-0.5 flex-wrap mb-3 sm:mb-0">
-          {tabs.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.key}
               onClick={() => {
@@ -645,14 +674,26 @@ const SettingsModal = () => {
               {/* Add Spreadsheet Buttons */}
               <div className="flex flex-col sm:flex-row gap-2 mb-6">
                 <button
-                  onClick={() => loginWithGoogle()}
+                  onClick={() => {
+                    if (!bolCreds || bolCreds.length === 0) {
+                      toast.error("You must connect a Bol.com account first before adding a spreadsheet.");
+                      return;
+                    }
+                    loginWithGoogle();
+                  }}
                   className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"
                 >
                   <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
                   Connect with Google
                 </button>
                 <button
-                  onClick={() => setPublicLinkModalOpen(true)}
+                  onClick={() => {
+                    if (!bolCreds || bolCreds.length === 0) {
+                      toast.error("You must connect a Bol.com account first before adding a spreadsheet.");
+                      return;
+                    }
+                    setPublicLinkModalOpen(true);
+                  }}
                   className="flex-1 border border-gray-200 bg-white text-gray-700 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center"
                 >
                   Add Public Link
@@ -672,6 +713,9 @@ const SettingsModal = () => {
 
             </div>
           )}
+
+          {/* Team Management */}
+          {settingsTab === "team" && <TeamSection />}
 
           {/* Privacy & Security */}
           {settingsTab === "privacy" && !showChangePassword && (

@@ -194,9 +194,10 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
   // Translation & Validation State Checks for all selected photos
   const selectedCount = selectedPhotos.length;
+  const hasInsufficientPhotos = selectedCount < 3;
   const untranslatedSelectedPhotos = form.photos.filter((src, i) => selectedPhotos.includes(i) && !isPhotoTranslated(i, src));
   const untranslatedCount = untranslatedSelectedPhotos.length;
-  const hasUntranslatedImages = selectedCount === 0 || untranslatedCount > 0;
+  const hasUntranslatedImages = untranslatedCount > 0;
 
   const cleanEan = (form.ean || "").replace(/\D/g, "");
   const isValidEan = cleanEan.length === 13;
@@ -206,7 +207,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     updating ||
     translatingAll ||
     translatingIndex !== null ||
-    (!isBulkMode && (hasUntranslatedImages || !isValidEan || !form.title?.trim() || !form.bol_price))
+    (!isBulkMode && (hasInsufficientPhotos || hasUntranslatedImages || !isValidEan || !form.title?.trim() || !form.bol_price))
   );
 
   const liveOfferPayload = useMemo(() => {
@@ -329,6 +330,9 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      if (form?.asin) {
+        formData.append("asin", form.asin);
+      }
       const token = localStorage.getItem("bol_access_token") || getToken() || "";
       const res = await fetch(`${API_URL}/bol/upload-image`, {
         method: "POST",
@@ -609,6 +613,11 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   };
 
   const handlePublish = async () => {
+    if (!isBulkMode && selectedPhotos.length < 3) {
+      toast.error(`Cannot publish: At least 3 photos are required (currently ${selectedPhotos.length}/3). Please upload more photos in the Media Gallery.`);
+      return;
+    }
+
     const activeCred = bolCreds.find(c => c.account_id === selectedAccount);
     const hasCreds = activeCred?.client_id && activeCred?.is_secret_set;
     if (!hasCreds) {
@@ -1160,18 +1169,21 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   label: (
                     <div className="flex items-center gap-2">
                       <span>Media Gallery</span>
-                      {!isBulkMode && (
-                        hasUntranslatedImages ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold text-amber-700 border border-amber-200 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                            {untranslatedCount > 0 ? `${untranslatedCount} Untranslated` : "Select Image"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold text-gray-600 border border-gray-200 flex items-center gap-1">
-                            <span>✓</span>
-                            <span>{selectedCount}/{selectedCount}</span>
-                          </span>
-                        )
+                      {hasInsufficientPhotos ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                          <span>{selectedCount}/3 Photos</span>
+                        </span>
+                      ) : hasUntranslatedImages ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-amber-700 border border-amber-200 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                          {untranslatedCount > 0 ? `${untranslatedCount} Untranslated` : "Select Image"}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-gray-600 border border-gray-200 flex items-center gap-1">
+                          <span>✓</span>
+                          <span>{selectedCount}/{selectedCount} Ready</span>
+                        </span>
                       )}
                     </div>
                   ),
@@ -1304,13 +1316,20 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-6 pt-5 border-t border-gray-100">
               {/* Left side: Dynamic translation / validation status banner */}
               <div className="flex items-center gap-2">
-                {!isBulkMode && hasUntranslatedImages ? (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-800 text-xs font-semibold">
+                {!isBulkMode && hasInsufficientPhotos ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-xs font-semibold">
                     <span>⚠️</span>
                     <span>
                       {selectedCount === 0
-                        ? "Select at least 1 image to publish."
-                        : `${untranslatedCount} selected image${untranslatedCount === 1 ? '' : 's'} untranslated.`}
+                        ? "At least 3 photos required to publish (0/3 selected). Please upload photos in Media Gallery."
+                        : `At least 3 photos required to publish (${selectedCount}/3 selected). Please upload ${3 - selectedCount} more photo${3 - selectedCount === 1 ? '' : 's'} in Media Gallery.`}
+                    </span>
+                  </div>
+                ) : !isBulkMode && hasUntranslatedImages ? (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-800 text-xs font-semibold">
+                    <span>⚠️</span>
+                    <span>
+                      {untranslatedCount} selected image{untranslatedCount === 1 ? '' : 's'} untranslated.
                     </span>
                     {untranslatedCount > 0 && (
                       <button
@@ -1348,9 +1367,11 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   disabled={isPublishDisabled}
                   className="h-10 px-6 rounded-lg font-semibold bg-gray-900 text-white disabled:!bg-gray-200 disabled:!text-gray-400 disabled:!border-gray-200 disabled:!cursor-not-allowed cursor-pointer transition-all"
                   title={
-                    hasUntranslatedImages && !isBulkMode
-                      ? "All product images must be translated to Dutch before publishing."
-                      : (!isValidEan && !isBulkMode ? "A valid 13-digit EAN is required." : "")
+                    hasInsufficientPhotos && !isBulkMode
+                      ? `At least 3 photos are required to publish (currently ${selectedCount}/3 selected).`
+                      : (hasUntranslatedImages && !isBulkMode
+                        ? "All product images must be translated to Dutch before publishing."
+                        : (!isValidEan && !isBulkMode ? "A valid 13-digit EAN is required." : ""))
                   }
                 >
                   {isBulkMode ? "Save Draft" : (scheduleEnabled ? "Schedule Publish" : "Publish to Bol.com")}

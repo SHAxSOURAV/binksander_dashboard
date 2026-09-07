@@ -143,6 +143,7 @@ const productApis = baseApis.injectEndpoints({
         page: arg?.page || 1,
         limit: arg?.limit || 50,
         total: res?.total || 0,
+        total_needs_review: res?.total_needs_review || 0,
         has_any_items: res?.has_any_items || false,
         items: (res?.data || []).map(mapItem),
       }),
@@ -204,11 +205,14 @@ const productApis = baseApis.injectEndpoints({
     }),
 
     deleteNeedsReviewBulk: builder.mutation({
-      query: (itemIds) => ({
-        url: "/spreadsheet/needs-review/bulk-delete",
-        method: "POST",
-        body: { item_ids: itemIds },
-      }),
+      query: (arg) => {
+        const body = Array.isArray(arg) ? { item_ids: arg } : arg;
+        return {
+          url: "/spreadsheet/needs-review/bulk-delete",
+          method: "POST",
+          body,
+        };
+      },
       invalidatesTags: ["Products"],
     }),
 
@@ -245,11 +249,14 @@ const productApis = baseApis.injectEndpoints({
     }),
 
     forcePassBulk: builder.mutation({
-      query: (itemIds) => ({
-        url: "/spreadsheet/force-pass-bulk",
-        method: "POST",
-        body: { item_ids: itemIds },
-      }),
+      query: (arg) => {
+        const body = Array.isArray(arg) ? { item_ids: arg } : arg;
+        return {
+          url: "/spreadsheet/force-pass-bulk",
+          method: "POST",
+          body,
+        };
+      },
       invalidatesTags: ["Products"],
     }),
 
@@ -721,12 +728,12 @@ const productApis = baseApis.injectEndpoints({
       invalidatesTags: ["Products", "Drafts", "BolOffers"],
     }),
 
-    // POST /spreadsheet/revalidate-items (Quality validation check for Inventory Catalog)
+    // POST /spreadsheet/revalidate-items (Quality validation check for Inventory Catalog & Needs Review)
     revalidateInventoryItems: builder.mutation({
-      query: ({ item_ids, asins, eans, all_items } = {}) => ({
+      query: ({ item_ids, asins, eans, all_items, select_all, spreadsheet_url, filter_brand, filter_reason, search } = {}) => ({
         url: "/spreadsheet/revalidate-items",
         method: "POST",
-        body: { item_ids, asins, eans, all_items },
+        body: { item_ids, asins, eans, all_items, select_all, spreadsheet_url, filter_brand, filter_reason, search },
       }),
       invalidatesTags: ["Products", "NeedsReview"],
     }),
