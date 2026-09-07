@@ -1,6 +1,8 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { baseApis } from "../Redux/main/baseApis";
+import { useGetConnectionQuery } from "../Redux/productApis";
+import { getToken } from "../utils/session";
 
 const UIContext = createContext(null);
 
@@ -22,10 +24,6 @@ export const UIProvider = ({ children }) => {
     if (id) localStorage.setItem("activeBolAccountId", id);
     else localStorage.removeItem("activeBolAccountId");
 
-    // The selected account travels as the X-Bol-Account-ID header, which RTK Query
-    // does not include in its cache key - so without this every screen would keep
-    // showing the previous account's KPIs, offers and orders until a tag happened to
-    // be invalidated. Dropping the whole cache forces a clean refetch per account.
     dispatch(baseApis.util.resetApiState());
   };
 
@@ -42,6 +40,29 @@ export const UIProvider = ({ children }) => {
       localStorage.removeItem("selectedSpreadsheetUrl");
     }
   };
+
+  const hasToken = Boolean(getToken());
+  const { data: connectionData } = useGetConnectionQuery(undefined, {
+    skip: !hasToken,
+  });
+
+  useEffect(() => {
+    if (connectionData && Array.isArray(connectionData.connected_sheets)) {
+      const sheets = connectionData.connected_sheets;
+      if (sheets.length < 2) {
+        // If 0 or only 1 spreadsheet is connected, user shouldn't be locked to a stale filter
+        if (selectedSpreadsheetUrl !== "all") {
+          setSelectedSpreadsheetUrl("all");
+        }
+      } else if (
+        selectedSpreadsheetUrl !== "all" &&
+        !sheets.some((s) => s.spreadsheet_url === selectedSpreadsheetUrl)
+      ) {
+        // Stale URL from a previously disconnected or modified spreadsheet
+        setSelectedSpreadsheetUrl("all");
+      }
+    }
+  }, [connectionData, selectedSpreadsheetUrl]);
 
   const openSettings = (tab = "account") => {
     setSettingsTab(tab);

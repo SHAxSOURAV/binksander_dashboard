@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import {
   MdOutlineDashboard,
@@ -10,34 +11,29 @@ import {
 import { TbBrandAmazon } from "react-icons/tb";
 import { LuTruck } from "react-icons/lu";
 import Logo from "../../../components/shared/Logo";
+import { getUser, setUser } from "../../../utils/session";
+import { useGetProfileQuery } from "../../../Redux/profileApis";
 
 const menuItems = [
-  { name: "Overview", link: "/", icon: <MdOutlineDashboard size={20} />, end: true },
-  { name: "Inventory Catalog", link: "/products", icon: <MdOutlineInventory2 size={20} /> },
-  { name: "Needs Review", link: "/needs-review", icon: <MdOutlineRateReview size={20} /> },
-  { name: "Bol.com Offers", link: "/bol-listings", icon: <MdOutlineLocalOffer size={20} /> },
-  { name: "Sales & Orders", link: "/orders", icon: <MdOutlineShoppingCart size={20} /> },
+  { module: "overview", name: "Overview", link: "/", icon: <MdOutlineDashboard size={20} />, end: true },
+  { module: "inventory", name: "Inventory Catalog", link: "/products", icon: <MdOutlineInventory2 size={20} /> },
+  { module: "needs_review", name: "Needs Review", link: "/needs-review", icon: <MdOutlineRateReview size={20} /> },
+  { module: "offers", name: "Bol.com Offers", link: "/bol-listings", icon: <MdOutlineLocalOffer size={20} /> },
+  { module: "sales", name: "Sales & Orders", link: "/orders", icon: <MdOutlineShoppingCart size={20} /> },
   {
+    module: "sourcing",
     name: "Amazon Sourcing",
     link: "/amazon-operations",
     icon: <TbBrandAmazon size={20} />,
   },
-  // {
-  //   name: "Amazon Lookup",
-  //   link: "/amazon-lookup",
-  //   icon: <TbBrandAmazon size={20} />,
-  // },
-  // {
-  //   name: "Affiliate Config",
-  //   link: "/amazon-affiliates",
-  //   icon: <TbBrandAmazon size={20} />,
-  // },
   {
+    module: "rimco",
     name: "Rimco Logistics",
     link: "/rimco-operations",
     icon: <LuTruck size={20} />,
   },
   {
+    module: "returns",
     name: "Amazon Return Dashboard",
     link: "https://amazon-dashbaord.vercel.app",
     icon: <MdOutlineAssignmentReturn size={20} />,
@@ -46,6 +42,18 @@ const menuItems = [
 ];
 
 const Sidebar = ({ onNavigate }) => {
+  const { data: profile } = useGetProfileQuery();
+  const currentUser = profile || getUser();
+  const isOwnerOrAdmin =
+    !currentUser?.owner_id ||
+    ["manager", "admin", "seller"].includes(currentUser?.role);
+  const permissions = currentUser?.permissions || [];
+
+  const visibleMenuItems = useMemo(() => {
+    if (isOwnerOrAdmin) return menuItems;
+    return menuItems.filter((item) => !item.module || permissions.includes(item.module));
+  }, [isOwnerOrAdmin, permissions]);
+
   return (
     <div className="h-full bg-white flex flex-col font-poppins">
       {/* Logo */}
@@ -58,7 +66,7 @@ const Sidebar = ({ onNavigate }) => {
         <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-300 px-3 mb-1.5">
           Menu
         </p>
-        {menuItems.map((item, index) =>
+        {visibleMenuItems.map((item, index) =>
           item.isExternal ? (
             <a
               href={item.link}

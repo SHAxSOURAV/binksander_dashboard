@@ -40,6 +40,7 @@ const NeedsReview = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFailure, setSelectedFailure] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [view, setView] = useState("list");
 
   // Modal states for delete confirmation
@@ -56,6 +57,12 @@ const NeedsReview = () => {
     }, 400);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Reset selection when search, filters, or sheet change
+  useEffect(() => {
+    setSelectedRowKeys([]);
+    setSelectAllMatching(false);
+  }, [debouncedSearch, filterBrand, filterReason, selectedSpreadsheetUrl]);
 
   const { data, isLoading } = useGetNeedsReviewItemsQuery(
     {
@@ -89,11 +96,22 @@ const NeedsReview = () => {
   };
 
   const handleRevalidateBulk = async () => {
-    if (!selectedRowKeys.length) return;
+    if (!selectedRowKeys.length && !selectAllMatching) return;
     try {
-      const res = await revalidateInventoryItems({ item_ids: selectedRowKeys }).unwrap();
-      message.success(res.message || `Started re-validation for ${selectedRowKeys.length} product(s)!`);
+      const payload = selectAllMatching
+        ? {
+            select_all: true,
+            spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            filter_brand: filterBrand && filterBrand !== "all" ? filterBrand : undefined,
+            filter_reason: filterReason && filterReason !== "all" ? filterReason : undefined,
+            search: debouncedSearch || undefined,
+          }
+        : { item_ids: selectedRowKeys };
+      const res = await revalidateInventoryItems(payload).unwrap();
+      const count = selectAllMatching ? (data?.total || 0) : selectedRowKeys.length;
+      message.success(res.message || `Started re-validation for ${count.toLocaleString()} product(s)!`);
       setSelectedRowKeys([]);
+      setSelectAllMatching(false);
     } catch (err) {
       message.error(err?.data?.detail || "Failed to revalidate selected items");
     }
@@ -112,11 +130,22 @@ const NeedsReview = () => {
   };
 
   const handleDeleteBulk = async () => {
-    if (!selectedRowKeys.length) return;
+    if (!selectedRowKeys.length && !selectAllMatching) return;
     try {
-      const res = await deleteBulk(selectedRowKeys).unwrap();
-      message.success(res.message || `Deleted ${selectedRowKeys.length} product(s)`);
+      const payload = selectAllMatching
+        ? {
+            select_all: true,
+            spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            filter_brand: filterBrand && filterBrand !== "all" ? filterBrand : undefined,
+            filter_reason: filterReason && filterReason !== "all" ? filterReason : undefined,
+            search: debouncedSearch || undefined,
+          }
+        : { item_ids: selectedRowKeys };
+      const res = await deleteBulk(payload).unwrap();
+      const count = selectAllMatching ? (data?.total || 0) : selectedRowKeys.length;
+      message.success(res.message || `Deleted ${count.toLocaleString()} product(s)`);
       setSelectedRowKeys([]);
+      setSelectAllMatching(false);
       setIsBulkDeleteOpen(false);
     } catch (err) {
       message.error(err?.data?.detail || "Failed to delete selected products");
@@ -138,8 +167,8 @@ const NeedsReview = () => {
 
   const buildExportQuery = (format = "json") => {
     const query = new URLSearchParams();
-    if (selectedRowKeys.length > 0) {
-      // Specifically selected products via checkboxes
+    if (selectedRowKeys.length > 0 && !selectAllMatching) {
+      // Specifically selected products on page via checkboxes
       query.append("item_ids", selectedRowKeys.join(","));
     } else {
       // Export all products belonging to selected sheet
@@ -190,8 +219,9 @@ const NeedsReview = () => {
       );
       const sheetName = activeSheetObj?.title || activeSheetObj?.name || (selectedSpreadsheetUrl !== "all" ? "Sheet" : "All Products");
       const dateStr = new Date().toISOString().slice(0, 10);
-      const sheetTitle = selectedRowKeys.length > 0
-        ? `Needs Review - Selected (${selectedRowKeys.length}) - ${dateStr}`
+      const effectiveCount = selectAllMatching ? (data?.total || 0) : selectedRowKeys.length;
+      const sheetTitle = (selectAllMatching || selectedRowKeys.length > 0)
+        ? `Needs Review - Selected (${effectiveCount.toLocaleString()}) - ${dateStr}`
         : `Needs Review - ${sheetName} - ${dateStr}`;
 
       message.loading({
@@ -263,9 +293,10 @@ const NeedsReview = () => {
       a.remove();
       window.URL.revokeObjectURL(downloadUrl);
 
+      const effectiveCount = selectAllMatching ? (data?.total || 0) : selectedRowKeys.length;
       message.success(
-        selectedRowKeys.length > 0
-          ? `Downloaded ${selectedRowKeys.length} selected item(s) as CSV!`
+        effectiveCount > 0
+          ? `Downloaded ${effectiveCount.toLocaleString()} selected item(s) as CSV!`
           : "Needs Review CSV downloaded successfully!"
       );
     } catch (err) {
@@ -286,11 +317,22 @@ const NeedsReview = () => {
   };
 
   const handleForcePassBulk = async () => {
-    if (!selectedRowKeys.length) return;
+    if (!selectedRowKeys.length && !selectAllMatching) return;
     try {
-      const res = await forcePassBulk(selectedRowKeys).unwrap();
-      message.success(res.message || `Forcibly approved ${selectedRowKeys.length} product(s)!`);
+      const payload = selectAllMatching
+        ? {
+            select_all: true,
+            spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            filter_brand: filterBrand && filterBrand !== "all" ? filterBrand : undefined,
+            filter_reason: filterReason && filterReason !== "all" ? filterReason : undefined,
+            search: debouncedSearch || undefined,
+          }
+        : { item_ids: selectedRowKeys };
+      const res = await forcePassBulk(payload).unwrap();
+      const count = selectAllMatching ? (data?.total || 0) : selectedRowKeys.length;
+      message.success(res.message || `Forcibly approved ${count.toLocaleString()} product(s)!`);
       setSelectedRowKeys([]);
+      setSelectAllMatching(false);
     } catch (err) {
       message.error("Failed to approve selected products");
     }
@@ -343,8 +385,14 @@ const NeedsReview = () => {
   const failingChecks = (r) =>
     Object.entries(r.validation_checks || {}).filter(([, v]) => v !== "pass");
 
-  const toggleRow = (id, checked) =>
-    setSelectedRowKeys((prev) => (checked ? [...prev, id] : prev.filter((k) => k !== id)));
+  const toggleRow = (id, checked) => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelectedRowKeys(items.map((i) => i._id).filter((k) => k !== id));
+    } else {
+      setSelectedRowKeys((prev) => (checked ? [...prev, id] : prev.filter((k) => k !== id)));
+    }
+  };
 
   /** Icon-only row actions. Text labels cost a third of the row width. */
   const RowActions = ({ record }) => {
@@ -415,10 +463,54 @@ const NeedsReview = () => {
   const totalPages = data?.total_pages || 0;
   const totalItems = data?.total || 0;
 
+  const isAllPageSelected = items.length > 0 && selectedRowKeys.length === items.length;
+  const isHeaderChecked = selectAllMatching || isAllPageSelected;
+  const isHeaderIndeterminate = !selectAllMatching && selectedRowKeys.length > 0 && selectedRowKeys.length < items.length;
+
+  const handleHeaderSelectAll = () => {
+    if (items.length === 0) return;
+
+    if (selectAllMatching) {
+      // 3rd click: Deselect all
+      setSelectedRowKeys([]);
+      setSelectAllMatching(false);
+    } else if (selectedRowKeys.length === items.length) {
+      // 2nd click: If all 50 on page already selected, select all matching products across all pages
+      if (totalItems > items.length) {
+        setSelectAllMatching(true);
+        message.info({
+          content: `Selected all ${totalItems.toLocaleString()} products in Needs Review`,
+          key: "select_all_alert",
+          duration: 3,
+        });
+      } else {
+        setSelectedRowKeys([]);
+        setSelectAllMatching(false);
+      }
+    } else {
+      // 1st click: Select all items on this page
+      setSelectedRowKeys(items.map((i) => i._id));
+      setSelectAllMatching(false);
+    }
+  };
+
+  const getHeaderTooltip = () => {
+    if (selectAllMatching) {
+      return `All ${totalItems.toLocaleString()} products selected across all pages. Click to deselect all.`;
+    }
+    if (isAllPageSelected && totalItems > items.length) {
+      return `All ${items.length} products on this page selected. Click again to select all ${totalItems.toLocaleString()} products.`;
+    }
+    return `Select all ${items.length} products on this page`;
+  };
+
   const brandOptions = [
     { value: "all", label: "All Brands" },
     ...(filtersMeta?.brands || []).map((b) => ({ value: b, label: b }))
   ];
+
+  const hasSelection = selectAllMatching || selectedRowKeys.length > 0;
+  const selectedCountDisplay = selectAllMatching ? totalItems : selectedRowKeys.length;
 
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
@@ -468,16 +560,16 @@ const NeedsReview = () => {
                   {
                     key: "google_sheet",
                     icon: <SiGooglesheets className="text-emerald-600" size={15} />,
-                    label: selectedRowKeys.length > 0
-                      ? `Create Google Sheet (${selectedRowKeys.length} selected)`
+                    label: hasSelection
+                      ? `Create Google Sheet (${selectedCountDisplay.toLocaleString()} selected)`
                       : "Create Google Sheet (All items)",
                     onClick: handleExportGoogleSheet,
                   },
                   {
                     key: "csv",
                     icon: <LuDownload size={15} className="text-gray-500" />,
-                    label: selectedRowKeys.length > 0
-                      ? `Download CSV (${selectedRowKeys.length} selected)`
+                    label: hasSelection
+                      ? `Download CSV (${selectedCountDisplay.toLocaleString()} selected)`
                       : "Download CSV (All items)",
                     onClick: handleDownloadCsv,
                   },
@@ -489,8 +581,8 @@ const NeedsReview = () => {
                 onClick={handleExportGoogleSheet}
                 disabled={isDownloading}
                 title={
-                  selectedRowKeys.length > 0
-                    ? `Create Google Spreadsheet with ${selectedRowKeys.length} selected item(s)`
+                  hasSelection
+                    ? `Create Google Spreadsheet with ${selectedCountDisplay.toLocaleString()} selected item(s)`
                     : "Create Google Spreadsheet with all Needs Review items"
                 }
                 className="h-9 px-3 rounded border border-gray-200 flex items-center justify-center gap-1.5 text-gray-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50/50 disabled:opacity-50 transition-colors cursor-pointer text-xs font-semibold"
@@ -556,87 +648,117 @@ const NeedsReview = () => {
           </div>
         ) : view === "grid" ? (
           /* Grid view */
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-            {items.map((record) => {
-              const ean = record.EAN || record.ean;
-              const code = ean || record.asin;
-              const safeUrl = getSafeAmazonUrl(record.supplier_link, record.asin, record.country);
-              const checked = selectedRowKeys.includes(record._id);
-              return (
-                <div
-                  key={record._id}
-                  className="bg-white rounded-md border border-gray-200 p-2.5 hover:border-gray-400 transition-colors flex flex-col"
-                >
-                  <div className="bg-gray-50 rounded h-24 flex items-center justify-center mb-2 overflow-hidden relative w-full">
-                    <div className="absolute top-1.5 left-1.5 z-10">
-                      <Checkbox
-                        checked={checked}
-                        onChange={(e) => toggleRow(record._id, e.target.checked)}
-                        className="bg-white/90 rounded backdrop-blur-sm"
-                      />
-                    </div>
-                    {record.product_photo ? (
-                      <img src={record.product_photo} alt={getTitle(record)} className="h-[86%] w-[86%] object-contain" />
-                    ) : (
-                      <span className="text-gray-300 text-xs">No image</span>
-                    )}
+          <div>
+            {items.length > 0 && (
+              <div className="flex items-center justify-between mb-2.5 px-1">
+                <Tooltip title={getHeaderTooltip()}>
+                  <div
+                    onClick={handleHeaderSelectAll}
+                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100 hover:border-gray-300 transition-colors cursor-pointer text-xs font-medium select-none"
+                  >
+                    <Checkbox
+                      checked={isHeaderChecked}
+                      indeterminate={isHeaderIndeterminate}
+                      onChange={(e) => { e.stopPropagation(); handleHeaderSelectAll(); }}
+                    />
+                    <span className="text-gray-700">
+                      {selectAllMatching
+                        ? `All ${totalItems.toLocaleString()} products selected across all pages`
+                        : isAllPageSelected && totalItems > items.length
+                        ? `All ${items.length} on this page selected — Click to select all ${totalItems.toLocaleString()}`
+                        : `Select all on page (${items.length})`}
+                    </span>
                   </div>
-
-                  <p className="text-[12px] font-medium text-gray-900 line-clamp-2 leading-snug mb-1 min-h-[2.2em]">
-                    {getTitle(record)}
-                  </p>
-
-                  {record.product_brand && (
-                    <div className="mb-1.5">
-                      <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-600 rounded text-[9px] font-semibold uppercase tracking-wide truncate max-w-full">
-                        {record.product_brand}
-                      </span>
+                </Tooltip>
+                {selectAllMatching && (
+                  <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Bulk mode: All {totalItems.toLocaleString()} matching products
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+              {items.map((record) => {
+                const ean = record.EAN || record.ean;
+                const code = ean || record.asin;
+                const safeUrl = getSafeAmazonUrl(record.supplier_link, record.asin, record.country);
+                const checked = selectAllMatching || selectedRowKeys.includes(record._id);
+                return (
+                  <div
+                    key={record._id}
+                    className="bg-white rounded-md border border-gray-200 p-2.5 hover:border-gray-400 transition-colors flex flex-col"
+                  >
+                    <div className="bg-gray-50 rounded h-24 flex items-center justify-center mb-2 overflow-hidden relative w-full">
+                      <div className="absolute top-1.5 left-1.5 z-10">
+                        <Checkbox
+                          checked={checked}
+                          onChange={(e) => toggleRow(record._id, e.target.checked)}
+                          className="bg-white/90 rounded backdrop-blur-sm"
+                        />
+                      </div>
+                      {record.product_photo ? (
+                        <img src={record.product_photo} alt={getTitle(record)} className="h-[86%] w-[86%] object-contain" />
+                      ) : (
+                        <span className="text-gray-300 text-xs">No image</span>
+                      )}
                     </div>
-                  )}
 
-                  <CheckChips record={record} className="mb-1.5" />
+                    <p className="text-[12px] font-medium text-gray-900 line-clamp-2 leading-snug mb-1 min-h-[2.2em]">
+                      {getTitle(record)}
+                    </p>
 
-                  {(record.validation_reasons || []).slice(0, 1).map((reason, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedFailure({ record, checkKey: null })}
-                      className="text-left text-[10px] text-gray-500 hover:text-gray-900 line-clamp-2 mb-1.5 transition-colors"
-                    >
-                      {formatReason(reason)}
-                    </button>
-                  ))}
+                    {record.product_brand && (
+                      <div className="mb-1.5">
+                        <span className="inline-flex px-1.5 py-0.5 border border-gray-200 text-gray-600 rounded text-[9px] font-semibold uppercase tracking-wide truncate max-w-full">
+                          {record.product_brand}
+                        </span>
+                      </div>
+                    )}
 
-                  <div className="flex items-center justify-between gap-1 mt-auto pt-2 border-t border-gray-100">
-                    {code ? (
+                    <CheckChips record={record} className="mb-1.5" />
+
+                    {(record.validation_reasons || []).slice(0, 1).map((reason, i) => (
                       <button
-                        onClick={() => handleCopy(code)}
-                        title={`Copy ${ean ? "EAN" : "ASIN"}`}
-                        className="flex items-center gap-1 px-1 py-0.5 rounded group/copy border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                        key={i}
+                        onClick={() => setSelectedFailure({ record, checkKey: null })}
+                        className="text-left text-[10px] text-gray-500 hover:text-gray-900 line-clamp-2 mb-1.5 transition-colors"
                       >
-                        <span className="text-[9px] font-semibold text-gray-400">{ean ? "EAN" : "ASIN"}</span>
-                        <span className="text-[10px] text-gray-700 font-mono truncate max-w-[70px]">{code}</span>
-                        <FiCopy size={9} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                        {formatReason(reason)}
                       </button>
-                    ) : <span />}
-                    {safeUrl && (
-                      <a
-                        href={safeUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="View on Amazon"
-                        className="text-gray-300 hover:text-gray-900 transition-colors"
-                      >
-                        <FiExternalLink size={11} />
-                      </a>
-                    )}
-                  </div>
+                    ))}
 
-                  <div className="flex justify-end mt-1.5">
-                    <RowActions record={record} />
+                    <div className="flex items-center justify-between gap-1 mt-auto pt-2 border-t border-gray-100">
+                      {code ? (
+                        <button
+                          onClick={() => handleCopy(code)}
+                          title={`Copy ${ean ? "EAN" : "ASIN"}`}
+                          className="flex items-center gap-1 px-1 py-0.5 rounded group/copy border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-[9px] font-semibold text-gray-400">{ean ? "EAN" : "ASIN"}</span>
+                          <span className="text-[10px] text-gray-700 font-mono truncate max-w-[70px]">{code}</span>
+                          <FiCopy size={9} className="text-gray-300 group-hover/copy:text-gray-900 transition-colors" />
+                        </button>
+                      ) : <span />}
+                      {safeUrl && (
+                        <a
+                          href={safeUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="View on Amazon"
+                          className="text-gray-300 hover:text-gray-900 transition-colors"
+                        >
+                          <FiExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end mt-1.5">
+                      <RowActions record={record} />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         ) : (
           /* List view */
@@ -645,11 +767,13 @@ const NeedsReview = () => {
               <thead>
                 <tr className="border-b border-gray-200 text-gray-400">
                   <th className="py-2 px-2 w-8">
-                    <Checkbox
-                      checked={items.length > 0 && selectedRowKeys.length === items.length}
-                      indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < items.length}
-                      onChange={(e) => setSelectedRowKeys(e.target.checked ? items.map((i) => i._id) : [])}
-                    />
+                    <Tooltip title={getHeaderTooltip()}>
+                      <Checkbox
+                        checked={isHeaderChecked}
+                        indeterminate={isHeaderIndeterminate}
+                        onChange={handleHeaderSelectAll}
+                      />
+                    </Tooltip>
                   </th>
                   <th className="py-2 px-2 w-12" />
                   <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider">Product</th>
@@ -667,7 +791,7 @@ const NeedsReview = () => {
                     <tr key={record._id} className="hover:bg-gray-50 transition-colors">
                       <td className="py-2 px-2">
                         <Checkbox
-                          checked={selectedRowKeys.includes(record._id)}
+                          checked={selectAllMatching || selectedRowKeys.includes(record._id)}
                           onChange={(e) => toggleRow(record._id, e.target.checked)}
                         />
                       </td>
@@ -764,17 +888,23 @@ const NeedsReview = () => {
       </div>
 
       {/* Sticky Bulk Action Bar (bottom-middle floating) */}
-      {selectedRowKeys.length > 0 && (
+      {(selectedRowKeys.length > 0 || selectAllMatching) && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-4 py-2.5 rounded-md shadow-lg border border-gray-200 flex items-center gap-4 z-50 animate-fade-in-up">
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded bg-gray-900 text-white flex items-center justify-center font-semibold text-[11px] tabular-nums">
-              {selectedRowKeys.length}
+            <div className={`h-6 px-2 rounded ${selectAllMatching ? "bg-emerald-700" : "bg-gray-900"} text-white flex items-center justify-center font-semibold text-[11px] tabular-nums`}>
+              {(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()}
             </div>
-            <span className="text-[12px] font-medium text-gray-600">selected</span>
+            <span className="text-[12px] font-medium text-gray-600">
+              {selectAllMatching ? "all matching products selected" : "selected"}
+            </span>
           </div>
           <div className="h-5 w-px bg-gray-200"></div>
           <div className="flex items-center gap-1.5">
-            <Button onClick={() => setSelectedRowKeys([])} type="text" className="text-gray-500 hover:text-gray-800 cursor-pointer">
+            <Button
+              onClick={() => { setSelectedRowKeys([]); setSelectAllMatching(false); }}
+              type="text"
+              className="text-gray-500 hover:text-gray-800 cursor-pointer"
+            >
               Cancel
             </Button>
             <Button
@@ -788,7 +918,7 @@ const NeedsReview = () => {
               ) : (
                 <LuShieldCheck size={13} />
               )}
-              Re-validate ({selectedRowKeys.length})
+              Re-validate ({(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})
             </Button>
             <Button
               type="primary"
@@ -797,7 +927,7 @@ const NeedsReview = () => {
               onClick={handleForcePassBulk}
             >
               <FiCheckCircle size={13} />
-              Approve ({selectedRowKeys.length})
+              Approve ({(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})
             </Button>
             <Button
               danger
@@ -805,7 +935,7 @@ const NeedsReview = () => {
               className="h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
             >
               <FiTrash2 size={13} />
-              Delete ({selectedRowKeys.length})
+              Delete ({(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})
             </Button>
             <Dropdown
               menu={{
@@ -813,13 +943,13 @@ const NeedsReview = () => {
                   {
                     key: "google_sheet",
                     icon: <SiGooglesheets className="text-emerald-600" size={14} />,
-                    label: `Google Spreadsheet (${selectedRowKeys.length})`,
+                    label: `Google Spreadsheet (${(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})`,
                     onClick: handleExportGoogleSheet,
                   },
                   {
                     key: "csv",
                     icon: <LuDownload size={14} />,
-                    label: `Download CSV (${selectedRowKeys.length})`,
+                    label: `Download CSV (${(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})`,
                     onClick: handleDownloadCsv,
                   },
                 ],
@@ -832,7 +962,7 @@ const NeedsReview = () => {
                 onClick={handleExportGoogleSheet}
               >
                 <SiGooglesheets className="text-emerald-600" size={14} />
-                Google Sheet ({selectedRowKeys.length})
+                Google Sheet ({(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})
               </Button>
             </Dropdown>
           </div>
@@ -898,7 +1028,7 @@ const NeedsReview = () => {
             </div>
             <h3 className="text-sm font-semibold text-gray-900 mb-1">Delete Selected Products</h3>
             <p className="text-gray-500 text-xs mb-5 leading-relaxed">
-              Are you sure you want to delete <strong className="text-gray-900 font-bold">{selectedRowKeys.length}</strong> selected product(s) from Needs Review? This action cannot be undone.
+              Are you sure you want to delete <strong className="text-gray-900 font-bold">{(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()}</strong> selected product(s) from Needs Review? This action cannot be undone.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button
@@ -914,7 +1044,7 @@ const NeedsReview = () => {
                 className="h-9 px-4 rounded text-xs font-medium bg-red-600 hover:bg-red-700 border-0 cursor-pointer"
                 onClick={handleDeleteBulk}
               >
-                Delete Selected ({selectedRowKeys.length})
+                Delete Selected ({(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()})
               </Button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import VerifyCode from "../Pages/auth/VerifyCode";
 import CreateNewPassword from "../Pages/auth/CreateNewPassword";
 
 import AdminRoute from "../ProtectedRoute/AdminRoute";
+import ModuleRoute from "../ProtectedRoute/ModuleRoute";
 import Dashboard from "../Pages/layout/Dashboard";
 import ErrorBoundary from "../ErrorBoundary";
 
@@ -31,15 +32,64 @@ const router = createBrowserRouter([
       </AdminRoute>
     ),
     children: [
-      { index: true, element: <DashboardHome /> },
-      { path: "/products", element: <Products /> },
-      { path: "/bol-listings", element: <BolListing /> },
-      { path: "/orders", element: <Orders /> },
-      { path: "/amazon-operations", element: <AmazonOperations /> },
-      { path: "/rimco-operations", element: <RimcoOperations /> },
+      {
+        index: true,
+        element: (
+          <ModuleRoute module="overview">
+            <DashboardHome />
+          </ModuleRoute>
+        ),
+      },
+      {
+        path: "/products",
+        element: (
+          <ModuleRoute module="inventory">
+            <Products />
+          </ModuleRoute>
+        ),
+      },
+      {
+        path: "/bol-listings",
+        element: (
+          <ModuleRoute module="offers">
+            <BolListing />
+          </ModuleRoute>
+        ),
+      },
+      {
+        path: "/orders",
+        element: (
+          <ModuleRoute module="sales">
+            <Orders />
+          </ModuleRoute>
+        ),
+      },
+      {
+        path: "/amazon-operations",
+        element: (
+          <ModuleRoute module="sourcing">
+            <AmazonOperations />
+          </ModuleRoute>
+        ),
+      },
+      {
+        path: "/rimco-operations",
+        element: (
+          <ModuleRoute module="rimco">
+            <RimcoOperations />
+          </ModuleRoute>
+        ),
+      },
       { path: "/amazon-affiliates", element: <AmazonAffiliateAccounts /> },
       { path: "/amazon-lookup", element: <AmazonLookup /> },
-      { path: "/needs-review", element: <NeedsReview /> },
+      {
+        path: "/needs-review",
+        element: (
+          <ModuleRoute module="needs_review">
+            <NeedsReview />
+          </ModuleRoute>
+        ),
+      },
       { path: "/low-stock", element: <LowStockAlerts /> },
     ],
   },

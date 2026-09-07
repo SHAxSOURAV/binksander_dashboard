@@ -7,19 +7,47 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependencies & build outputs
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
 *.local
+.eslintcache
+coverage/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Editor & IDE directories and files
+.vscode/
+.idea/
+.claude/
 .DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*~
+*.tmp
+*.temp
+*.bak
+
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Windows duplicate copies
+* (1).*
+* (2).*
+* (3).*
+* (4).*
+* (5).*
+*(*).*
+* (1)*
+* (2)*
+*(*)*

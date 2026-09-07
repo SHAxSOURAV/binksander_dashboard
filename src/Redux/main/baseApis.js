@@ -62,6 +62,7 @@ export const baseApis = createApi({
     "Support",
     "BolOffers",
     "StockAlerts",
+    "Team",
   ],
   endpoints: () => ({}),
 });

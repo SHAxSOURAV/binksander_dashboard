@@ -241,6 +241,12 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
   );
   const hasInvalidEan = invalidEanDrafts.length > 0;
 
+  // Validation: Missing or insufficient photos (< 3 photos)
+  const insufficientPhotosDrafts = drafts.filter(
+    d => !d.photos || d.photos.length < 3
+  );
+  const hasInsufficientPhotos = insufficientPhotosDrafts.length > 0;
+
   // Validation: Untranslated Images
   const untranslatedDrafts = drafts.filter(d => !d.isTranslated);
   const hasUntranslatedImages = untranslatedDrafts.length > 0;
@@ -259,6 +265,11 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
   const handleBulkPublish = async () => {
     if (hasInvalidEan) {
       toast.error(`Cannot publish: ${invalidEanDrafts.length} product(s) have missing or invalid 13-digit EANs.`);
+      return;
+    }
+
+    if (hasInsufficientPhotos) {
+      toast.error(`Cannot publish: ${insufficientPhotosDrafts.length} product(s) have fewer than 3 photos. A minimum of 3 photos is required per product.`);
       return;
     }
 
@@ -513,9 +524,21 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                         {/* Badges Row */}
                         <div className="flex items-center flex-wrap gap-1.5 text-[11px]">
                           {/* Photos count */}
-                          <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
-                            {d.photos?.length || 1} {d.photos?.length === 1 ? 'Photo' : 'Photos'}
-                          </span>
+                          {(d.photos?.length || 0) < 3 ? (
+                            <span 
+                              className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200 flex items-center gap-1 cursor-pointer hover:bg-rose-100 transition-colors"
+                              onClick={() => setEditingDraftId(d.draftId)}
+                              title="At least 3 photos required. Click to upload photos."
+                            >
+                              <span>⚠️</span>
+                              <span>Only {d.photos?.length || 0}/3 Photos</span>
+                              <span className="underline ml-0.5 font-semibold">(Upload)</span>
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
+                              {d.photos.length} Photos
+                            </span>
+                          )}
 
                           {/* Translation Status Badge */}
                           {d.isTranslated ? (
@@ -667,8 +690,23 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
             </div>
           )}
 
+          {/* Insufficient Photos Alert (< 3 photos) */}
+          {hasInsufficientPhotos && !hasInvalidEan && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between gap-3 text-rose-900 text-xs shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📸</span>
+                <div>
+                  <span className="font-bold text-rose-900">Minimum 3 Photos Required: </span>
+                  <span className="text-rose-700">
+                    {insufficientPhotosDrafts.length} product(s) have fewer than 3 photos. Click "Upload" or "Edit" on each product to add photos.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Untranslated Images Alert (clean & non-redundant) */}
-          {hasUntranslatedImages && !hasInvalidEan && (
+          {hasUntranslatedImages && !hasInvalidEan && !hasInsufficientPhotos && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between gap-3 text-amber-900 text-xs shadow-sm">
               <div className="flex items-center gap-2">
                 <span className="text-base">ℹ️</span>
@@ -694,8 +732,17 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
             size="large"
             onClick={handleBulkPublish}
             loading={isPublishing}
-            disabled={isGeneratingDrafts || drafts.length === 0 || hasInvalidEan || hasUntranslatedImages}
+            disabled={isGeneratingDrafts || drafts.length === 0 || hasInvalidEan || hasInsufficientPhotos || hasUntranslatedImages}
             className="bg-black hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed h-11 text-sm font-semibold rounded-xl shadow-md cursor-pointer"
+            title={
+              hasInsufficientPhotos
+                ? `A minimum of 3 photos is required for each product (${insufficientPhotosDrafts.length} product(s) need more photos).`
+                : hasInvalidEan
+                  ? `Some products have missing or invalid 13-digit EANs.`
+                  : hasUntranslatedImages
+                    ? `Some product images need Dutch translation.`
+                    : ""
+            }
           >
             {scheduleEnabled ? "Schedule Bulk Publish" : `Publish All (${drafts.length})`}
           </Button>

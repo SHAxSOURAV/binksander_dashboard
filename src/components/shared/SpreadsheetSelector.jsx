@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { Select, Tooltip } from "antd";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { useGetConnectionQuery } from "../../Redux/productApis";
@@ -26,6 +26,18 @@ const SpreadsheetSelector = ({ onSelectChange, className = "" }) => {
     return connectionData.connected_sheets;
   }, [connectionData]);
 
+  // Validate that the currently selected URL is still valid in the connected sheets list
+  const isSelectedValid =
+    selectedSpreadsheetUrl === "all" ||
+    connectedSheets.some((sheet) => sheet.spreadsheet_url === selectedSpreadsheetUrl);
+
+  useEffect(() => {
+    if (connectedSheets.length >= 2 && !isSelectedValid && selectedSpreadsheetUrl !== "all") {
+      setSelectedSpreadsheetUrl("all");
+      if (onSelectChange) onSelectChange("all");
+    }
+  }, [connectedSheets.length, isSelectedValid, selectedSpreadsheetUrl, onSelectChange, setSelectedSpreadsheetUrl]);
+
   // Requirement: Only display the dropdown if the user has connected 2 or more spreadsheets.
   if (isLoading || isError || connectedSheets.length < 2) {
     return null;
@@ -33,11 +45,6 @@ const SpreadsheetSelector = ({ onSelectChange, className = "" }) => {
 
   // Calculate sum of items across all sheets for the "All Spreadsheets" option label
   const totalAllItems = connectedSheets.reduce((acc, sheet) => acc + (sheet.item_count || 0), 0);
-
-  // Validate that the currently selected URL is still valid in the connected sheets list
-  const isSelectedValid =
-    selectedSpreadsheetUrl === "all" ||
-    connectedSheets.some((sheet) => sheet.spreadsheet_url === selectedSpreadsheetUrl);
 
   const activeValue = isSelectedValid ? selectedSpreadsheetUrl : "all";
 

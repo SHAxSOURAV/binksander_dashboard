@@ -583,9 +583,8 @@ const Products = () => {
           </div>
         )}
 
-        {/* Connect prompt — only when nothing is imported yet. The connected state now
-            lives in the square status tile beside the product count. */}
-        {total === 0 && (
+        {/* Connect prompt — only when nothing is imported yet and no spreadsheet is connected. */}
+        {total === 0 && !connectedSheet && (
           <button
             onClick={() => setConnectOpen(true)}
             className="w-full flex items-center justify-between rounded px-4 py-3 mb-4 text-left border border-dashed border-gray-300 hover:bg-gray-50 transition-colors"
@@ -623,9 +622,11 @@ const Products = () => {
                   ? "Couldn't reach the server. Is the backend running?"
                   : debouncedSearch || Object.keys(activeFilters).length > 0
                     ? `No products match your filters or search.`
-                    : data?.has_any_items
-                      ? "All your imported products are in the Needs Review queue."
-                      : "No products yet. Connect your inventory to import."
+                    : selectedSpreadsheetUrl !== "all"
+                      ? "No approved products found for this spreadsheet."
+                      : (data?.total_needs_review > 0 && total === 0)
+                        ? "All your imported products are in the Needs Review queue."
+                        : "No products yet. Connect your inventory to import."
               }
             />
           </div>
