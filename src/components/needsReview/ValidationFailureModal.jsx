@@ -28,6 +28,26 @@ const ValidationFailureModal = ({ open, onClose, record, checkKey }) => {
         pass: "Brand name check passed successfully."
       },
       fix: "Verify your brand name spelling or set TAVILY_API_KEY on the backend server."
+    },
+    amazon_in_stock: {
+      title: "Amazon Stock Availability Check",
+      desc: "Checks real-time inventory and supplier availability on Amazon.",
+      causes: {
+        fail: "This product is currently out of stock or unavailable on Amazon.",
+        uncertain: "Stock status could not be verified from Amazon.",
+        pass: "Product is in stock and available for fulfillment."
+      },
+      fix: "The system automatically re-checks this product every 30 days. When Amazon restocks it, it will automatically move to the Inventory Catalog."
+    },
+    amazon_low_rating: {
+      title: "Amazon Rating Check",
+      desc: "Checks customer reviews and ratings on Amazon (minimum threshold: 3.5 stars).",
+      causes: {
+        fail: "Product has an average Amazon rating below 3.5 stars.",
+        uncertain: "Product rating could not be determined.",
+        pass: "Rating is 3.5 stars or higher."
+      },
+      fix: "Review product quality and customer feedback on Amazon before publishing."
     }
   };
 
