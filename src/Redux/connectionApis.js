@@ -112,6 +112,16 @@ const connectionApis = baseApis.injectEndpoints({
         body: data,
       }),
     }),
+
+    // POST /spreadsheets/reconnect { spreadsheet_url, access_token, refresh_token, sheet_id? }
+    reconnectSpreadsheet: builder.mutation({
+      query: (data) => ({
+        url: "/spreadsheets/reconnect",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Connection", "Products"],
+    }),
   }),
   overrideExisting: true,
 });
@@ -130,6 +140,7 @@ export const {
   useLazyGetListUserSheetsQuery,
   useLazyGetSpreadsheetTabsQuery,
   useExchangeGoogleCodeMutation,
+  useReconnectSpreadsheetMutation,
 } = connectionApis;
 
 export default connectionApis;

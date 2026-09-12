@@ -34,6 +34,7 @@ import {
   useLazyGetListUserSheetsQuery,
   useLazyGetSpreadsheetTabsQuery,
   useExchangeGoogleCodeMutation,
+  useReconnectSpreadsheetMutation,
 } from "../../Redux/connectionApis";
 import { useResyncInventoryMutation } from "../../Redux/productApis";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -87,7 +88,7 @@ const SettingsModal = () => {
     undefined,
     { skip: !settingsOpen },
   );
-  const { data: connected, isLoading: loadingSheets } =
+  const { data: connected, isLoading: loadingSheets, refetch: refetchSheets } =
     useGetConnectedSheetsQuery(undefined, { skip: !settingsOpen });
   const { data: bolCreds = [] } = useGetBolCredentialsQuery(undefined, {
     skip: !settingsOpen,
@@ -128,6 +129,8 @@ const SettingsModal = () => {
 
   const [importPublicSheet, { isLoading: importingPublic }] = useImportPublicSheetMutation();
   const [importOAuthSheet, { isLoading: importingOAuth }] = useImportOAuthSheetMutation();
+  const [reconnectSpreadsheet, { isLoading: isReconnecting }] = useReconnectSpreadsheetMutation();
+  const reconnectingSheetRef = useRef(null);
   const [exchangeGoogleCode, { isLoading: exchangingCode }] = useExchangeGoogleCodeMutation();
   const [getListUserSheets, { isFetching: fetchingUserSheets }] = useLazyGetListUserSheetsQuery();
   const [getSpreadsheetTabs, { isFetching: fetchingTabs }] = useLazyGetSpreadsheetTabsQuery();
@@ -288,6 +291,21 @@ const SettingsModal = () => {
         console.log("exchangeGoogleCode response:", res);
         setOauthToken(res.access_token);
         setOauthRefreshToken(res.refresh_token);
+
+        if (reconnectingSheetRef.current) {
+          const target = reconnectingSheetRef.current;
+          reconnectingSheetRef.current = null;
+          await reconnectSpreadsheet({
+            spreadsheet_url: target.spreadsheet_url,
+            sheet_id: target.sheet_id || "0",
+            access_token: res.access_token,
+            refresh_token: res.refresh_token,
+          }).unwrap();
+          toast.success("Successfully reconnected spreadsheet! Live sync restored.");
+          refetchSheets?.();
+          return;
+        }
+
         setOauthSheetsList(res.sheets || []);
         setOauthSheetsModalOpen(true);
       } catch (err) {
@@ -595,10 +613,14 @@ const SettingsModal = () => {
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             {isAuthExpired ? (
                               <button
-                                onClick={() => loginWithGoogle()}
-                                className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 rounded-[4px] transition-colors shadow-xs"
+                                onClick={() => {
+                                  reconnectingSheetRef.current = s;
+                                  loginWithGoogle();
+                                }}
+                                disabled={isReconnecting}
+                                className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 rounded-[4px] transition-colors shadow-xs disabled:opacity-50"
                               >
-                                <LuRefreshCw size={12} /> Reconnect
+                                <LuRefreshCw size={12} className={isReconnecting ? "animate-spin" : ""} /> Reconnect
                               </button>
                             ) : s.is_syncing ? (
                               <button
@@ -679,6 +701,7 @@ const SettingsModal = () => {
                       toast.error("You must connect a Bol.com account first before adding a spreadsheet.");
                       return;
                     }
+                    reconnectingSheetRef.current = null;
                     loginWithGoogle();
                   }}
                   className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"

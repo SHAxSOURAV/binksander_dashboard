@@ -370,6 +370,7 @@ const NeedsReview = () => {
     bolcom_duplicate_ean: "Duplicate EAN",
     bolcom_duplicate_brand: "Duplicate Brand",
     amazon_low_rating: "Low Rating",
+    amazon_in_stock: "Out of Stock",
   };
 
   const formatReason = (text) => {
@@ -377,6 +378,7 @@ const NeedsReview = () => {
     if (text.includes("Rating") || text.includes("3.5")) return text;
     if (text.includes("EAN")) return "EAN already listed";
     if (text.includes("Brand")) return "Brand already listed";
+    if (text.includes("stock") || text.includes("Stock")) return "Out of stock on Amazon";
     if (text.includes("API call failed") || text.includes("credentials")) return "Bol connection error";
     if (text.includes("Tavily") || text.includes("search")) return "Search service error";
     return text;

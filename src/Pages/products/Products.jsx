@@ -71,7 +71,8 @@ const Products = () => {
   const [selected, setSelected] = useState(null);
   const [editingDraftId, setEditingDraftId] = useState(null);
   const [connectOpen, setConnectOpen] = useState(false);
-  const { setSettingsOpen, setSettingsTab, selectedSpreadsheetUrl } = useUI();
+  const { setSettingsOpen, setSettingsTab, selectedSpreadsheetUrl, activeBolAccountId } = useUI();
+  const [publishFilter, setPublishFilter] = useState("all");
 
   const [filters, setFilters] = useState({});
   const [activeFilters, setActiveFilters] = useState({});
@@ -139,6 +140,8 @@ const Products = () => {
     sortBy,
     sortOrder,
     spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+    bol_account_id: activeBolAccountId,
+    filter_publish_status: publishFilter !== "all" ? publishFilter : (activeFilters.filter_publish_status || undefined),
     ...activeFilters
   }, {
     pollingInterval
@@ -460,10 +463,24 @@ const Products = () => {
             <button
               onClick={() => setFilterOpen(true)}
               title="Filter products"
-              className={`w-9 h-9 rounded border flex items-center justify-center transition-colors ${Object.keys(activeFilters).length ? 'border-gray-900 text-gray-900 bg-gray-100' : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+              className={`w-9 h-9 rounded border flex items-center justify-center transition-colors ${Object.keys(activeFilters).length || publishFilter !== "all" ? 'border-gray-900 text-gray-900 bg-gray-100' : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
             >
               <FiFilter size={16} />
             </button>
+
+            <Select
+              value={publishFilter}
+              onChange={(val) => {
+                setPublishFilter(val);
+                setPage(1);
+              }}
+              className="w-36 h-9 custom-select"
+              options={[
+                { value: 'all', label: 'All Products' },
+                { value: 'published', label: 'Published' },
+                { value: 'unpublished', label: 'Publishable' },
+              ]}
+            />
 
             <Select
               value={sortBy ? `${sortBy}-${sortOrder}` : "default"}
@@ -533,9 +550,23 @@ const Products = () => {
         )}
 
         {/* Active Filter Chips (if any filter is selected) */}
-        {Object.keys(activeFilters).length > 0 && (
+        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all") && (
           <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-2 text-sm font-medium border-b border-gray-100 flex-wrap">
             <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider mr-1">Filters</span>
+            {publishFilter !== "all" && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-800 text-[11px] font-medium">
+                Bol: {publishFilter === 'published' ? 'Published' : 'Publishable'}
+                <button
+                  onClick={() => {
+                    setPublishFilter("all");
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
             {activeFilters.filter_brand && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
                 Brand: {activeFilters.filter_brand}
@@ -574,6 +605,7 @@ const Products = () => {
               onClick={() => {
                 setActiveFilters({});
                 setFilters({});
+                setPublishFilter("all");
                 setPage(1);
               }}
               className="text-[11px] text-gray-500 hover:text-gray-900 font-medium ml-1"
@@ -1191,13 +1223,16 @@ const Products = () => {
             <label className="text-xs font-semibold text-gray-600 mb-2 block">Publish Status</label>
             <Select
               className="w-full"
-              allowClear
-              placeholder="e.g. Online"
-              value={filters.filter_status}
-              onChange={v => setFilters({ ...filters, filter_status: v })}
+              value={publishFilter}
+              onChange={v => {
+                setPublishFilter(v);
+                setFilters({ ...filters, filter_publish_status: v });
+                setPage(1);
+              }}
               options={[
-                { label: "Online (Published on Bol)", value: "Online" },
-                { label: "Offline (Draft / Unpublished)", value: "Offline" },
+                { label: "All Products", value: "all" },
+                { label: "Published (Live on Bol)", value: "published" },
+                { label: "Publishable (Unpublished)", value: "unpublished" },
               ]}
             />
           </div>

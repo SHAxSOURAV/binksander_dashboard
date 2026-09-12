@@ -109,6 +109,8 @@ const productApis = baseApis.injectEndpoints({
         filter_is_valid_amazon,
         filter_min_rating,
         filter_max_rating,
+        filter_publish_status,
+        bol_account_id,
         sortBy,
         sortOrder,
         spreadsheet_url,
@@ -120,6 +122,7 @@ const productApis = baseApis.injectEndpoints({
         if (sync_date_range) query.append("sync_date_range", sync_date_range);
         if (title_source) query.append("title_source", title_source);
         if (filter_status) query.append("filter_status", filter_status);
+        if (filter_publish_status && filter_publish_status !== "all") query.append("filter_publish_status", filter_publish_status);
         if (filter_stock) query.append("filter_stock", filter_stock);
         if (filter_category) query.append("filter_category", filter_category);
         if (filter_delivery) query.append("filter_delivery", filter_delivery);
@@ -137,7 +140,16 @@ const productApis = baseApis.injectEndpoints({
         if (sortOrder) query.append("sort_order", sortOrder);
         if (spreadsheet_url && spreadsheet_url !== "all") query.append("spreadsheet_url", spreadsheet_url);
         
-        return `/spreadsheet/scrape-items?${query.toString()}`;
+        const headers = {};
+        const activeAccount = bol_account_id || localStorage.getItem("activeBolAccountId");
+        if (activeAccount) {
+          headers["x-bol-account-id"] = activeAccount;
+        }
+
+        return {
+          url: `/spreadsheet/scrape-items?${query.toString()}`,
+          headers,
+        };
       },
       transformResponse: (res, _meta, arg) => ({
         page: arg?.page || 1,
