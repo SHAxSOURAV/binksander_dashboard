@@ -7,6 +7,7 @@ import {
   MdOutlineShoppingCart,
   MdOutlineRateReview,
   MdOutlineAssignmentReturn,
+  MdOutlineSearch,
 } from "react-icons/md";
 import { TbBrandAmazon } from "react-icons/tb";
 import { LuTruck } from "react-icons/lu";
@@ -37,6 +38,13 @@ const menuItems = [
     name: "Amazon Return Dashboard",
     link: "https://amazon-dashbaord.vercel.app",
     icon: <MdOutlineAssignmentReturn size={20} />,
+    isExternal: true,
+  },
+  {
+    module: "research",
+    name: "Research Tool",
+    link: "https://rylee-automation.vercel.app/",
+    icon: <MdOutlineSearch size={20} />,
     isExternal: true,
   }
 ];
