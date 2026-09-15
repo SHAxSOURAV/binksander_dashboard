@@ -48,6 +48,7 @@ const MODULE_DEFINITIONS = [
   { key: "sourcing", label: "Amazon Sourcing", desc: "Amazon sourcing & product analysis" },
   { key: "rimco", label: "Rimco Logistics", desc: "Rimco shipping & fulfillment" },
   { key: "returns", label: "Return Dashboard", desc: "Amazon returns management" },
+  { key: "research", label: "Research Tool", desc: "Product research tool" },
 ];
 
 const ROLE_COLORS = {
@@ -113,7 +114,7 @@ const TeamSection = () => {
     if (rolesData?.roles?.length) return rolesData.roles;
     return [
       { key: "manager", label: "Manager / Admin", default_permissions: MODULE_DEFINITIONS.map((m) => m.key) },
-      { key: "product_research", label: "Product research", default_permissions: ["overview", "sales", "sourcing", "offers"] },
+      { key: "product_research", label: "Product research", default_permissions: ["overview", "sales", "sourcing", "offers", "research"] },
       { key: "product_lister", label: "Product lister", default_permissions: ["overview", "inventory", "needs_review", "offers", "sourcing"] },
       { key: "order_processor", label: "Order processor", default_permissions: MODULE_DEFINITIONS.map((m) => m.key) },
       { key: "order_processor_manager", label: "Order processor manager", default_permissions: MODULE_DEFINITIONS.map((m) => m.key) },
