@@ -27,6 +27,18 @@ export const UIProvider = ({ children }) => {
     dispatch(baseApis.util.resetApiState());
   };
 
+  const [activeRimcoAccountId, setActiveRimcoAccountIdState] = useState(() => {
+    return localStorage.getItem("activeRimcoAccountId") || null;
+  });
+
+  const setActiveRimcoAccountId = (id) => {
+    if (id === activeRimcoAccountId) return;
+
+    setActiveRimcoAccountIdState(id);
+    if (id) localStorage.setItem("activeRimcoAccountId", id);
+    else localStorage.removeItem("activeRimcoAccountId");
+  };
+
   const [selectedSpreadsheetUrl, setSelectedSpreadsheetUrlState] = useState(() => {
     return localStorage.getItem("selectedSpreadsheetUrl") || "all";
   });
@@ -83,6 +95,8 @@ export const UIProvider = ({ children }) => {
         setSupportOpen,
         activeBolAccountId,
         setActiveBolAccountId,
+        activeRimcoAccountId,
+        setActiveRimcoAccountId,
         selectedSpreadsheetUrl,
         setSelectedSpreadsheetUrl,
       }}
