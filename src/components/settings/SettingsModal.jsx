@@ -13,6 +13,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import BolAccountsSection from "./BolAccountsSection";
+import RimcoAccountsSection from "./RimcoAccountsSection";
 import TeamSection from "./TeamSection";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { LuUnplug, LuRefreshCw } from "react-icons/lu";
@@ -733,6 +734,8 @@ const SettingsModal = () => {
                 saving={savingCreds}
                 deleting={deletingCreds}
               />
+
+              <RimcoAccountsSection />
 
             </div>
           )}
