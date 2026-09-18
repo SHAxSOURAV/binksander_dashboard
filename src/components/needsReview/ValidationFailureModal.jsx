@@ -9,6 +9,16 @@ const ValidationFailureModal = ({ open, onClose, record, checkKey }) => {
   const status = checkKey ? checks[checkKey] : null;
 
   const checkDescriptions = {
+    brand_blacklist: {
+      title: "Blacklisted Brand Check",
+      desc: "Checks the product's brand against your connected Brand Blacklist Google Sheets.",
+      causes: {
+        fail: "This product's brand is listed on your connected Brand Blacklist Google Sheets. Blacklisted brands are strictly prohibited from entering the Inventory Catalog.",
+        uncertain: "Brand name could not be extracted or verified.",
+        pass: "Product brand passed blacklist checks.",
+      },
+      fix: "If this product should be allowed into your catalog, remove its brand from your connected Brand Blacklist sheet in Settings → Connection, or click Re-validate to re-check.",
+    },
     bolcom_duplicate_ean: {
       title: "Duplicate EAN Check",
       desc: "Checks Bol.com retailer catalog to see if the product's 13-digit EAN barcode is already listed.",

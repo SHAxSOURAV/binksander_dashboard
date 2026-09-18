@@ -367,6 +367,7 @@ const NeedsReview = () => {
     r.TITLE || r.Title || r.title || r.product_title || "No title";
 
   const CHECK_LABELS = {
+    brand_blacklist: "Blacklisted Brand",
     bolcom_duplicate_ean: "Duplicate EAN",
     bolcom_duplicate_brand: "Duplicate Brand",
     amazon_low_rating: "Low Rating",
@@ -375,6 +376,7 @@ const NeedsReview = () => {
 
   const formatReason = (text) => {
     if (!text) return "Validation failed";
+    if (text.includes("Blacklisted Brand") || text.includes("blacklist") || text.includes("Blacklist")) return text;
     if (text.includes("Rating") || text.includes("3.5")) return text;
     if (text.includes("EAN")) return "EAN already listed";
     if (text.includes("Brand")) return "Brand already listed";
@@ -611,6 +613,7 @@ const NeedsReview = () => {
               className="w-40 h-9 custom-select"
               options={[
                 { value: "all", label: "All reasons" },
+                { value: "Blacklisted Brand", label: "Blacklisted Brand" },
                 { value: "Already on bol.com (EAN)", label: "Duplicate EAN" },
                 { value: "Already on bol.com (Brand)", label: "Duplicate Brand" },
                 { value: "Low Amazon Rating", label: "Low Rating" },

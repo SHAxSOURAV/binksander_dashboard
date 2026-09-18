@@ -56,6 +56,15 @@ const connectionApis = baseApis.injectEndpoints({
       invalidatesTags: ["Connection", "BolOffers", "Analytics", "Orders", "Products"],
     }),
 
+    // POST /users/bol-credentials/{account_id}/test
+    testBolAccount: builder.mutation({
+      query: (accountId) => ({
+        url: `/users/bol-credentials/${accountId}/test`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Connection"],
+    }),
+
     // GET /users/amazon-credentials → { email, is_secret_set, has_totp } (404 if none)
     getAmazonCredentials: builder.query({
       query: () => "/users/amazon-credentials",
@@ -122,6 +131,59 @@ const connectionApis = baseApis.injectEndpoints({
       }),
       invalidatesTags: ["Connection", "Products"],
     }),
+
+    // --- BRAND BLACKLIST ENDPOINTS ---
+    // GET /blacklist/sheets
+    getBlacklistSheets: builder.query({
+      query: () => "/blacklist/sheets",
+      providesTags: ["Blacklist"],
+    }),
+
+    // POST /blacklist/import-public { spreadsheet_url, sheet_id? }
+    importPublicBlacklist: builder.mutation({
+      query: (data) => ({
+        url: "/blacklist/import-public",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Blacklist", "Products"],
+    }),
+
+    // POST /blacklist/import-oauth { spreadsheet_url, sheet_id?, title?, access_token?, refresh_token? }
+    importOAuthBlacklist: builder.mutation({
+      query: (data) => ({
+        url: "/blacklist/import-oauth",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Blacklist", "Products"],
+    }),
+
+    // POST /blacklist/sync { spreadsheet_url }
+    syncBlacklistSheet: builder.mutation({
+      query: (data) => ({
+        url: "/blacklist/sync",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Blacklist", "Products"],
+    }),
+
+    // POST /blacklist/unlink { spreadsheet_url }
+    unlinkBlacklistSheet: builder.mutation({
+      query: (data) => ({
+        url: "/blacklist/unlink",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["Blacklist", "Products"],
+    }),
+
+    // GET /blacklist/brands
+    getBlacklistedBrands: builder.query({
+      query: () => "/blacklist/brands",
+      providesTags: ["Blacklist"],
+    }),
   }),
   overrideExisting: true,
 });
@@ -133,6 +195,7 @@ export const {
   useSaveBolCredentialsMutation,
   useUpdateBolMultiplierMutation,
   useDeleteBolCredentialsMutation,
+  useTestBolAccountMutation,
   useGetAmazonCredentialsQuery,
   useSaveAmazonCredentialsMutation,
   useImportPublicSheetMutation,
@@ -141,6 +204,13 @@ export const {
   useLazyGetSpreadsheetTabsQuery,
   useExchangeGoogleCodeMutation,
   useReconnectSpreadsheetMutation,
+  useGetBlacklistSheetsQuery,
+  useImportPublicBlacklistMutation,
+  useImportOAuthBlacklistMutation,
+  useSyncBlacklistSheetMutation,
+  useUnlinkBlacklistSheetMutation,
+  useGetBlacklistedBrandsQuery,
 } = connectionApis;
 
 export default connectionApis;
+
