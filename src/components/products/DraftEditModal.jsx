@@ -326,6 +326,13 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const handleCustomFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (form.photos?.length >= 9) {
+      toast.error("Maximum 9 photos allowed per product. Please deselect or remove an existing photo first.");
+      e.target.value = "";
+      return;
+    }
+
     setUploadingImage(true);
     try {
       const formData = new FormData();
@@ -1190,7 +1197,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   children: (
                     <div className="py-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                        <span className="text-[13px] text-gray-500 font-medium">Select images or upload custom images to include in the Bol.com listing.</span>
+                        <span className="text-[13px] text-gray-500 font-medium">Select images (min 3, max 9) to include in the Bol.com listing. Images beyond 9 are automatically dropped.</span>
                         <button
                           type="button"
                           onClick={handleTranslateAllImages}
@@ -1215,13 +1222,13 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {/* Upload custom image dropzone card */}
-                        <label className="relative aspect-square bg-gray-50 border border-dashed border-gray-300 hover:border-gray-400 rounded flex flex-col items-center justify-center p-3 cursor-pointer hover:bg-gray-50 transition-all duration-200 group shadow-sm">
+                        <label className={`relative aspect-square rounded flex flex-col items-center justify-center p-3 transition-all duration-200 group shadow-sm ${form.photos?.length >= 9 ? 'bg-gray-100 border border-gray-200 cursor-not-allowed opacity-60' : 'bg-gray-50 border border-dashed border-gray-300 hover:border-gray-400 cursor-pointer hover:bg-gray-50'}`}>
                           <input 
                             type="file" 
                             accept="image/*" 
                             className="hidden" 
                             onChange={handleCustomFileUpload} 
-                            disabled={uploadingImage}
+                            disabled={uploadingImage || form.photos?.length >= 9}
                           />
                           {uploadingImage ? (
                             <Spin size="small" />
@@ -1232,8 +1239,8 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                               </svg>
                             </div>
                           )}
-                          <span className="text-[12px] font-semibold text-gray-700">Upload Image</span>
-                          <span className="text-[10px] text-slate-400 font-medium mt-0.5">JPG / PNG</span>
+                          <span className="text-[12px] font-semibold text-gray-700">{form.photos?.length >= 9 ? "Max 9 Photos" : "Upload Image"}</span>
+                          <span className="text-[10px] text-slate-400 font-medium mt-0.5">{form.photos?.length >= 9 ? "Limit reached (9/9)" : "JPG / PNG"}</span>
                         </label>
 
                         {form.photos?.length > 0 && form.photos.map((src, i) => (

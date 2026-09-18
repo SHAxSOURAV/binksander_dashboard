@@ -15,6 +15,7 @@ import {
 import BolAccountsSection from "./BolAccountsSection";
 import RimcoAccountsSection from "./RimcoAccountsSection";
 import TeamSection from "./TeamSection";
+import BrandBlacklistSection from "./BrandBlacklistSection";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { LuUnplug, LuRefreshCw } from "react-icons/lu";
 import { useUI } from "../../Provider/ContextProvider";
@@ -723,6 +724,9 @@ const SettingsModal = () => {
                   Add Public Link
                 </button>
               </div>
+
+              {/* Brand Blacklist Sheets */}
+              <BrandBlacklistSection />
 
               <BolAccountsSection
                 accounts={bolCreds}
