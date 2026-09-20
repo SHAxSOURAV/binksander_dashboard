@@ -20,8 +20,8 @@ const { TextArea } = Input;
 
 const Field = ({ label, children, required }) => (
   <div className="flex flex-col gap-1">
-    <label className="text-[11px] font-semibold text-gray-500 mb-0.5 uppercase tracking-wide">
-      {label} {required && <span className="text-red-500">*</span>}
+    <label className="text-[11px] font-semibold text-gray-500 mb-0.5 uppercase tracking-wide flex items-center gap-1">
+      {label} {required && <span className="text-rose-500">*</span>}
     </label>
     {children}
   </div>
@@ -174,6 +174,8 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const [customUploadedUrls, setCustomUploadedUrls] = useState(new Set());
   const [isDraftTranslated, setIsDraftTranslated] = useState(false);
   const [verifiedPhotoIndexes, setVerifiedPhotoIndexes] = useState(new Set());
+  const [logoRemovedIndexes, setLogoRemovedIndexes] = useState(new Set());
+  const [photosMetadata, setPhotosMetadata] = useState([]);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [translatingIndex, setTranslatingIndex] = useState(null);
   const [revertingIndex, setRevertingIndex] = useState(null);
@@ -189,6 +191,8 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     if (originalPhotos[index] && originalPhotos[index] !== url) return true;
     // 4. Single photo explicitly checked & verified clean by translation engine
     if (verifiedPhotoIndexes.has(index)) return true;
+    // 5. Logo was removed
+    if (logoRemovedIndexes.has(index)) return true;
     return false;
   };
 
@@ -376,6 +380,14 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       
       if (res.success) {
         setVerifiedPhotoIndexes(prev => new Set([...prev, index]));
+        if (res.logo_removed_indexes) {
+          setLogoRemovedIndexes(new Set(res.logo_removed_indexes));
+        } else if (res.logo_removed) {
+          setLogoRemovedIndexes(prev => new Set([...prev, index]));
+        }
+        if (res.photos_metadata) {
+          setPhotosMetadata(res.photos_metadata);
+        }
         if (res.translated_url) {
           setForm(prev => {
             const newPhotos = [...prev.photos];
@@ -392,7 +404,8 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
             return updated;
           });
         }
-        toast.success(res.message || (res.has_text === false ? "No text found — image is clean and ready!" : "Image translated successfully!"));
+        const logoMsg = res.logo_removed ? " (Brand logo erased)" : "";
+        toast.success((res.message || (res.has_text === false ? "No text found — image is clean and ready!" : "Image translated successfully!")) + logoMsg);
       }
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to translate image.");
@@ -417,6 +430,18 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
           next.delete(index);
           return next;
         });
+        if (res.logo_removed_indexes) {
+          setLogoRemovedIndexes(new Set(res.logo_removed_indexes));
+        } else {
+          setLogoRemovedIndexes(prev => {
+            const next = new Set(prev);
+            next.delete(index);
+            return next;
+          });
+        }
+        if (res.photos_metadata) {
+          setPhotosMetadata(res.photos_metadata);
+        }
         setIsDraftTranslated(false);
         setForm(prev => {
           const newPhotos = [...prev.photos];
@@ -443,6 +468,12 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       if (res.success && res.data?.photos) {
         setIsDraftTranslated(true);
         setVerifiedPhotoIndexes(new Set(res.data.photos.map((_, i) => i)));
+        if (res.data.logo_removed_indexes) {
+          setLogoRemovedIndexes(new Set(res.data.logo_removed_indexes));
+        }
+        if (res.data.photos_metadata) {
+          setPhotosMetadata(res.data.photos_metadata);
+        }
         setForm(prev => ({
           ...prev,
           photos: res.data.photos
@@ -450,7 +481,9 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         if (res.data.original_photos) {
           setOriginalPhotos(res.data.original_photos);
         }
-        toast.success("All pictures checked & translated successfully!");
+        const logoCount = res.data.logo_removed_indexes?.length || 0;
+        const logoMsg = logoCount > 0 ? ` (${logoCount} logo${logoCount > 1 ? 's' : ''} removed)` : '';
+        toast.success(`All pictures checked & translated successfully!${logoMsg}`);
       }
     } catch (err) {
       toast.error(err?.data?.detail || err?.message || "Failed to translate all images.");
@@ -575,6 +608,13 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         });
         setVerifiedPhotoIndexes(autoVerified);
       }
+
+      if (draft.logo_removed_indexes?.length) {
+        setLogoRemovedIndexes(new Set(draft.logo_removed_indexes));
+      } else {
+        setLogoRemovedIndexes(new Set());
+      }
+      setPhotosMetadata(draft.photos_metadata || []);
 
       setOriginalPhotos(draft.original_photos || draft.photos || []);
       if (draft.photos?.length > 0) {
@@ -729,7 +769,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           value={form.title}
                           onChange={(e) => handleChange("title", e.target.value)}
                           rows={2}
-                          className="rounded-lg text-[14px] text-gray-800"
+                          className="rounded-[4px] text-[14px] text-gray-800 border-gray-200 hover:border-gray-300 focus:border-gray-900 focus:ring-0 p-2.5"
                         />
                       </Field>
 
@@ -752,12 +792,12 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                             value={form.product_category}
                             onChange={(e) => handleChange("product_category", e.target.value)}
                             placeholder="Spreadsheet Product Category"
-                            className="rounded-lg h-10 text-[14px] text-gray-800"
+                            className="rounded-[4px] h-10 text-[14px] text-gray-800 border-gray-200"
                           />
                         </Field>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-3.5 rounded border border-gray-200/80">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/60 p-4 rounded-[4px] border border-gray-200">
                         <Field label="Bol.com Product Group (Chunk ID)" required>
                           {form.chunk_recommendations?.length > 0 ? (
                             <Select
@@ -783,7 +823,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                               value={form.chunk_id || ""}
                               onChange={(e) => handleChange("chunk_id", e.target.value)}
                               placeholder="Enter Bol Chunk ID (e.g. 30006542)"
-                              className="w-full rounded-lg h-10 text-[14px] text-gray-800"
+                              className="w-full rounded-[4px] h-10 text-[14px] text-gray-800 border-gray-200"
                             />
                           )}
                         </Field>
@@ -793,7 +833,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                             value={form.chunk_name}
                             onChange={(e) => handleChange("chunk_name", e.target.value)}
                             placeholder="Product Group Name"
-                            className="rounded-lg h-10 text-[14px] text-gray-800"
+                            className="rounded-[4px] h-10 text-[14px] text-gray-800 border-gray-200"
                           />
                         </Field>
                       </div>
@@ -803,26 +843,30 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           <Input
                             value={form.ean}
                             onChange={(e) => handleChange("ean", e.target.value)}
-                            className="rounded-lg h-10 text-[14px] text-gray-800"
+                            className="rounded-[4px] h-10 text-[14px] text-gray-800 border-gray-200"
                           />
                         </Field>
                         
                         <div className="flex flex-col justify-end">
                             <div className="flex items-center justify-between mb-3">
-                                <label className="text-[13px] font-semibold text-gray-700">Schedule Publishing</label>
-                                <Button 
-                                    type={scheduleEnabled ? "primary" : "default"} 
-                                    size="small" 
+                                <label className="text-[12px] font-semibold text-gray-700">Schedule Publishing</label>
+                                <button 
+                                    type="button"
                                     onClick={() => setScheduleEnabled(!scheduleEnabled)}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-[4px] border transition-all cursor-pointer ${
+                                      scheduleEnabled
+                                        ? "bg-gray-900 text-white border-gray-900"
+                                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                    }`}
                                 >
                                     {scheduleEnabled ? "Enabled" : "Off"}
-                                </Button>
+                                </button>
                             </div>
                             {scheduleEnabled && (
                                 <Field label="Publish Date & Time (Europe/Amsterdam)">
                                     <DatePicker 
                                     showTime 
-                                    className="w-full h-9" 
+                                    className="w-full h-10 rounded-[4px] border-gray-200" 
                                     onChange={(v) => handleChange("schedule_at", v?.toDate() || null)}
                                     />
                                 </Field>
@@ -835,7 +879,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           <InputNumber
                             value={form.bol_price}
                             onChange={(val) => handleChange("bol_price", val)}
-                            className="w-full rounded-lg flex items-center text-[14px] font-bold"
+                            className="w-full rounded-[4px] flex items-center text-[14px] font-bold h-10 border-gray-200"
                             min={0}
                             step={0.01}
                             prefix={<span className="text-gray-400 mr-1">€</span>}
@@ -845,7 +889,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           <InputNumber
                             value={form.stock_amount}
                             onChange={(val) => handleChange("stock_amount", val)}
-                            className="w-full rounded-lg flex items-center text-[14px]"
+                            className="w-full rounded-[4px] flex items-center text-[14px] h-10 border-gray-200"
                             min={0}
                             step={1}
                           />
@@ -896,8 +940,8 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       {/* Product Description */}
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
-                            Product Description <span className="text-red-500">*</span>
+                          <label className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                            Product Description <span className="text-rose-500">*</span>
                           </label>
                           <div className="flex items-center gap-2.5">
                             <button
@@ -907,12 +951,12 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                 handleChange("description", cleaned);
                                 toast.success("Description formatted & cleaned for Bol.com!");
                               }}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-lg transition-all active:scale-95 shadow-2xs cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-[4px] transition-all active:scale-95 shadow-2xs cursor-pointer"
                               title="Strip Asian brackets 【】, remove Amazon terms, replace competitor brands, and format for Bol.com"
                             >
-                              🪄 Clean for Bol.com
+                              Clean for Bol.com
                             </button>
-                            <span className="text-[11px] text-slate-400 font-medium">
+                            <span className="text-xs text-gray-400 font-medium">
                               {(form.description || "").length} characters
                             </span>
                           </div>
@@ -921,58 +965,53 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           value={form.description}
                           onChange={(e) => handleChange("description", e.target.value)}
                           rows={6}
-                          className="rounded text-[13px] text-slate-800 leading-relaxed thin-scrollbar p-3.5 border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                          className="rounded-[4px] text-[13px] text-gray-800 leading-relaxed thin-scrollbar p-3.5 border-gray-200 hover:border-gray-300 focus:border-gray-900 focus:ring-0"
                           placeholder="Rich Dutch product description for Bol.com..."
                         />
                       </div>
 
-                      {/* Bol.com Data Model v10 Specifications Container */}
-                      <div className="bg-white border border-slate-200/90 rounded-md overflow-hidden shadow-xs">
+                      {/* Bol.com Data Model Specifications Container */}
+                      <div className="bg-white border border-gray-200 rounded-[4px] overflow-hidden shadow-2xs">
                         {/* Clean Top Header */}
-                        <div className="px-5 py-4 bg-gray-50/80 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-500 text-base font-bold shadow-2xs">
-                              🏷️
+                        <div className="px-5 py-3.5 bg-gray-50/70 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2.5">
+                              <h3 className="text-sm font-bold text-gray-900 tracking-tight">
+                                Bol.com Data Model Specifications
+                              </h3>
+                              <span className="px-2 py-0.5 rounded-[4px] text-xs font-medium border border-gray-200 bg-white text-gray-600">
+                                {bolPreviewData?.chunk_name || form.chunk_name || "General Category"} ({form.chunk_id || "Auto"})
+                              </span>
                             </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-sm font-bold text-slate-800 tracking-tight">
-                                  Bol.com Data Model Specifications
-                                </h3>
-                                <span className="px-2.5 py-0.5 rounded text-[11px] font-semibold border border-gray-200 text-gray-600">
-                                  {bolPreviewData?.chunk_name || form.chunk_name || "General Category"} ({form.chunk_id || "Auto"})
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-slate-500 mt-0.5">
-                                Level 0 & 1 attributes are strictly validated by Bol.com for the product to be published as "Te koop".
-                              </p>
-                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Level 0 & 1 attributes are strictly validated by Bol.com for the product to be published as "Te koop".
+                            </p>
                           </div>
 
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-2">
                             {/* View Switcher Segmented Control */}
-                            <div className="flex bg-slate-200/70 p-1 rounded text-xs font-semibold">
+                            <div className="flex bg-gray-200/80 p-0.5 rounded-[4px] text-xs font-medium">
                               <button
                                 type="button"
                                 onClick={() => setSpecViewMode("categorized")}
-                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
+                                className={`px-3 py-1 rounded-[4px] transition-all cursor-pointer text-xs ${
                                   specViewMode === "categorized"
-                                    ? "bg-white text-slate-800 shadow-xs font-bold"
-                                    : "text-slate-600 hover:text-slate-900"
+                                    ? "bg-white text-gray-900 shadow-2xs font-semibold"
+                                    : "text-gray-600 hover:text-gray-900"
                                 }`}
                               >
-                                📋 Specifications
+                                Specifications
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setSpecViewMode("payload")}
-                                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
+                                className={`px-3 py-1 rounded-[4px] transition-all cursor-pointer text-xs ${
                                   specViewMode === "payload"
-                                    ? "bg-white text-blue-700 shadow-xs font-bold"
-                                    : "text-slate-600 hover:text-slate-900"
+                                    ? "bg-white text-gray-900 shadow-2xs font-semibold"
+                                    : "text-gray-600 hover:text-gray-900"
                                 }`}
                               >
-                                {"{ }"} Live Bol Payload
+                                Live Bol Payload
                               </button>
                             </div>
                           </div>
@@ -983,16 +1022,16 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           <div className="p-5 space-y-6">
                             {/* 1. Mandatory Attributes Section */}
                             <div>
-                              <div className="flex items-center justify-between pb-2.5 mb-3.5 border-b border-slate-100">
+                              <div className="flex items-center justify-between pb-2.5 mb-3.5 border-b border-gray-100">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                                  <span className="text-xs font-bold text-gray-900 uppercase tracking-wide">
                                     Mandatory Attributes (Level 0 & 1)
                                   </span>
-                                  <span className="text-[11px] text-slate-500 font-medium">
+                                  <span className="text-xs text-gray-400 font-normal">
                                     Required English Attribute Keys & Dutch Values
                                   </span>
                                 </div>
-                                <span className="text-[11px] font-bold text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
+                                <span className="text-xs font-semibold text-gray-600 px-2 py-0.5 rounded-[4px] border border-gray-200 bg-white">
                                   {bolPreviewData?.mandatory_attributes?.filter(a => Boolean(form.attributes?.[a.id] || a.value)).length || 0} of {bolPreviewData?.mandatory_attributes?.length || 0} Ready
                                 </span>
                               </div>
@@ -1007,31 +1046,27 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                     return (
                                       <div
                                         key={attr.id}
-                                        className={`p-3.5 rounded border transition-all ${
+                                        className={`p-3.5 rounded-[4px] border transition-all ${
                                           hasValue
-                                            ? "bg-gray-50/60 border-slate-200/90 hover:border-slate-300"
-                                            : "bg-amber-50/40 border-amber-200"
+                                            ? "bg-white border-gray-200 hover:border-gray-300"
+                                            : "bg-gray-50/50 border-gray-300"
                                         }`}
                                       >
-                                        <div className="flex items-center justify-between mb-1.5">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[12px] font-bold text-slate-800">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-gray-900">
                                               {attr.id}
                                             </span>
-                                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
-                                              attr.level === 0 ? "border border-gray-300 text-gray-700" : "border border-gray-200 text-gray-500"
-                                            }`}>
+                                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-[4px] border border-gray-200 text-gray-500 bg-gray-50">
                                               Level {attr.level}
                                             </span>
                                           </div>
                                           {hasValue ? (
-                                            <span className="text-[10px] font-bold text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 flex items-center gap-1">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                            <span className="text-[10px] font-medium text-gray-600 px-2 py-0.5 rounded-[4px] border border-gray-200 bg-gray-50">
                                               Ready
                                             </span>
                                           ) : (
-                                            <span className="text-[10px] font-bold text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1 animate-pulse">
-                                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                            <span className="text-[10px] font-semibold text-gray-900 px-2 py-0.5 rounded-[4px] border border-gray-300 bg-white">
                                               Required
                                             </span>
                                           )}
@@ -1042,7 +1077,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                             value={currentVal || undefined}
                                             onChange={(val) => handleAttributeChange(attr.id, val)}
                                             placeholder={`Select ${attr.id}`}
-                                            className="w-full h-8 text-[12px]"
+                                            className="w-full h-9 text-xs draft-attr-select"
                                             options={allowed.map((opt) => ({ value: opt, label: opt }))}
                                             allowClear
                                           />
@@ -1051,7 +1086,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                             value={currentVal}
                                             onChange={(e) => handleAttributeChange(attr.id, e.target.value)}
                                             placeholder={`Enter ${attr.id}`}
-                                            className="w-full h-8 text-[12px] rounded-lg border-slate-200"
+                                            className="w-full h-9 text-xs rounded-[4px] border-gray-200"
                                           />
                                         )}
                                       </div>
@@ -1069,14 +1104,14 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                     if (["DESCRIPTION", "BESCHRIJVING"].includes(rawK.toUpperCase())) return null;
 
                                     return (
-                                      <div key={k} className="p-3 bg-gray-50/80 border border-slate-200/90 rounded">
-                                        <span className="text-[11px] font-bold text-slate-600 block mb-1">
+                                      <div key={k} className="p-3 bg-gray-50/60 border border-gray-200 rounded-[4px]">
+                                        <span className="text-[11px] font-semibold text-gray-600 block mb-1">
                                           {rawK}
                                         </span>
                                         <Input
                                           value={rawV}
                                           onChange={(e) => handleAttributeChange(rawK, e.target.value)}
-                                          className="h-8 text-[12px] rounded-lg border-slate-200"
+                                          className="h-8 text-xs rounded-[4px] border-gray-200"
                                         />
                                       </div>
                                     );
@@ -1088,18 +1123,18 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                             {/* 2. Optional / Product Specifications Section */}
                             {bolPreviewData?.optional_attributes?.length > 0 && (
                               <div className="pt-2">
-                                <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
-                                  <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100">
+                                  <span className="text-xs font-bold text-gray-900 uppercase tracking-wide">
                                     Additional Category Specifications (Optional)
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                                   {bolPreviewData.optional_attributes.map((attr) => (
-                                    <div key={attr.id} className="p-2.5 bg-gray-50/50 border border-slate-200/70 rounded">
-                                      <span className="text-[10px] font-bold text-slate-400 uppercase block truncate" title={attr.id}>
+                                    <div key={attr.id} className="p-2.5 bg-gray-50/50 border border-gray-200 rounded-[4px]">
+                                      <span className="text-[10px] font-semibold text-gray-400 uppercase block truncate" title={attr.id}>
                                         {attr.id}
                                       </span>
-                                      <span className="text-[12px] font-medium text-gray-700 block truncate mt-0.5" title={String(attr.value)}>
+                                      <span className="text-xs font-medium text-gray-800 block truncate mt-0.5" title={String(attr.value)}>
                                         {String(attr.value)}
                                       </span>
                                     </div>
@@ -1110,16 +1145,16 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                           </div>
                         ) : (
                           /* 2. Live Bol.com JSON Payload View */
-                          <div className="p-4 bg-slate-950 text-slate-100 font-mono text-xs">
-                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+                          <div className="p-4 bg-gray-950 text-gray-100 font-mono text-xs rounded-b-[4px]">
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-800">
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => setPayloadType("content")}
-                                  className={`px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
+                                  className={`px-3 py-1.5 rounded-[4px] transition-all text-xs font-semibold cursor-pointer ${
                                     payloadType === "content"
-                                      ? "bg-gray-900 text-white"
-                                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                      ? "bg-gray-800 text-white"
+                                      : "bg-gray-900 text-gray-400 hover:text-white"
                                   }`}
                                 >
                                   POST /retailer/content/products
@@ -1127,10 +1162,10 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                 <button
                                   type="button"
                                   onClick={() => setPayloadType("offer")}
-                                  className={`px-3 py-1.5 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
+                                  className={`px-3 py-1.5 rounded-[4px] transition-all text-xs font-semibold cursor-pointer ${
                                     payloadType === "offer"
-                                      ? "bg-gray-900 text-white"
-                                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                      ? "bg-gray-800 text-white"
+                                      : "bg-gray-900 text-gray-400 hover:text-white"
                                   }`}
                                 >
                                   POST /retailer/offers
@@ -1150,13 +1185,13 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                                   navigator.clipboard.writeText(payloadStr);
                                   toast.success("Payload copied to clipboard!");
                                 }}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-700"
+                                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-[4px] text-xs font-sans font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700"
                               >
-                                📋 Copy JSON
+                                Copy JSON
                               </button>
                             </div>
 
-                            <pre className="p-3.5 bg-slate-900 rounded overflow-x-auto text-[11px] text-emerald-400 max-h-96 thin-scrollbar border border-slate-800/80">
+                            <pre className="p-3.5 bg-black/40 rounded-[4px] overflow-x-auto text-[11px] text-gray-300 max-h-96 thin-scrollbar border border-gray-800/80">
                               {JSON.stringify(
                                 payloadType === "content"
                                   ? (liveContentPayload || { status: "Generating content payload..." })
@@ -1177,19 +1212,16 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                     <div className="flex items-center gap-2">
                       <span>Media Gallery</span>
                       {hasInsufficientPhotos ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                          <span>{selectedCount}/3 Photos</span>
+                        <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-medium text-gray-600 bg-gray-100 border border-gray-200">
+                          {selectedCount}/3 Photos
                         </span>
                       ) : hasUntranslatedImages ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-amber-700 border border-amber-200 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-medium text-gray-600 bg-gray-100 border border-gray-200">
                           {untranslatedCount > 0 ? `${untranslatedCount} Untranslated` : "Select Image"}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold text-gray-600 border border-gray-200 flex items-center gap-1">
-                          <span>✓</span>
-                          <span>{selectedCount}/{selectedCount} Ready</span>
+                        <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-medium text-gray-600 bg-gray-100 border border-gray-200">
+                          {selectedCount}/{selectedCount} Ready
                         </span>
                       )}
                     </div>
@@ -1197,12 +1229,12 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   children: (
                     <div className="py-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                        <span className="text-[13px] text-gray-500 font-medium">Select images (min 3, max 9) to include in the Bol.com listing. Images beyond 9 are automatically dropped.</span>
+                        <span className="text-[13px] text-gray-500 font-medium">Select minimum 3, maximum 9 images to publish.</span>
                         <button
                           type="button"
                           onClick={handleTranslateAllImages}
                           disabled={translatingAll || !form.photos?.length}
-                          className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-700 text-white rounded text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                          className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-700 text-white rounded-[4px] text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
                           title="Translate all Dutch text in product pictures using AI"
                         >
                           {translatingAll ? (
@@ -1222,7 +1254,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {/* Upload custom image dropzone card */}
-                        <label className={`relative aspect-square rounded flex flex-col items-center justify-center p-3 transition-all duration-200 group shadow-sm ${form.photos?.length >= 9 ? 'bg-gray-100 border border-gray-200 cursor-not-allowed opacity-60' : 'bg-gray-50 border border-dashed border-gray-300 hover:border-gray-400 cursor-pointer hover:bg-gray-50'}`}>
+                        <label className={`relative aspect-square rounded-[4px] flex flex-col items-center justify-center p-3 transition-all duration-200 group shadow-sm ${form.photos?.length >= 9 ? 'bg-gray-100 border border-gray-200 cursor-not-allowed opacity-60' : 'bg-gray-50 border border-dashed border-gray-300 hover:border-gray-400 cursor-pointer hover:bg-gray-50'}`}>
                           <input 
                             type="file" 
                             accept="image/*" 
@@ -1246,7 +1278,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                         {form.photos?.length > 0 && form.photos.map((src, i) => (
                           <div 
                             key={i} 
-                            className={`relative aspect-square bg-white border rounded-md overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center p-2 group ${selectedPhotos.includes(i) ? 'border-brand ring-2 ring-brand/10' : 'border-gray-200 hover:border-slate-300'}`}
+                            className={`relative aspect-square bg-white border rounded-[4px] overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center p-2 group ${selectedPhotos.includes(i) ? 'border-brand ring-2 ring-brand/10' : 'border-gray-200 hover:border-slate-300'}`}
                           >
                              {translatingIndex === i || revertingIndex === i ? (
                                <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
@@ -1261,50 +1293,81 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                              <div className={`absolute inset-0 transition-all duration-200 pointer-events-none ${selectedPhotos.includes(i) ? 'bg-transparent' : 'bg-slate-900/20 group-hover:bg-slate-900/10'}`}></div>
                              
                              {isPhotoTranslated(i, src) ? (
-                                <>
-                                  <div className="absolute top-2.5 left-2.5 z-10">
-                                    <span className={`px-2.5 py-0.5 backdrop-blur-md text-white rounded text-[10px] font-bold tracking-wide shadow-sm flex items-center gap-1 border ${(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? 'bg-gray-900/85 border-white/20' : customUploadedUrls.has(src) ? 'bg-gray-700/85 border-white/20' : 'bg-gray-500/85 border-white/20'}`}>
-                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-white">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                      </svg>
-                                      {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) ? "Translated" : customUploadedUrls.has(src) ? "Custom Upload" : "Clean (No Text)"}
-                                    </span>
-                                  </div>
-                                  
-                                  {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) && (
-                                    <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
-                                      <button
-                                        type="button"
-                                        title="Undo translation & revert to original photo"
-                                        onClick={(e) => handleRevertImage(i, e)}
-                                        className="px-2.5 py-1 bg-slate-900/85 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded text-[10px] font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-                                        </svg>
-                                        Undo Translation
-                                      </button>
-                                    </div>
-                                  )}
-                                </>
+                                (() => {
+                                  const photoMeta = photosMetadata?.[i];
+                                  const isLogoRemoved = logoRemovedIndexes.has(i) || photoMeta?.logo_removed;
+                                  const hasTextTranslated = photoMeta ? (photoMeta.has_text === true) : (isPhotoTranslated(i, src) && !isLogoRemoved);
+
+                                  return (
+                                    <>
+                                      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                                        {hasTextTranslated && (
+                                          <span className="px-2 py-0.5 backdrop-blur-md bg-gray-950/90 text-white border border-white/15 rounded-[4px] text-[10px] font-medium tracking-wide shadow-sm flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-white">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                            </svg>
+                                            Translated
+                                          </span>
+                                        )}
+
+                                        {isLogoRemoved && (
+                                          <span
+                                            title={photoMeta?.logos?.length ? `Removed brand logo: ${photoMeta.logos.join(', ')}` : "Brand logo detected and removed"}
+                                            className="px-2 py-0.5 backdrop-blur-md bg-gray-950/90 text-white border border-white/15 rounded-[4px] text-[10px] font-medium tracking-wide shadow-sm flex items-center gap-1"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-gray-300">
+                                              <path fillRule="evenodd" d="M12.516 2.17a.75.75 0 00-1.032 0 11.209 11.209 0 01-7.877 3.08.75.75 0 00-.722.515A12.74 12.74 0 002.5 9.75c0 5.942 4.064 10.933 9.563 12.348a.749.749 0 00.374 0c5.499-1.415 9.563-6.406 9.563-12.348 0-1.39-.223-2.73-.635-3.985a.75.75 0 00-.722-.516l-.143.001c-2.996 0-5.717-1.17-7.734-3.08zm3.094 8.016a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
+                                            </svg>
+                                            Logo Removed
+                                          </span>
+                                        )}
+
+                                        {!hasTextTranslated && !isLogoRemoved && (
+                                          <span className="px-2 py-0.5 backdrop-blur-md bg-gray-950/90 text-white border border-white/15 rounded-[4px] text-[10px] font-medium tracking-wide shadow-sm flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-white">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                            </svg>
+                                            {customUploadedUrls.has(src) ? "Custom Upload" : "Clean (No Text)"}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {(src?.includes("translated-images") || (originalPhotos[i] && originalPhotos[i] !== src)) && (
+                                        <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                                          <button
+                                            type="button"
+                                            title="Revert to original photo"
+                                            onClick={(e) => handleRevertImage(i, e)}
+                                            className="px-2.5 py-1 bg-gray-950/90 hover:bg-rose-600 text-white backdrop-blur-md border border-white/20 rounded-[4px] text-[10px] font-medium shadow-md transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                            </svg>
+                                            {isLogoRemoved && !hasTextTranslated ? "Undo Logo Removal" : "Undo Translation"}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()
                              ) : (
-                               <div className="absolute top-2.5 left-2.5 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
-                                 <button 
-                                   type="button"
-                                   title="Translate Image"
-                                   onClick={(e) => handleTranslateImage(i, e)}
-                                   className="px-2.5 py-1 bg-white/95 hover:bg-gray-900 hover:text-white backdrop-blur-md border border-gray-200 rounded text-[10px] font-semibold text-gray-700 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                                 >
-                                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
-                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
-                                   </svg>
-                                   Translate
-                                 </button>
-                               </div>
-                             )}
+                                <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
+                                  <button 
+                                    type="button"
+                                    title="Translate Image"
+                                    onClick={(e) => handleTranslateImage(i, e)}
+                                    className="px-2.5 py-1 bg-white/95 hover:bg-gray-900 hover:text-white backdrop-blur-md border border-gray-200 rounded-[4px] text-[10px] font-medium text-gray-700 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
+                                    </svg>
+                                    Translate
+                                  </button>
+                                </div>
+                              )}
 
                              <div 
-                               className={`absolute top-2.5 right-2.5 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer z-10 ${selectedPhotos.includes(i) ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/20' : 'bg-white/80 backdrop-blur-md border border-slate-300 text-transparent hover:bg-white hover:border-slate-400'}`} 
+                               className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm cursor-pointer z-10 ${selectedPhotos.includes(i) ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/20' : 'bg-white/80 backdrop-blur-md border border-slate-300 text-transparent hover:bg-white hover:border-slate-400'}`} 
                                onClick={(e) => { e.stopPropagation(); togglePhotoSelection(i); }}
                              >
                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
@@ -1324,8 +1387,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
               {/* Left side: Dynamic translation / validation status banner */}
               <div className="flex items-center gap-2">
                 {!isBulkMode && hasInsufficientPhotos ? (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-xs font-semibold">
-                    <span>⚠️</span>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-[4px] border border-gray-200 bg-gray-50 text-gray-700 text-xs font-medium">
                     <span>
                       {selectedCount === 0
                         ? "At least 3 photos required to publish (0/3 selected). Please upload photos in Media Gallery."
@@ -1333,8 +1395,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                     </span>
                   </div>
                 ) : !isBulkMode && hasUntranslatedImages ? (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-800 text-xs font-semibold">
-                    <span>⚠️</span>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-[4px] border border-gray-200 bg-gray-50 text-gray-700 text-xs font-medium">
                     <span>
                       {untranslatedCount} selected image{untranslatedCount === 1 ? '' : 's'} untranslated.
                     </span>
@@ -1343,28 +1404,22 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                         type="button"
                         onClick={handleTranslateAllImages}
                         disabled={translatingAll}
-                        className="ml-1 px-2 py-0.5 bg-gray-900 text-white rounded font-semibold hover:bg-gray-700 cursor-pointer disabled:opacity-50"
+                        className="ml-1 px-2.5 py-1 bg-gray-900 text-white rounded-[4px] font-semibold hover:bg-black cursor-pointer disabled:opacity-50 text-[11px]"
                       >
                         {translatingAll ? "Translating..." : "Translate All"}
                       </button>
                     )}
                   </div>
                 ) : !isBulkMode && !isValidEan ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
-                    <span>⚠️</span>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] border border-gray-200 bg-gray-50 text-gray-700 text-xs font-medium">
                     <span>Valid 13-digit EAN required.</span>
-                  </div>
-                ) : !isBulkMode ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-semibold">
-                    <span>✓</span>
-                    <span>All {selectedCount} images ready & translated</span>
                   </div>
                 ) : null}
               </div>
 
               {/* Right side: Action buttons */}
               <div className="flex items-center justify-end gap-3 shrink-0">
-                <Button onClick={onClose} className="h-10 px-5 rounded-lg font-medium border-gray-200 text-gray-600 cursor-pointer">
+                <Button onClick={onClose} className="h-10 px-5 rounded-[4px] font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 cursor-pointer">
                   Cancel
                 </Button>
                 <Button
@@ -1372,7 +1427,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   onClick={handlePublish}
                   loading={publishing || updating}
                   disabled={isPublishDisabled}
-                  className="h-10 px-6 rounded-lg font-semibold bg-gray-900 text-white disabled:!bg-gray-200 disabled:!text-gray-400 disabled:!border-gray-200 disabled:!cursor-not-allowed cursor-pointer transition-all"
+                  className="h-10 px-6 rounded-[4px] font-semibold bg-gray-900 hover:bg-black text-white disabled:!bg-gray-200 disabled:!text-gray-400 disabled:!border-gray-200 disabled:!cursor-not-allowed cursor-pointer transition-all"
                   title={
                     hasInsufficientPhotos && !isBulkMode
                       ? `At least 3 photos are required to publish (currently ${selectedCount}/3 selected).`
@@ -1391,29 +1446,41 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
       <style dangerouslySetInnerHTML={{__html: `
         .draft-modal .ant-modal-content {
-           border-radius: 24px;
+           border-radius: 6px;
            padding: 24px 32px;
+        }
+        .draft-modal .ant-input,
+        .draft-modal .ant-input-number,
+        .draft-modal .ant-picker,
+        .draft-modal .ant-select-selector {
+           border-radius: 4px !important;
         }
         .draft-modal .ant-input-number .ant-input-number-input {
            height: 38px;
         }
         .draft-select .ant-select-selector {
-           border-radius: 8px !important;
+           border-radius: 4px !important;
            height: 40px !important;
            display: flex;
            align-items: center;
         }
+        .draft-attr-select .ant-select-selector {
+           border-radius: 4px !important;
+           height: 36px !important;
+           display: flex;
+           align-items: center;
+        }
         .custom-tabs .ant-tabs-nav::before {
-           border-bottom: 2px solid #f3f4f6;
+           border-bottom: 1px solid #e5e7eb;
         }
         .custom-tabs .ant-tabs-tab {
-           padding: 12px 0;
-           margin: 0 32px 0 0;
+           padding: 10px 0;
+           margin: 0 28px 0 0;
         }
         .custom-tabs .ant-tabs-tab-btn {
-           font-weight: 700;
-           font-size: 14px;
-           color: #9ca3af;
+           font-weight: 600;
+           font-size: 13px;
+           color: #6b7280;
         }
         .custom-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
            color: #111827 !important;
@@ -1421,7 +1488,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
         .custom-tabs .ant-tabs-ink-bar {
            background: #111827;
            height: 2px !important;
-           border-radius: 3px 3px 0 0;
+           border-radius: 2px 2px 0 0;
         }
       `}} />
     </Modal>
