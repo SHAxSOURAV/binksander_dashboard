@@ -375,11 +375,12 @@ const SettingsModal = () => {
       onCancel={() => setSettingsOpen(false)}
       footer={null}
       centered
-      width={800}
+      width={settingsTab === "team" ? 940 : 800}
       title={<span className="text-base font-semibold text-gray-900">Settings</span>}
       className="settings-modal-premium"
+      style={{ maxWidth: '96vw' }}
       styles={{
-        content: { padding: '20px 24px', borderRadius: '8px', boxShadow: '0 16px 40px -12px rgba(0, 0, 0, 0.18)' },
+        content: { padding: '20px 24px', borderRadius: '6px', boxShadow: '0 16px 40px -12px rgba(0, 0, 0, 0.18)' },
         header: { marginBottom: '12px' }
       }}
     >
