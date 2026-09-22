@@ -205,7 +205,7 @@ const SettingsModal = () => {
   const handleOpenUnlink = (spreadsheet_url, itemCount) => {
     setDisconnectSheetUrl(spreadsheet_url);
     setDisconnectItemCount(itemCount || 0);
-    setDisconnectDeleteData(false);
+    setDisconnectDeleteData(true);
     setDisconnectModalOpen(true);
   };
 
@@ -627,22 +627,7 @@ const SettingsModal = () => {
                               </button>
                             ) : s.is_syncing ? (
                               <button
-                                onClick={() => {
-                                  Modal.confirm({
-                                    title: "Disconnect Syncing?",
-                                    content: "Your products will remain in the dashboard, but will no longer automatically sync from Google Sheets.",
-                                    okText: "Disconnect",
-                                    okType: "danger",
-                                    onOk: async () => {
-                                      try {
-                                        await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: false }).unwrap();
-                                        toast.success("Disconnected from Google Sheet");
-                                      } catch (err) {
-                                        toast.error(err?.data?.detail || "Failed to disconnect");
-                                      }
-                                    }
-                                  });
-                                }}
+                                onClick={() => handleOpenUnlink(s.spreadsheet_url, s.item_count)}
                                 disabled={unlinking}
                                 className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
                               >
