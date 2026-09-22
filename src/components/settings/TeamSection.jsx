@@ -46,7 +46,10 @@ const MODULE_DEFINITIONS = [
   { key: "rimco", label: "Rimco Logistics", desc: "Rimco shipping & fulfillment" },
   { key: "returns", label: "Return Dashboard", desc: "Amazon returns management" },
   { key: "research", label: "Research Tool", desc: "Product research tool" },
+  { key: "api_usage", label: "API Usage & Quotas", desc: "View third-party API quotas, live usage & health", sensitive: true },
 ];
+
+const STANDARD_MODULE_KEYS = MODULE_DEFINITIONS.filter((m) => !m.sensitive).map((m) => m.key);
 
 const TeamSection = () => {
   const currentUser = getUser();
@@ -97,11 +100,11 @@ const TeamSection = () => {
   const availableRoles = useMemo(() => {
     if (rolesData?.roles?.length) return rolesData.roles;
     return [
-      { key: "manager", label: "Manager / Admin", default_permissions: MODULE_DEFINITIONS.map((m) => m.key) },
+      { key: "manager", label: "Manager / Admin", default_permissions: STANDARD_MODULE_KEYS },
       { key: "product_research", label: "Product research", default_permissions: ["overview", "sales", "sourcing", "offers", "research"] },
       { key: "product_lister", label: "Product lister", default_permissions: ["overview", "inventory", "needs_review", "offers", "sourcing"] },
-      { key: "order_processor", label: "Order processor", default_permissions: MODULE_DEFINITIONS.map((m) => m.key) },
-      { key: "order_processor_manager", label: "Order processor manager", default_permissions: MODULE_DEFINITIONS.map((m) => m.key) },
+      { key: "order_processor", label: "Order processor", default_permissions: STANDARD_MODULE_KEYS },
+      { key: "order_processor_manager", label: "Order processor manager", default_permissions: STANDARD_MODULE_KEYS },
       { key: "product_lister_manager", label: "Product lister manager", default_permissions: ["overview", "inventory", "needs_review", "offers", "sourcing"] },
       { key: "stock_blacklist_checker", label: "Stock / blacklist checker", default_permissions: ["inventory", "needs_review", "offers"] },
       { key: "customer_support", label: "Customer questions / mail handling", default_permissions: ["overview", "sales"] },
@@ -785,7 +788,14 @@ const TeamSection = () => {
                       className="mt-0.5"
                     />
                     <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-800 leading-tight">{mod.label}</p>
+                      <p className="text-xs font-medium text-gray-800 leading-tight flex items-center gap-1.5">
+                        {mod.label}
+                        {mod.sensitive && (
+                          <span className="text-[9px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            Restricted
+                          </span>
+                        )}
+                      </p>
                       <p className="text-[10.5px] text-gray-400 truncate">{mod.desc}</p>
                     </div>
                   </label>
@@ -998,7 +1008,14 @@ const TeamSection = () => {
                       className="mt-0.5"
                     />
                     <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-800 leading-tight">{mod.label}</p>
+                      <p className="text-xs font-medium text-gray-800 leading-tight flex items-center gap-1.5">
+                        {mod.label}
+                        {mod.sensitive && (
+                          <span className="text-[9px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            Restricted
+                          </span>
+                        )}
+                      </p>
                       <p className="text-[10.5px] text-gray-400 truncate">{mod.desc}</p>
                     </div>
                   </label>
