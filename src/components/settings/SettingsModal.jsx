@@ -11,11 +11,13 @@ import {
   FiCamera,
   FiEdit2,
   FiUsers,
+  FiActivity,
 } from "react-icons/fi";
 import BolAccountsSection from "./BolAccountsSection";
 import RimcoAccountsSection from "./RimcoAccountsSection";
 import TeamSection from "./TeamSection";
 import BrandBlacklistSection from "./BrandBlacklistSection";
+import ApiUsageSection from "./ApiUsageSection";
 import { BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { LuUnplug, LuRefreshCw } from "react-icons/lu";
 import { useUI } from "../../Provider/ContextProvider";
@@ -73,6 +75,8 @@ const SettingsModal = () => {
     ].includes(userRole);
   const canAccessConnection =
     !isSubUser || ["manager", "admin", "seller"].includes(userRole);
+  const canAccessApiUsage =
+    !isSubUser || (currentUser?.permissions || []).includes("api_usage");
 
   const visibleTabs = [
     { key: "account", label: "Account", icon: <FiUser size={16} /> },
@@ -81,6 +85,9 @@ const SettingsModal = () => {
       : []),
     ...(canManageTeam
       ? [{ key: "team", label: "Team", icon: <FiUsers size={16} /> }]
+      : []),
+    ...(canAccessApiUsage
+      ? [{ key: "api_usage", label: "API Usage", icon: <FiActivity size={16} /> }]
       : []),
     { key: "privacy", label: "Privacy & Security", icon: <FiShield size={16} /> },
   ];
@@ -375,7 +382,7 @@ const SettingsModal = () => {
       onCancel={() => setSettingsOpen(false)}
       footer={null}
       centered
-      width={settingsTab === "team" ? 940 : 800}
+      width={["team", "api_usage"].includes(settingsTab) ? 940 : 800}
       title={<span className="text-base font-semibold text-gray-900">Settings</span>}
       className="settings-modal-premium"
       style={{ maxWidth: '96vw' }}
@@ -805,6 +812,11 @@ const SettingsModal = () => {
                 </Button>
               </Form>
             </div>
+          )}
+
+          {/* API Usage & Quotas */}
+          {settingsTab === "api_usage" && canAccessApiUsage && (
+            <ApiUsageSection />
           )}
         </div>
       </div>
