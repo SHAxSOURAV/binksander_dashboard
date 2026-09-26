@@ -13,6 +13,14 @@ const authApis = baseApis.injectEndpoints({
       invalidatesTags: ["Profile"],
     }),
 
+    // GET /auth/config -> { signup_available: boolean }
+    getAuthConfig: builder.query({
+      query: () => ({
+        url: "/auth/config",
+        method: "GET",
+      }),
+    }),
+
     // POST /auth/signup  { email, password, full_name }  → { success, message }
     // (email verification required afterwards via /auth/verify-email)
     signup: builder.mutation({
@@ -83,6 +91,7 @@ const authApis = baseApis.injectEndpoints({
 });
 
 export const {
+  useGetAuthConfigQuery,
   useLoginMutation,
   useSignupMutation,
   useVerifyEmailMutation,

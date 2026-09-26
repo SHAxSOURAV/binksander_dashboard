@@ -4,12 +4,14 @@ import toast from "react-hot-toast";
 import Logo from "../../components/shared/Logo";
 import { useLoginMutation, useResendOtpMutation } from "../../Redux/authApis";
 import { saveSession } from "../../utils/session";
+import useSignupStatus from "../../hooks/useSignupStatus";
 
 const Login = () => {
   const navigate = useNavigate();
   const [login, { isLoading }] = useLoginMutation();
   const [resendOtp] = useResendOtpMutation();
   const [form] = Form.useForm();
+  const { isSignupAvailable } = useSignupStatus();
 
   const onFinish = async (values) => {
     try {
@@ -97,12 +99,14 @@ const Login = () => {
           </div>
         </Form>
 
-        <div className="text-center mt-6">
-          <p className="text-xs text-gray-400">Don&apos;t Have An Account</p>
-          <Link to="/signup" className="text-gray-900 font-semibold text-sm">
-            Signup
-          </Link>
-        </div>
+        {isSignupAvailable && (
+          <div className="text-center mt-6">
+            <p className="text-xs text-gray-400">Don&apos;t Have An Account</p>
+            <Link to="/signup" className="text-gray-900 font-semibold text-sm">
+              Signup
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

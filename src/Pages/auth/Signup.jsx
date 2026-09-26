@@ -1,12 +1,26 @@
+import { useEffect } from "react";
 import { Form, Input, Button } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Logo from "../../components/shared/Logo";
 import { useSignupMutation } from "../../Redux/authApis";
+import useSignupStatus from "../../hooks/useSignupStatus";
 
 const Signup = () => {
   const navigate = useNavigate();
   const [signup, { isLoading }] = useSignupMutation();
+  const { isSignupAvailable, isLoading: isConfigLoading } = useSignupStatus();
+
+  useEffect(() => {
+    if (!isConfigLoading && !isSignupAvailable) {
+      toast.error("Registration is currently disabled.");
+      navigate("/login", { replace: true });
+    }
+  }, [isSignupAvailable, isConfigLoading, navigate]);
+
+  if (!isConfigLoading && !isSignupAvailable) {
+    return null;
+  }
 
   const onFinish = async (values) => {
     try {
