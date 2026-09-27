@@ -80,6 +80,7 @@ const mapItem = (it, i) => ({
   bol_offer_id: it.bol_offer_id || "",
   bol_on_hold: !!it.bol_on_hold,
   bol_stock: it.bol_stock || 0,
+  bolStock: it.bol_stock ?? null,
   pending_process_id: it.pending_process_id || "",
   pending_action: it.pending_action || "",
 });
