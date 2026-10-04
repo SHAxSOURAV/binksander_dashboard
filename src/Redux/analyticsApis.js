@@ -14,10 +14,32 @@ const analyticsApis = baseApis.injectEndpoints({
       providesTags: ["Analytics"],
     }),
 
-    // GET /analytics/performance
+    // GET /analytics/performance?account_id=&force_refresh=
     getPerformance: builder.query({
-      query: () => `/analytics/performance`,
-      providesTags: ["Analytics"],
+      query: (arg) => {
+        let accountId = null;
+        let forceRefresh = false;
+        if (typeof arg === "string") {
+          accountId = arg;
+        } else if (arg && typeof arg === "object") {
+          accountId = arg.accountId;
+          forceRefresh = !!arg.forceRefresh;
+        }
+        let url = `/analytics/performance`;
+        const params = [];
+        if (accountId) params.push(`account_id=${encodeURIComponent(accountId)}`);
+        if (forceRefresh) params.push(`force_refresh=true`);
+        if (params.length > 0) url += `?${params.join("&")}`;
+
+        return {
+          url,
+          headers: accountId ? { "x-bol-account-id": accountId } : {},
+        };
+      },
+      providesTags: (result, error, arg) => {
+        const id = typeof arg === "string" ? arg : (arg?.accountId || "GLOBAL");
+        return [{ type: "Analytics", id: `PERF_${id}` }];
+      },
     }),
 
     // GET /analytics/sales-analysis?range=&category=

@@ -1,14 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate, Tooltip } from "antd";
 import { FiSearch, FiPlus, FiLink, FiFilter, FiEye, FiCopy } from "react-icons/fi";
 import { BsGrid, BsListUl, BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { FaStar } from "react-icons/fa";
 import { LuRefreshCw, LuShieldCheck } from "react-icons/lu";
-import ProductDetailsModal from "../../components/products/ProductDetailsModal";
-import ConnectInventoryModal from "../../components/products/ConnectInventoryModal";
-import DraftEditModal from "../../components/products/DraftEditModal";
-import BulkPublishModal from "../../components/products/BulkPublishModal";
+// Heavy modals are lazy-loaded — their JS is downloaded only when the user
+// actually opens one, keeping the initial Products page bundle small.
+const ProductDetailsModal = lazy(() => import("../../components/products/ProductDetailsModal"));
+const ConnectInventoryModal = lazy(() => import("../../components/products/ConnectInventoryModal"));
+const DraftEditModal = lazy(() => import("../../components/products/DraftEditModal"));
+const BulkPublishModal = lazy(() => import("../../components/products/BulkPublishModal"));
 import Pagination from "../../components/shared/Pagination";
 import { useDispatch } from "react-redux";
 import productApis, { 
@@ -66,7 +68,7 @@ const Products = () => {
   // Remember the user's chosen page size across sessions.
   const [limit, setLimit] = useState(() => {
     const saved = Number(localStorage.getItem("products:pageSize"));
-    return PAGE_SIZE_OPTIONS.includes(saved) ? saved : 100;
+    return PAGE_SIZE_OPTIONS.includes(saved) ? saved : 20;
   });
   const [selected, setSelected] = useState(null);
   const [editingDraftId, setEditingDraftId] = useState(null);
@@ -81,6 +83,9 @@ const Products = () => {
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState("asc");
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [isFetchingAllForPublish, setIsFetchingAllForPublish] = useState(false);
+  const [allFetchedProducts, setAllFetchedProducts] = useState(null);
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
   const [stockFilter, setStockFilter] = useState("all");
 
@@ -115,6 +120,8 @@ const Products = () => {
       setDebouncedSearch(search);
       setPage(1);
       setSelectedProducts([]);
+      setSelectAllMatching(false);
+      setAllFetchedProducts(null);
     }, 400);
     return () => clearTimeout(t);
   }, [search]);
@@ -123,8 +130,17 @@ const Products = () => {
     setLimit(size);
     setPage(1);
     setSelectedProducts([]);
+    setSelectAllMatching(false);
+    setAllFetchedProducts(null);
     localStorage.setItem("products:pageSize", String(size));
   };
+
+  // Reset selection when page, active filters, or spreadsheet change
+  useEffect(() => {
+    setSelectedProducts([]);
+    setSelectAllMatching(false);
+    setAllFetchedProducts(null);
+  }, [page, activeFilters, selectedSpreadsheetUrl]);
 
   const [pollingInterval, setPollingInterval] = useState(0);
   const [scrapePollCount, setScrapePollCount] = useState(0);
@@ -144,7 +160,10 @@ const Products = () => {
     filter_publish_status: publishFilter !== "all" ? publishFilter : (activeFilters.filter_publish_status || undefined),
     ...activeFilters
   }, {
-    pollingInterval
+    pollingInterval,
+    // Keep the previous page/filter results visible while new data loads,
+    // preventing the jarring blank-skeleton flash on every interaction.
+    keepPreviousData: true,
   });
 
   useEffect(() => {
@@ -160,10 +179,10 @@ const Products = () => {
     const hasPendingStock = data?.items?.some(p => p.isValidAmazon && p.stockQuantity == null);
     
     if ((hasPendingScrape || hasMissingImage || hasPendingStock) && scrapePollCount < 35) {
-      setPollingInterval(3000);
+      setPollingInterval(8000);
       setScrapePollCount(prev => prev + 1);
     } else if (hasProcessing) {
-      setPollingInterval(10000);
+      setPollingInterval(12000);
     } else {
       setPollingInterval(30000);
     }
@@ -207,21 +226,63 @@ const Products = () => {
   const [revalidatingItemId, setRevalidatingItemId] = useState(null);
 
   const handleBulkRevalidate = async () => {
-    if (!selectedProducts || selectedProducts.length === 0) return;
+    if (!selectedProducts.length && !selectAllMatching) return;
     const eans = selectedProducts.map(p => p.ean).filter(Boolean);
     const itemIds = selectedProducts.map(p => p.itemId || p.id).filter(id => id && !String(id).startsWith('item-'));
     const asins = selectedProducts.map(p => p.asin).filter(Boolean);
 
     try {
-      const res = await revalidateInventoryItems({
-        item_ids: itemIds.length > 0 ? itemIds : undefined,
-        eans: eans.length > 0 ? eans : undefined,
-        asins: asins.length > 0 ? asins : undefined
-      }).unwrap();
-      toast.success(res.message || `Quality re-validation started for ${selectedProducts.length} product(s)!`);
+      const payload = selectAllMatching
+        ? {
+            select_all: true,
+            spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            search: debouncedSearch || undefined,
+            filter_brand: activeFilters.filter_brand,
+            filter_category: activeFilters.filter_category,
+          }
+        : {
+            item_ids: itemIds.length > 0 ? itemIds : undefined,
+            eans: eans.length > 0 ? eans : undefined,
+            asins: asins.length > 0 ? asins : undefined,
+          };
+      const res = await revalidateInventoryItems(payload).unwrap();
+      const count = selectAllMatching ? total : selectedProducts.length;
+      toast.success(res.message || `Quality re-validation started for ${count.toLocaleString()} product(s)!`);
       setSelectedProducts([]);
+      setSelectAllMatching(false);
+      setAllFetchedProducts(null);
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to re-validate selected products.");
+    }
+  };
+
+  const handleOpenBulkPublish = async () => {
+    if (selectAllMatching && total > selectedProducts.length) {
+      setIsFetchingAllForPublish(true);
+      try {
+        const result = await dispatch(
+          productApis.endpoints.getProducts.initiate({
+            page: 1,
+            limit: total > 500 ? 500 : total,
+            search: debouncedSearch,
+            sync_date_range: syncDateRange || undefined,
+            title_source: titleSource,
+            spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            ...activeFilters,
+          })
+        ).unwrap();
+        const allItems = result?.data || [];
+        setAllFetchedProducts(allItems.filter((p) => !p.scrapePending && p.title));
+        setBulkPublishOpen(true);
+      } catch (err) {
+        toast.error("Failed to fetch all products for publishing");
+        setBulkPublishOpen(true);
+      } finally {
+        setIsFetchingAllForPublish(false);
+      }
+    } else {
+      setAllFetchedProducts(null);
+      setBulkPublishOpen(true);
     }
   };
 
@@ -324,7 +385,66 @@ const Products = () => {
     }
   };
 
+  const selectableProducts = useMemo(() => {
+    return products.filter((p) => !p.scrapePending && p.title);
+  }, [products]);
+
+  const totalItems = total || 0;
+  const isAllPageSelected =
+    selectableProducts.length > 0 &&
+    selectableProducts.every((p) => selectedProducts.some((item) => item.id === p.id));
+
+  const isHeaderChecked = selectAllMatching || isAllPageSelected;
+  const isHeaderIndeterminate =
+    !selectAllMatching &&
+    selectedProducts.length > 0 &&
+    !isAllPageSelected;
+
+  const handleHeaderSelectAll = () => {
+    if (selectableProducts.length === 0) return;
+
+    if (selectAllMatching) {
+      // 3rd click: Deselect all
+      setSelectedProducts([]);
+      setSelectAllMatching(false);
+      setAllFetchedProducts(null);
+    } else if (isAllPageSelected) {
+      // 2nd click: If all on page already selected, select all matching products across all pages
+      if (totalItems > selectableProducts.length) {
+        setSelectAllMatching(true);
+        toast.success(`Selected all ${totalItems.toLocaleString()} products in Inventory Catalog`, {
+          id: "select_all_alert",
+          duration: 3,
+        });
+      } else {
+        setSelectedProducts([]);
+        setSelectAllMatching(false);
+        setAllFetchedProducts(null);
+      }
+    } else {
+      // 1st click: Select all items on this page
+      setSelectedProducts(selectableProducts);
+      setSelectAllMatching(false);
+      setAllFetchedProducts(null);
+    }
+  };
+
+  const getHeaderTooltip = () => {
+    if (selectAllMatching) {
+      return `All ${totalItems.toLocaleString()} products selected across all pages. Click to deselect all.`;
+    }
+    if (isAllPageSelected && totalItems > selectableProducts.length) {
+      return `All ${selectableProducts.length} products on this page selected. Click again to select all ${totalItems.toLocaleString()} products.`;
+    }
+    return `Select all ${selectableProducts.length} products on this page`;
+  };
+
   const toggleSelection = (p) => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelectedProducts(selectableProducts.filter((item) => item.id !== p.id));
+      return;
+    }
     setSelectedProducts(prev => {
       if (prev.find(item => item.id === p.id)) {
         return prev.filter(item => item.id !== p.id);
@@ -334,18 +454,20 @@ const Products = () => {
     });
   };
 
-  const toggleSelectAll = (e) => {
-    if (e.target.checked) {
-      const selectable = products.filter(p => !p.scrapePending && p.title);
-      setSelectedProducts(selectable);
-    } else {
-      setSelectedProducts([]);
-    }
-  };
+  const hasSelection = selectAllMatching || selectedProducts.length > 0;
+  const selectedCountDisplay = selectAllMatching ? totalItems : selectedProducts.length;
 
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
-      <div className="bg-white rounded-lg p-4 card-shadow">
+      <div className="bg-white rounded-lg p-4 card-shadow relative overflow-hidden">
+        {/* Subtle top progress bar when refreshing with stale data visible */}
+        {isFetching && !loading && (
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gray-100 overflow-hidden z-10">
+            <div className="h-full w-1/3 bg-gray-400 rounded animate-[shimmer_1.2s_ease-in-out_infinite]"
+              style={{ animation: 'shimmer 1.2s ease-in-out infinite', background: 'linear-gradient(90deg, transparent, #6b7280, transparent)' }}
+            />
+          </div>
+        )}
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
@@ -413,14 +535,17 @@ const Products = () => {
               </p>
             </div>
           </div>
+
+
           <div className="flex items-center gap-2 flex-wrap">
             <SpreadsheetSelector onSelectChange={() => setPage(1)} />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               prefix={<FiSearch className="text-gray-400 mr-1" />}
-              placeholder="Search"
-              className="h-9 w-full sm:w-56"
+              placeholder="Search EAN, Title or ASIN..."
+              allowClear
+              className="h-9 w-full sm:w-60"
             />
 
             <button
@@ -879,24 +1004,18 @@ const Products = () => {
             ))}
           </div>
         ) : (
-          /* List view */
-          <div className="overflow-x-auto thin-scrollbar">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-gray-400">
-                  <th className="py-2 px-2 w-8">
-                    <Checkbox
-                      checked={selectedProducts.length > 0 && selectedProducts.length === products.filter(p => !p.scrapePending && p.title).length}
-                      indeterminate={selectedProducts.length > 0 && selectedProducts.length < products.filter(p => !p.scrapePending && p.title).length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedProducts(products.filter(p => !p.scrapePending && p.title));
-                        } else {
-                          setSelectedProducts([]);
-                        }
-                      }}
-                    />
-                  </th>
+        /* List view */
+        <div className="overflow-x-auto thin-scrollbar">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-gray-400">
+                <th className="py-2 px-2 w-8">
+                  <Checkbox
+                    checked={isHeaderChecked}
+                    indeterminate={isHeaderIndeterminate}
+                    onChange={handleHeaderSelectAll}
+                  />
+                </th>
                   <th className="py-2 px-2 w-12" />
                   <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider">Product</th>
                   {columns.ean && <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider w-40">EAN</th>}
@@ -926,13 +1045,8 @@ const Products = () => {
                       <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedProducts.some(item => item.id === p.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedProducts(prev => [...prev, p]);
-                            } else {
-                              setSelectedProducts(prev => prev.filter(item => item.id !== p.id));
-                            }
-                          }}
+                          onChange={() => toggleSelection(p)}
+                          disabled={p.scrapePending || !p.title}
                         />
                       </td>
 
@@ -1112,65 +1226,105 @@ const Products = () => {
         </div>
       </div>
 
-      {/* Modals & Drawers */}
-      <ProductDetailsModal
-        open={!!selected}
-        product={selected}
-        onClose={() => setSelected(null)}
-        onDraftCreated={(draftId) => setEditingDraftId(draftId)}
-        onOpenDraftModal={(draftId) => setEditingDraftId(draftId)}
-      />
-      <DraftEditModal
-        open={!!editingDraftId}
-        draftId={editingDraftId}
-        onClose={() => setEditingDraftId(null)}
-      />
-      <ConnectInventoryModal
-        open={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        selectedProducts={selectedProducts}
-      />
-      {bulkPublishOpen && (
-        <BulkPublishModal
-          products={selectedProducts}
-          onClose={() => setBulkPublishOpen(false)}
-          onClearSelection={() => setSelectedProducts([])}
+      {/* Modals & Drawers — lazy-loaded, each downloads on first open */}
+      <Suspense fallback={null}>
+        <ProductDetailsModal
+          open={!!selected}
+          product={selected}
+          onClose={() => setSelected(null)}
+          onDraftCreated={(draftId) => setEditingDraftId(draftId)}
+          onOpenDraftModal={(draftId) => setEditingDraftId(draftId)}
         />
+      </Suspense>
+      <Suspense fallback={null}>
+        <DraftEditModal
+          open={!!editingDraftId}
+          draftId={editingDraftId}
+          onClose={() => setEditingDraftId(null)}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ConnectInventoryModal
+          open={connectOpen}
+          onClose={() => setConnectOpen(false)}
+          selectedProducts={selectedProducts}
+        />
+      </Suspense>
+      {bulkPublishOpen && (
+        <Suspense fallback={null}>
+          <BulkPublishModal
+            products={allFetchedProducts || selectedProducts}
+            onClose={() => setBulkPublishOpen(false)}
+            onClearSelection={() => {
+              setSelectedProducts([]);
+              setSelectAllMatching(false);
+              setAllFetchedProducts(null);
+            }}
+          />
+        </Suspense>
       )}
 
-      {/* Sticky Bulk Action Bar */}
-      {selectedProducts.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-6 py-3 rounded-2xl shadow-xl border border-gray-200 flex items-center gap-6 z-50 animate-fade-in-up">
+      {/* Sticky Bulk Action Bar (bottom-middle floating) */}
+      {hasSelection && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-4 py-2.5 rounded-md shadow-lg border border-gray-200 flex items-center gap-4 z-50 animate-fade-in-up">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
-              {selectedProducts.length}
+            <div className={`h-6 px-2 rounded ${selectAllMatching ? "bg-emerald-700" : "bg-gray-900"} text-white flex items-center justify-center font-semibold text-[11px] tabular-nums`}>
+              {(selectAllMatching ? totalItems : selectedProducts.length).toLocaleString()}
             </div>
-            <span className="text-sm font-semibold text-gray-700">Products Selected</span>
+            <div
+              onClick={handleHeaderSelectAll}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer text-xs font-medium text-gray-700 select-none"
+            >
+              <Checkbox
+                checked={isHeaderChecked}
+                indeterminate={isHeaderIndeterminate}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleHeaderSelectAll();
+                }}
+              />
+              <span>
+                {selectAllMatching
+                  ? "All selected"
+                  : isAllPageSelected && totalItems > selectableProducts.length
+                  ? "Select all"
+                  : "Select page"}
+              </span>
+            </div>
           </div>
-          <div className="h-6 w-px bg-gray-200"></div>
-          <div className="flex items-center gap-3">
-            <Button onClick={() => setSelectedProducts([])} type="text" className="text-gray-500 hover:text-gray-800">
+          <div className="h-5 w-px bg-gray-200"></div>
+          <div className="flex items-center gap-1.5">
+            <Button
+              onClick={() => {
+                setSelectedProducts([]);
+                setSelectAllMatching(false);
+                setAllFetchedProducts(null);
+              }}
+              type="text"
+              className="text-gray-500 hover:text-gray-800 cursor-pointer"
+            >
               Cancel
             </Button>
             <Button
               type="default"
               disabled={isRevalidatingInventory}
-              className="border-gray-300 text-gray-700 hover:text-black font-semibold h-9 px-4 flex items-center gap-1.5"
+              className="border-gray-200 text-gray-700 hover:text-black font-medium h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
               onClick={handleBulkRevalidate}
             >
               {isRevalidatingInventory ? (
-                <LuRefreshCw className="animate-spin text-brand" size={14} />
+                <LuRefreshCw className="animate-spin" size={13} />
               ) : (
-                <LuShieldCheck className="text-blue-600" size={14} />
+                <LuShieldCheck size={13} />
               )}
-              Re-validate ({selectedProducts.length})
+              Re-validate ({(selectAllMatching ? totalItems : selectedProducts.length).toLocaleString()})
             </Button>
             <Button
               type="primary"
-              className="bg-black hover:bg-gray-800 h-9 px-6 font-semibold"
-              onClick={() => setBulkPublishOpen(true)}
+              loading={isFetchingAllForPublish}
+              className="bg-gray-900 hover:bg-gray-700 h-8 px-3 text-xs font-medium border-0 flex items-center gap-1.5 cursor-pointer text-white"
+              onClick={handleOpenBulkPublish}
             >
-              Bulk Publish
+              Bulk Publish ({(selectAllMatching ? totalItems : selectedProducts.length).toLocaleString()})
             </Button>
           </div>
         </div>
@@ -1389,6 +1543,8 @@ const Products = () => {
             <Button onClick={() => {
               setFilters({});
               setActiveFilters({});
+              setPage(1);
+              setFilterOpen(false);
             }}>Clear All</Button>
             <Button type="primary" onClick={applyFilters} className="flex-1 bg-brand">Apply Filters</Button>
           </div>

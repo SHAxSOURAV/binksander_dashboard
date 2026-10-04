@@ -41,7 +41,11 @@ import {
   useGetLowStockAlertsQuery,
   useDismissLowStockAlertMutation,
   useResyncStockMutation,
+  useGetProductsQuery,
+  useGetFiltersMetaQuery,
+  useGetConnectionQuery,
 } from "../../Redux/productApis";
+import { useUI } from "../../Provider/ContextProvider";
 
 const PERIOD_OPTIONS = [
   { label: "Last 7 days", value: "7d" },
@@ -61,7 +65,19 @@ const TABS = [
 const ALERTS_PAGE_SIZE = 10;
 
 const DashboardHome = () => {
+  const { activeBolAccountId } = useUI();
   const [activeTab, setActiveTab] = useState("overview");
+
+  // ── Prefetch Inventory Catalog data in the background ──
+  // While the user is viewing Overview, silently warm the RTK Query cache
+  // for /products so navigation to Inventory Catalog is instant (~0ms)
+  // instead of waiting 8-10s for cold MongoDB round-trips.
+  useGetProductsQuery(
+    { page: 1, limit: 20, bol_account_id: activeBolAccountId },
+    { pollingInterval: 0, refetchOnMountOrArgChange: false }
+  );
+  useGetFiltersMetaQuery(undefined, { pollingInterval: 0 });
+  useGetConnectionQuery(undefined, { pollingInterval: 0 });
 
   // Retain selected period filter across sessions
   const [range, setRange] = useState(() => {
@@ -417,7 +433,7 @@ const DashboardHome = () => {
 
       {activeTab === "performance" && (
         <div className="animate-fade-in">
-          <PerformanceTab />
+          <PerformanceTab accountId={activeBolAccountId} />
         </div>
       )}
 

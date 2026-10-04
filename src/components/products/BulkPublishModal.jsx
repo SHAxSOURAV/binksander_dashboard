@@ -5,11 +5,12 @@ import {
   useGetBolCredentialsQuery,
 } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
-import { 
+import productApis, { 
   useCreateDraftFromAmazonMutation,
   useBulkTranslateDraftImagesMutation,
   useTranslateDraftImagesMutation,
 } from "../../Redux/productApis";
+import { useDispatch } from "react-redux";
 import { url as API_URL } from "../../Redux/main/server";
 import { getToken } from "../../utils/session";
 import DraftEditModal from "./DraftEditModal";
@@ -25,6 +26,7 @@ const Field = ({ label, children, required }) => (
 );
 
 const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
+  const dispatch = useDispatch();
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
 
@@ -63,6 +65,9 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
   }, [activeBolAccountId]);
 
   useEffect(() => {
+    let isCancelled = false;
+    const activeRequests = new Set();
+
     const createDrafts = async () => {
       if (hasGenerated) return;
       setHasGenerated(true);
@@ -79,8 +84,10 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
       const batchSize = 4;
       let count = 0;
       for (let i = 0; i < validProducts.length; i += batchSize) {
+        if (isCancelled) break;
         const batch = validProducts.slice(i, i + batchSize);
         await Promise.all(batch.map(async (p) => {
+          if (isCancelled) return;
           try {
             const payload = {
               asin: p.asin,
@@ -91,7 +98,11 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
               status: "draft",
               photos: [] // Let Amazon scraper fetch all 5-8 product photos
             };
-            const result = await generateDraft(payload).unwrap();
+            const reqPromise = generateDraft(payload);
+            activeRequests.add(reqPromise);
+            const result = await reqPromise.unwrap();
+            activeRequests.delete(reqPromise);
+            if (isCancelled) return;
             if (result.success && result.data?.id) {
               const photos = result.data.photos || (p.image ? [p.image] : []);
               const translatedPhotosCount = photos.filter(url => typeof url === 'string' && url.includes("translated-images")).length;
@@ -116,14 +127,20 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
               });
             }
           } catch (err) {
-            console.error(`Failed to create draft for ASIN ${p.asin}:`, err);
+            if (!isCancelled) {
+              console.error(`Failed to create draft for ASIN ${p.asin}:`, err);
+            }
           } finally {
-            count += 1;
-            setGeneratedCount(count);
+            if (!isCancelled) {
+              count += 1;
+              setGeneratedCount(count);
+            }
           }
         }));
       }
-      setIsGeneratingDrafts(false);
+      if (!isCancelled) {
+        setIsGeneratingDrafts(false);
+      }
     };
 
     if (products && products.length > 0) {
@@ -131,6 +148,14 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
     } else {
       setIsGeneratingDrafts(false);
     }
+
+    return () => {
+      isCancelled = true;
+      activeRequests.forEach(req => {
+        try { req.abort(); } catch (_) {}
+      });
+      activeRequests.clear();
+    };
   }, [products]);
 
   const handleChange = (key, value) => {
@@ -331,6 +356,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
       }
       
       toast.success(data.message || "Bulk publish started!");
+      dispatch(productApis.util.invalidateTags(["Products", "BolOffers"]));
       onClearSelection();
       onClose();
     } catch (err) {
@@ -366,6 +392,12 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
           <div className="flex flex-col items-center justify-center p-12">
             <Spin size="large" />
             <p className="mt-4 text-gray-600 font-semibold">Generating Drafts... ({generatedCount}/{products.length})</p>
+            <Button
+              className="mt-4 text-gray-500 hover:text-red-600 border-gray-200 hover:border-red-300 text-xs font-medium cursor-pointer"
+              onClick={onClose}
+            >
+              Cancel Operation
+            </Button>
           </div>
         ) : (
         <div className="flex flex-col gap-5 py-4">

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import Login from "../Pages/auth/Login";
@@ -11,16 +12,30 @@ import ModuleRoute from "../ProtectedRoute/ModuleRoute";
 import Dashboard from "../Pages/layout/Dashboard";
 import ErrorBoundary from "../ErrorBoundary";
 
-import DashboardHome from "../Pages/dashboardHome/DashboardHome";
-import Products from "../Pages/products/Products";
-import Orders from "../Pages/orders/Orders";
-import AmazonOperations from "../Pages/amazonOperations/AmazonOperations";
-import RimcoOperations from "../Pages/rimcoOperations/RimcoOperations";
-import BolListing from "../Pages/bolListing/BolListing";
-import AmazonAffiliateAccounts from "../Pages/amazonAffiliateAccounts/AmazonAffiliateAccounts";
-import AmazonLookup from "../Pages/amazonLookup/AmazonLookup";
-import NeedsReview from "../Pages/needsReview/NeedsReview";
-import LowStockAlerts from "../Pages/lowStock/LowStockAlerts";
+// Lazy-loaded page components — each becomes its own chunk, downloaded only
+// when the user navigates to that route.  This keeps the initial bundle small.
+const DashboardHome = lazy(() => import("../Pages/dashboardHome/DashboardHome"));
+const Products = lazy(() => import("../Pages/products/Products"));
+const Orders = lazy(() => import("../Pages/orders/Orders"));
+const AmazonOperations = lazy(() => import("../Pages/amazonOperations/AmazonOperations"));
+const RimcoOperations = lazy(() => import("../Pages/rimcoOperations/RimcoOperations"));
+const BolListing = lazy(() => import("../Pages/bolListing/BolListing"));
+const AmazonAffiliateAccounts = lazy(() => import("../Pages/amazonAffiliateAccounts/AmazonAffiliateAccounts"));
+const AmazonLookup = lazy(() => import("../Pages/amazonLookup/AmazonLookup"));
+const NeedsReview = lazy(() => import("../Pages/needsReview/NeedsReview"));
+const LowStockAlerts = lazy(() => import("../Pages/lowStock/LowStockAlerts"));
+
+// Minimal full-page spinner shown while a lazy chunk downloads.
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-[60vh]">
+    <div className="w-7 h-7 border-[2.5px] border-gray-200 border-t-gray-800 rounded-full animate-spin" />
+  </div>
+);
+
+// Wrap a lazy component in Suspense with the shared spinner.
+const Lazy = ({ children }) => (
+  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+);
 
 const router = createBrowserRouter([
   {
@@ -36,7 +51,7 @@ const router = createBrowserRouter([
         index: true,
         element: (
           <ModuleRoute module="overview">
-            <DashboardHome />
+            <Lazy><DashboardHome /></Lazy>
           </ModuleRoute>
         ),
       },
@@ -44,7 +59,7 @@ const router = createBrowserRouter([
         path: "/products",
         element: (
           <ModuleRoute module="inventory">
-            <Products />
+            <Lazy><Products /></Lazy>
           </ModuleRoute>
         ),
       },
@@ -52,7 +67,7 @@ const router = createBrowserRouter([
         path: "/bol-listings",
         element: (
           <ModuleRoute module="offers">
-            <BolListing />
+            <Lazy><BolListing /></Lazy>
           </ModuleRoute>
         ),
       },
@@ -60,7 +75,7 @@ const router = createBrowserRouter([
         path: "/orders",
         element: (
           <ModuleRoute module="sales">
-            <Orders />
+            <Lazy><Orders /></Lazy>
           </ModuleRoute>
         ),
       },
@@ -68,7 +83,7 @@ const router = createBrowserRouter([
         path: "/amazon-operations",
         element: (
           <ModuleRoute module="sourcing">
-            <AmazonOperations />
+            <Lazy><AmazonOperations /></Lazy>
           </ModuleRoute>
         ),
       },
@@ -76,21 +91,21 @@ const router = createBrowserRouter([
         path: "/rimco-operations",
         element: (
           <ModuleRoute module="rimco">
-            <RimcoOperations />
+            <Lazy><RimcoOperations /></Lazy>
           </ModuleRoute>
         ),
       },
-      { path: "/amazon-affiliates", element: <AmazonAffiliateAccounts /> },
-      { path: "/amazon-lookup", element: <AmazonLookup /> },
+      { path: "/amazon-affiliates", element: <Lazy><AmazonAffiliateAccounts /></Lazy> },
+      { path: "/amazon-lookup", element: <Lazy><AmazonLookup /></Lazy> },
       {
         path: "/needs-review",
         element: (
           <ModuleRoute module="needs_review">
-            <NeedsReview />
+            <Lazy><NeedsReview /></Lazy>
           </ModuleRoute>
         ),
       },
-      { path: "/low-stock", element: <LowStockAlerts /> },
+      { path: "/low-stock", element: <Lazy><LowStockAlerts /></Lazy> },
     ],
   },
   { path: "/login", element: <Login /> },

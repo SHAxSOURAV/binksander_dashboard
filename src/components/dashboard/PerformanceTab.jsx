@@ -3,24 +3,27 @@ import { Drawer, Tag, Tooltip } from "antd";
 import {
   FiCheckCircle,
   FiAlertTriangle,
-  FiShield,
-  FiStar,
   FiAward,
-  FiXCircle,
   FiInfo,
+  FiRotateCcw,
+  FiShoppingBag,
+  FiCalendar,
+  FiClock,
+  FiPackage,
 } from "react-icons/fi";
 import { LuRefreshCw } from "react-icons/lu";
 import { useGetPerformanceQuery } from "../../Redux/analyticsApis";
+import { useUI } from "../../Provider/ContextProvider";
 
 const STATUS_STYLES = {
   green: {
-    card: "border-gray-100",
-    dot: "bg-green-500",
-    value: "text-gray-900",
+    card: "border-emerald-100 hover:border-emerald-200",
+    dot: "bg-emerald-500",
+    value: "text-emerald-700",
     tag: "success",
   },
   red: {
-    card: "border-red-200 bg-red-50/30",
+    card: "border-red-200 bg-red-50/20 hover:border-red-300",
     dot: "bg-red-500",
     value: "text-red-600",
     tag: "error",
@@ -33,7 +36,7 @@ const STATUS_STYLES = {
   },
 };
 
-/** One Bol performance indicator, rendered from the API's own norm + score. */
+/** One Bol performance indicator, rendered from Bol's official norm + score. */
 const IndicatorCard = ({ indicator, onClick }) => {
   const st = STATUS_STYLES[indicator.status] || STATUS_STYLES.unknown;
   const clickable = indicator.status === "red";
@@ -42,7 +45,7 @@ const IndicatorCard = ({ indicator, onClick }) => {
     <div
       onClick={clickable ? onClick : undefined}
       className={`bg-white rounded-lg p-4 card-shadow border transition-all ${st.card} ${
-        clickable ? "cursor-pointer hover:border-red-300" : ""
+        clickable ? "cursor-pointer hover:shadow-md" : ""
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -52,7 +55,7 @@ const IndicatorCard = ({ indicator, onClick }) => {
         <div className="flex items-center gap-1.5 shrink-0">
           {indicator.description && (
             <Tooltip title={indicator.description}>
-              <FiInfo size={12} className="text-gray-300 hover:text-gray-500" />
+              <FiInfo size={12} className="text-gray-300 hover:text-gray-500 cursor-pointer" />
             </Tooltip>
           )}
           <span className={`w-2 h-2 rounded-full ${st.dot}`} />
@@ -64,8 +67,8 @@ const IndicatorCard = ({ indicator, onClick }) => {
           {indicator.has_data ? indicator.display_value : "—"}
         </span>
         {indicator.norm_label && (
-          <Tag color={st.tag} className="shrink-0">
-            {indicator.norm_label}
+          <Tag color={st.tag} className="shrink-0 font-medium text-[11px]">
+            Norm: {indicator.norm_label}
           </Tag>
         )}
       </div>
@@ -75,7 +78,7 @@ const IndicatorCard = ({ indicator, onClick }) => {
           {indicator.numerator !== null && indicator.denominator ? (
             <>
               {indicator.numerator} of {indicator.denominator}
-              {indicator.status === "red" && " · below Bol's norm"}
+              {indicator.status === "red" && " · below Bol norm"}
             </>
           ) : indicator.status === "red" ? (
             "Below Bol's norm"
@@ -90,16 +93,29 @@ const IndicatorCard = ({ indicator, onClick }) => {
   );
 };
 
-const PerformanceTab = () => {
-  const { data: perf, isLoading, isFetching, refetch } = useGetPerformanceQuery();
+const PerformanceTab = ({ accountId: propAccountId }) => {
+  const { activeBolAccountId } = useUI();
+  const currentAccountId = propAccountId || activeBolAccountId;
+
+  // Poll every 60s for automatic background refresh; refetch on account change
+  const {
+    data: perf,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetPerformanceQuery(currentAccountId, {
+    pollingInterval: 60000,
+    skip: !currentAccountId,
+  });
+
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeAlertDetail, setActiveAlertDetail] = useState(null);
+  const [activeDrawerDetail, setActiveDrawerDetail] = useState(null);
 
   const p = perf || {};
   const indicators = p.indicators || [];
 
-  const openDrawer = (title, items) => {
-    setActiveAlertDetail({ title, items });
+  const openDrawer = (title, items, type = "alerts") => {
+    setActiveDrawerDetail({ title, items, type });
     setDrawerOpen(true);
   };
 
@@ -120,17 +136,34 @@ const PerformanceTab = () => {
     ? `Week ${p.period.week}, ${p.period.year}`
     : "Latest available";
 
+  const syncedTime = p.synced_at
+    ? new Date(p.synced_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
+
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#111111] to-[#333333] text-white rounded-lg p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header with live sync indicators */}
+      <div className="bg-gradient-to-r from-[#111111] to-[#252525] text-white rounded-lg p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <FiAward size={20} className="text-yellow-400" />
-            <h2 className="text-base font-bold">Bol Partner Performance</h2>
+            <h2 className="text-base font-bold">Bol Retailer Performance</h2>
+            <span className="text-[10px] bg-white/10 text-white/80 px-2 py-0.5 rounded-full font-mono">
+              Live Bol.com API
+            </span>
           </div>
-          <p className="text-xs text-white/70 mt-1">
-            Scores and norms straight from Bol&apos;s Retailer API · {periodLabel}
+          <p className="text-xs text-white/70 mt-1 flex items-center gap-2 flex-wrap">
+            <span>Period: {periodLabel}</span>
+            {syncedTime && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <FiClock size={11} /> Updated: {syncedTime}
+                </span>
+              </>
+            )}
+            <span>•</span>
+            <span className="text-emerald-400 font-medium">Auto-refresh active</span>
           </p>
         </div>
         <button
@@ -139,93 +172,143 @@ const PerformanceTab = () => {
           className="bg-white/10 hover:bg-white/20 text-white font-medium text-xs px-4 py-2 rounded-md transition-all self-start md:self-auto border border-white/10 flex items-center gap-2 disabled:opacity-50"
         >
           <LuRefreshCw size={13} className={isFetching ? "animate-spin" : ""} />
-          Refresh
+          {isFetching ? "Updating..." : "Refresh"}
         </button>
+      </div>
+
+      {/* Real Bol Account Operational Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Open Returns straight from Bol API */}
+        <div
+          onClick={() =>
+            (p.open_returns || []).length > 0 &&
+            openDrawer("Open Customer Returns", p.open_returns, "returns")
+          }
+          className={`bg-white rounded-lg p-4 card-shadow border transition-all ${
+            (p.open_returns_count || 0) > 0
+              ? "border-amber-200 bg-amber-50/20 cursor-pointer hover:border-amber-300"
+              : "border-gray-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+              Open Returns
+            </span>
+            <FiRotateCcw
+              className={(p.open_returns_count || 0) > 0 ? "text-amber-500" : "text-gray-400"}
+              size={16}
+            />
+          </div>
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <span
+              className={`text-2xl font-black ${
+                (p.open_returns_count || 0) > 0 ? "text-amber-600" : "text-gray-900"
+              }`}
+            >
+              {p.open_returns_count ?? 0}
+            </span>
+            <Tag color={(p.open_returns_count || 0) > 0 ? "warning" : "success"}>
+              {(p.open_returns_count || 0) > 0 ? "Action Required" : "All Handled"}
+            </Tag>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">
+            {(p.open_returns_count || 0) > 0
+              ? "Click to view open customer returns"
+              : "No unhandled customer returns in Bol"}
+          </p>
+        </div>
+
+        {/* Open Orders Awaiting Fulfillment straight from Bol API */}
+        <div
+          onClick={() =>
+            (p.open_orders || []).length > 0 &&
+            openDrawer("Open Orders Awaiting Shipping", p.open_orders, "orders")
+          }
+          className={`bg-white rounded-lg p-4 card-shadow border transition-all ${
+            (p.open_orders_count || 0) > 0
+              ? "border-blue-200 bg-blue-50/20 cursor-pointer hover:border-blue-300"
+              : "border-gray-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+              Pending Orders
+            </span>
+            <FiShoppingBag
+              className={(p.open_orders_count || 0) > 0 ? "text-blue-500" : "text-gray-400"}
+              size={16}
+            />
+          </div>
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <span
+              className={`text-2xl font-black ${
+                (p.open_orders_count || 0) > 0 ? "text-blue-600" : "text-gray-900"
+              }`}
+            >
+              {p.open_orders_count ?? 0}
+            </span>
+            <Tag color={(p.open_orders_count || 0) > 0 ? "blue" : "default"}>
+              {(p.open_orders_count || 0) > 0 ? "Awaiting Shipment" : "None Pending"}
+            </Tag>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">
+            {(p.open_orders_count || 0) > 0
+              ? "Click to view open Bol orders"
+              : "No open orders waiting for shipment"}
+          </p>
+        </div>
+
+        {/* Evaluation Period from Bol API */}
+        <div className="bg-white rounded-lg p-4 card-shadow border border-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+              Scored Period
+            </span>
+            <FiCalendar className="text-gray-400" size={16} />
+          </div>
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-gray-900">{periodLabel}</span>
+            <Tag color={p.indicators_available ? "success" : "default"}>
+              {p.indicators_available ? "Settled" : "Pending"}
+            </Tag>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">
+            Evaluated and published weekly by Bol
+          </p>
+        </div>
       </div>
 
       {!p.indicators_available && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-2.5">
-          <FiAlertTriangle className="text-amber-600 mt-0.5 shrink-0" size={15} />
+          <FiAlertTriangle className="text-amber-600 mt-0.5 shrink-0" size={16} />
           <div>
             <p className="text-xs font-semibold text-amber-900">
-              No scored performance data for this account yet
+              No scored performance data published by Bol yet
             </p>
             <p className="text-[11px] text-amber-700 mt-0.5">
-              Bol publishes indicators per completed week. Once the account has settled
-              orders in a scored week, the tiles below fill in automatically.
+              Bol publishes official performance scores once orders are delivered and settled in
+              completed weeks. Until Bol scores this account, figures will remain empty rather than
+              showing inaccurate estimates.
             </p>
           </div>
         </div>
       )}
 
-      {/* Account standing */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg p-4 card-shadow border border-gray-100 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-              Growth Start Status
-            </span>
-            <FiStar className="text-amber-500" size={16} />
-          </div>
-          <div className="mt-3">
-            {p.growth_start_achieved ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-green-100 text-green-800">
-                <FiCheckCircle size={13} /> Growth Power Achieved
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold bg-yellow-100 text-yellow-800">
-                <FiAlertTriangle size={13} /> {p.evaluation_phase || "Phase 1"} Evaluation
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-gray-400 mt-3">Evaluated by the Bol partner program</p>
-        </div>
-
-        <div
-          onClick={() => openDrawer("Policy Point Deductions", p.policy_deductions)}
-          className={`bg-white rounded-lg p-4 card-shadow border cursor-pointer transition-all ${
-            p.policy_points_status === "red"
-              ? "border-red-300 bg-red-50/40 hover:border-red-500"
-              : "border-gray-100 hover:border-gray-300"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-              Policy Points
-            </span>
-            <FiShield
-              className={p.policy_points_status === "red" ? "text-red-600" : "text-green-600"}
-              size={16}
-            />
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span
-              className={`text-2xl font-black ${
-                p.policy_points < 60 ? "text-red-600" : "text-gray-900"
-              }`}
-            >
-              {p.policy_points ?? 100}/100
-            </span>
-            <Tag color={p.policy_points < 60 ? "error" : "blue"}>Minimum: 60</Tag>
-          </div>
-          {p.policy_points < 60 ? (
-            <p className="mt-2.5 text-xs text-red-600 font-bold flex items-center gap-1">
-              <FiXCircle size={13} /> Account closure risk
-            </p>
-          ) : (
-            <p className="text-[11px] text-gray-400 mt-2.5">Click to view the deduction log</p>
-          )}
-        </div>
-      </div>
-
-      {/* Bol indicators */}
+      {/* Official Bol Performance Indicators */}
       {indicators.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-gray-800">Performance Indicators</h3>
-            {p.breached_count > 0 && (
-              <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
-                {p.breached_count} below norm
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-800">Performance Indicators</h3>
+              <span className="text-[11px] text-gray-400">({indicators.length} tracked metrics)</span>
+            </div>
+            {p.breached_count > 0 ? (
+              <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <FiAlertTriangle size={12} /> {p.breached_count} below norm
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <FiCheckCircle size={12} /> All standards met
               </span>
             )}
           </div>
@@ -234,47 +317,107 @@ const PerformanceTab = () => {
               <IndicatorCard
                 key={ind.name}
                 indicator={ind}
-                onClick={() => openDrawer(`${ind.label} — affected orders`, p.offending_orders)}
+                onClick={() => openDrawer(`${ind.label} — affected orders`, p.offending_orders, "alerts")}
               />
             ))}
           </div>
         </div>
       )}
 
+      {/* Slide-out Drawer for details */}
       <Drawer
-        title={activeAlertDetail?.title || "Indicator Breakdown"}
+        title={activeDrawerDetail?.title || "Details"}
         placement="right"
         onClose={() => setDrawerOpen(false)}
         open={drawerOpen}
-        width={450}
+        width={480}
       >
         <div className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Orders, shipments, or policy events that influenced this metric.
-          </p>
-
-          {!activeAlertDetail?.items || activeAlertDetail.items.length === 0 ? (
-            <div className="p-4 bg-gray-50 rounded-md text-xs text-gray-500 text-center">
-              No breach events recorded for this account.
-            </div>
-          ) : (
-            activeAlertDetail.items.map((item, idx) => (
-              <div
-                key={idx}
-                className="p-3 bg-red-50/50 rounded-md border border-red-100 flex flex-col gap-1 text-xs"
-              >
-                <div className="flex items-center justify-between font-bold text-gray-800">
-                  <span>Order #{item.orderId || `EVENT-${idx + 1}`}</span>
-                  <Tag color="volcano">{item.status || "Breach"}</Tag>
+          {activeDrawerDetail?.type === "returns" && (
+            <>
+              <p className="text-xs text-gray-500 mb-2">
+                Open / unhandled customer returns retrieved straight from Bol Retailer API.
+              </p>
+              {(!activeDrawerDetail.items || activeDrawerDetail.items.length === 0) ? (
+                <div className="p-6 text-center text-xs text-gray-400 bg-gray-50 rounded-lg">
+                  No open returns for this account.
                 </div>
-                <p className="text-gray-600">{item.reason || "Late delivery or policy deduction"}</p>
-                {item.date && (
-                  <span className="text-[10px] text-gray-400">
-                    {new Date(item.date).toLocaleString()}
-                  </span>
-                )}
-              </div>
-            ))
+              ) : (
+                activeDrawerDetail.items.map((ret, idx) => (
+                  <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-gray-800">
+                      <span>RMA #{ret.rmaId || ret.returnId || idx + 1}</span>
+                      <Tag color="orange">Unhandled</Tag>
+                    </div>
+                    {ret.orderId && <p className="text-gray-500">Order #{ret.orderId}</p>}
+                    {ret.ean && <p className="font-mono text-gray-500">EAN: {ret.ean}</p>}
+                    {ret.registrationDateTime && (
+                      <p className="text-[10px] text-gray-400">
+                        Date: {new Date(ret.registrationDateTime).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </>
+          )}
+
+          {activeDrawerDetail?.type === "orders" && (
+            <>
+              <p className="text-xs text-gray-500 mb-2">
+                Open orders waiting for shipment retrieved straight from Bol Retailer API.
+              </p>
+              {(!activeDrawerDetail.items || activeDrawerDetail.items.length === 0) ? (
+                <div className="p-6 text-center text-xs text-gray-400 bg-gray-50 rounded-lg">
+                  No open orders waiting for shipment.
+                </div>
+              ) : (
+                activeDrawerDetail.items.map((ord, idx) => (
+                  <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-gray-800">
+                      <span>Order #{ord.orderId || idx + 1}</span>
+                      <Tag color="blue">OPEN</Tag>
+                    </div>
+                    {ord.orderPlacedDateTime && (
+                      <p className="text-[10px] text-gray-400">
+                        Placed: {new Date(ord.orderPlacedDateTime).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </>
+          )}
+
+          {activeDrawerDetail?.type === "alerts" && (
+            <>
+              <p className="text-xs text-gray-500 mb-2">
+                Orders or events that influenced metric breaches for this account.
+              </p>
+              {(!activeDrawerDetail.items || activeDrawerDetail.items.length === 0) ? (
+                <div className="p-6 text-center text-xs text-gray-400 bg-gray-50 rounded-lg">
+                  No breach events recorded for this account.
+                </div>
+              ) : (
+                activeDrawerDetail.items.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-red-50/50 rounded-md border border-red-100 flex flex-col gap-1 text-xs"
+                  >
+                    <div className="flex items-center justify-between font-bold text-gray-800">
+                      <span>Order #{item.orderId || `EVENT-${idx + 1}`}</span>
+                      <Tag color="volcano">{item.status || "Breach"}</Tag>
+                    </div>
+                    <p className="text-gray-600">{item.reason || "Late delivery or cancellation threshold violation"}</p>
+                    {item.date && (
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(item.date).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </>
           )}
         </div>
       </Drawer>

@@ -143,3 +143,9 @@ body {
   box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.05) !important;
 }
 
+/* Progress shimmer for keepPreviousData loading state */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+

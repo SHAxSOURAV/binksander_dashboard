@@ -538,6 +538,7 @@ const NeedsReview = () => {
             </div>
           </div>
 
+
           <div className="flex items-center gap-2 flex-wrap">
             <SpreadsheetSelector onSelectChange={() => setPage(1)} />
             <Input
@@ -653,36 +654,7 @@ const NeedsReview = () => {
           </div>
         ) : view === "grid" ? (
           /* Grid view */
-          <div>
-            {items.length > 0 && (
-              <div className="flex items-center justify-between mb-2.5 px-1">
-                <Tooltip title={getHeaderTooltip()}>
-                  <div
-                    onClick={handleHeaderSelectAll}
-                    className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100 hover:border-gray-300 transition-colors cursor-pointer text-xs font-medium select-none"
-                  >
-                    <Checkbox
-                      checked={isHeaderChecked}
-                      indeterminate={isHeaderIndeterminate}
-                      onChange={(e) => { e.stopPropagation(); handleHeaderSelectAll(); }}
-                    />
-                    <span className="text-gray-700">
-                      {selectAllMatching
-                        ? `All ${totalItems.toLocaleString()} products selected across all pages`
-                        : isAllPageSelected && totalItems > items.length
-                        ? `All ${items.length} on this page selected — Click to select all ${totalItems.toLocaleString()}`
-                        : `Select all on page (${items.length})`}
-                    </span>
-                  </div>
-                </Tooltip>
-                {selectAllMatching && (
-                  <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    Bulk mode: All {totalItems.toLocaleString()} matching products
-                  </span>
-                )}
-              </div>
-            )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
               {items.map((record) => {
                 const ean = record.EAN || record.ean;
                 const code = ean || record.asin;
@@ -694,7 +666,7 @@ const NeedsReview = () => {
                     className="bg-white rounded-md border border-gray-200 p-2.5 hover:border-gray-400 transition-colors flex flex-col"
                   >
                     <div className="bg-gray-50 rounded h-24 flex items-center justify-center mb-2 overflow-hidden relative w-full">
-                      <div className="absolute top-1.5 left-1.5 z-10">
+                      <div className="absolute top-1.5 left-1.5 z-20" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={checked}
                           onChange={(e) => toggleRow(record._id, e.target.checked)}
@@ -764,7 +736,6 @@ const NeedsReview = () => {
                 );
               })}
             </div>
-          </div>
         ) : (
           /* List view */
           <div className="overflow-x-auto thin-scrollbar">
@@ -772,13 +743,11 @@ const NeedsReview = () => {
               <thead>
                 <tr className="border-b border-gray-200 text-gray-400">
                   <th className="py-2 px-2 w-8">
-                    <Tooltip title={getHeaderTooltip()}>
-                      <Checkbox
-                        checked={isHeaderChecked}
-                        indeterminate={isHeaderIndeterminate}
-                        onChange={handleHeaderSelectAll}
-                      />
-                    </Tooltip>
+                    <Checkbox
+                      checked={isHeaderChecked}
+                      indeterminate={isHeaderIndeterminate}
+                      onChange={handleHeaderSelectAll}
+                    />
                   </th>
                   <th className="py-2 px-2 w-12" />
                   <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider">Product</th>
@@ -899,9 +868,26 @@ const NeedsReview = () => {
             <div className={`h-6 px-2 rounded ${selectAllMatching ? "bg-emerald-700" : "bg-gray-900"} text-white flex items-center justify-center font-semibold text-[11px] tabular-nums`}>
               {(selectAllMatching ? totalItems : selectedRowKeys.length).toLocaleString()}
             </div>
-            <span className="text-[12px] font-medium text-gray-600">
-              {selectAllMatching ? "all matching products selected" : "selected"}
-            </span>
+            <div
+              onClick={handleHeaderSelectAll}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer text-xs font-medium text-gray-700 select-none"
+            >
+              <Checkbox
+                checked={isHeaderChecked}
+                indeterminate={isHeaderIndeterminate}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleHeaderSelectAll();
+                }}
+              />
+              <span>
+                {selectAllMatching
+                  ? "All selected"
+                  : isAllPageSelected && totalItems > items.length
+                  ? "Select all"
+                  : "Select page"}
+              </span>
+            </div>
           </div>
           <div className="h-5 w-px bg-gray-200"></div>
           <div className="flex items-center gap-1.5">
