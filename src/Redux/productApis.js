@@ -358,12 +358,27 @@ const productApis = baseApis.injectEndpoints({
     // Create a Bol.com draft from an Amazon ASIN (2.5x markup) → used before publishing.
     // POST /bol/drafts/from-amazon  { asin, country?, stock_amount? }
     createDraftFromAmazon: builder.mutation({
-      query: (data) => ({
-        url: "/bol/drafts/from-amazon",
-        method: "POST",
-        body: data,
-      }),
+      query: (arg) => {
+        const { bolAccountId, ...body } = arg || {};
+        return {
+          url: "/bol/drafts/from-amazon",
+          method: "POST",
+          headers: bolAccountId ? { "X-Bol-Account-Id": bolAccountId } : {},
+          body,
+        };
+      },
       invalidatesTags: ["Drafts"],
+    }),
+
+    // High-speed batch lookup of existing drafts by ASINs
+    // POST /bol/drafts/by-asins  { asins: [...] }
+    getDraftsByAsins: builder.mutation({
+      query: ({ asins, bolAccountId }) => ({
+        url: "/bol/drafts/by-asins",
+        method: "POST",
+        headers: bolAccountId ? { "X-Bol-Account-Id": bolAccountId } : {},
+        body: { asins },
+      }),
     }),
 
     // POST /bol/drafts/{id}/translate-images
@@ -793,6 +808,7 @@ export const {
   useImportOauthMutation,
   useResyncInventoryMutation,
   useCreateDraftFromAmazonMutation,
+  useGetDraftsByAsinsMutation,
   useTranslateDraftImagesMutation,
   useBulkTranslateDraftImagesMutation,
   useTranslateSingleImageMutation,

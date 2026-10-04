@@ -7,6 +7,7 @@ import {
 import { useUI } from "../../Provider/ContextProvider";
 import productApis, { 
   useCreateDraftFromAmazonMutation,
+  useGetDraftsByAsinsMutation,
   useBulkTranslateDraftImagesMutation,
   useTranslateDraftImagesMutation,
 } from "../../Redux/productApis";
@@ -32,6 +33,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
 
   const { data: bolCreds = [], isLoading: loadingCreds } = useGetBolCredentialsQuery();
   const [generateDraft] = useCreateDraftFromAmazonMutation();
+  const [getDraftsByAsins] = useGetDraftsByAsinsMutation();
   const [bulkTranslateDraftImages, { isLoading: isBulkTranslating }] = useBulkTranslateDraftImagesMutation();
   const [translateSingleDraft] = useTranslateDraftImagesMutation();
 
@@ -80,12 +82,73 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
         return;
       }
 
-      // Process in parallel batches of 4 concurrent requests for lightning-fast draft generation
+      // Step 1: High-speed batch lookup of existing drafts for all selected ASINs at once
+      const existingDraftsMap = new Map();
+      try {
+        const asins = validProducts.map(p => p.asin);
+        const lookupRes = await getDraftsByAsins({
+          asins,
+          bolAccountId: selectedAccount
+        }).unwrap();
+
+        if (lookupRes?.success && Array.isArray(lookupRes.data)) {
+          lookupRes.data.forEach(d => {
+            if (d.asin) existingDraftsMap.set(d.asin, d);
+          });
+        }
+      } catch (lookupErr) {
+        console.warn("Batch draft lookup failed, will generate via single calls:", lookupErr);
+      }
+
+      if (isCancelled) return;
+
+      // Populate any existing drafts directly into local state
+      const prePopulatedDrafts = [];
+      const productsToGenerate = [];
+
+      validProducts.forEach(p => {
+        const existing = existingDraftsMap.get(p.asin);
+        if (existing) {
+          const photos = existing.photos || (existing.image ? [existing.image] : (p.image ? [p.image] : []));
+          const translatedPhotosCount = photos.filter(url => typeof url === 'string' && url.includes("translated-images")).length;
+          const isTranslated = Boolean(existing.images_translated || (photos.length > 0 && translatedPhotosCount === photos.length));
+          
+          prePopulatedDrafts.push({
+            id: p.id,
+            asin: p.asin,
+            ean: existing.ean || p.spreadsheetEan || p.ean || "",
+            supplierUrl: p.supplier_link || p.supplierUrl || `https://www.amazon.nl/dp/${p.asin}`,
+            image: photos[0] || p.image,
+            photos: photos,
+            isTranslated: isTranslated,
+            translatedPhotosCount: translatedPhotosCount,
+            draftId: existing.id || existing._id,
+            draftPrice: existing.bol_price || existing.estimated_price || p.price || 39.95,
+            draftStock: existing.stock_amount || (typeof p.stock === 'number' ? p.stock : 10),
+            draftTitle: existing.title || p.spreadsheetTitle || p.title || p.asin
+          });
+        } else {
+          productsToGenerate.push(p);
+        }
+      });
+
+      if (prePopulatedDrafts.length > 0) {
+        setDrafts(prePopulatedDrafts);
+      }
+      setGeneratedCount(prePopulatedDrafts.length);
+
+      // If all selected products already have drafts, we're DONE instantly!
+      if (productsToGenerate.length === 0) {
+        setIsGeneratingDrafts(false);
+        return;
+      }
+
+      // Step 2: Only generate drafts for products that don't have one yet
       const batchSize = 4;
-      let count = 0;
-      for (let i = 0; i < validProducts.length; i += batchSize) {
+      let count = prePopulatedDrafts.length;
+      for (let i = 0; i < productsToGenerate.length; i += batchSize) {
         if (isCancelled) break;
-        const batch = validProducts.slice(i, i + batchSize);
+        const batch = productsToGenerate.slice(i, i + batchSize);
         await Promise.all(batch.map(async (p) => {
           if (isCancelled) return;
           try {
@@ -96,7 +159,8 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
               ean: p.spreadsheetEan || p.ean || "",
               estimated_price: parseFloat(p.price) || 0,
               status: "draft",
-              photos: [] // Let Amazon scraper fetch all 5-8 product photos
+              photos: [], // Let Amazon scraper fetch all 5-8 product photos
+              bolAccountId: selectedAccount
             };
             const reqPromise = generateDraft(payload);
             activeRequests.add(reqPromise);
@@ -451,7 +515,9 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
         {isGeneratingDrafts ? (
           <div className="flex flex-col items-center justify-center p-12">
             <Spin size="large" />
-            <p className="mt-4 text-gray-600 font-semibold">Generating Drafts... ({generatedCount}/{products.length})</p>
+            <p className="mt-4 text-gray-600 font-semibold">
+              {generatedCount === 0 ? "Loading existing drafts..." : `Generating Drafts... (${generatedCount}/${products.length})`}
+            </p>
             <Button
               className="mt-4 text-gray-500 hover:text-red-600 border-gray-200 hover:border-red-300 text-xs font-medium cursor-pointer"
               onClick={onClose}
