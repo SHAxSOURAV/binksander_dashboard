@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Modal, Select, DatePicker, Button, Spin, InputNumber } from "antd";
 import toast from "react-hot-toast";
 import {
@@ -162,6 +162,27 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
     setForm(prev => ({ ...prev, [key]: value }));
   };
 
+  const draftsRef = useRef(drafts);
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
+
+  const cancelTranslationRef = useRef(false);
+
+  // Auto-dismiss translating spinner if all drafts in queue are already translated
+  useEffect(() => {
+    if (drafts.length > 0 && drafts.every(d => d.isTranslated) && isTranslatingAll) {
+      setIsTranslatingAll(false);
+    }
+  }, [drafts, isTranslatingAll]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      cancelTranslationRef.current = true;
+    };
+  }, []);
+
   const totalImagesCount = drafts.reduce((acc, d) => acc + (d.photos?.length || (d.image ? 1 : 0)), 0);
   const translatedImagesCount = drafts.reduce((acc, d) => {
     return acc + (d.translatedPhotosCount ?? (d.isTranslated ? (d.photos?.length || 1) : 0));
@@ -173,46 +194,72 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
       return;
     }
 
-    const totalImgs = totalImagesCount;
-    let liveTranslated = translatedImagesCount;
+    cancelTranslationRef.current = false;
+    const initialDrafts = [...drafts];
+    const initialTotalImgs = drafts.reduce((acc, d) => acc + (d.photos?.length || (d.image ? 1 : 0)), 0);
+    const initialTranslated = drafts.reduce((acc, d) => acc + (d.translatedPhotosCount ?? (d.isTranslated ? (d.photos?.length || 1) : 0)), 0);
 
     setIsTranslatingAll(true);
     setTranslationProgress({
-      current: liveTranslated,
-      total: totalImgs,
+      current: initialTranslated,
+      total: initialTotalImgs,
       currentProductTitle: "Starting Dutch AI image translations...",
-      percent: totalImgs > 0 ? Math.round((liveTranslated / totalImgs) * 100) : 0
+      percent: initialTotalImgs > 0 ? Math.round((initialTranslated / initialTotalImgs) * 100) : 0
     });
 
     try {
-      // Translate each draft with untranslated photos sequentially with real-time UI updates
-      for (let i = 0; i < drafts.length; i++) {
-        const d = drafts[i];
-        if (d.isTranslated) {
-          continue; // Already fully translated
+      for (let i = 0; i < initialDrafts.length; i++) {
+        if (cancelTranslationRef.current) break;
+
+        const d = initialDrafts[i];
+
+        // 1. Check if user deleted this product from the modal while translation was in progress
+        const isStillInModal = draftsRef.current.some(item => item.draftId === d.draftId);
+        if (!isStillInModal) {
+          continue; // User deleted this product; skip immediately!
         }
 
-        const draftPhotoCount = d.photos?.length || (d.image ? 1 : 0);
+        // 2. Check if all remaining active drafts in modal are already translated
+        const remainingUntranslated = draftsRef.current.filter(item => !item.isTranslated);
+        if (remainingUntranslated.length === 0) {
+          break; // All active products in modal are 100% translated; finish immediately!
+        }
 
-        setTranslationProgress(prev => ({
-          ...prev,
-          currentProductTitle: `Translating (${i + 1}/${drafts.length}): ${d.draftTitle || 'Product'}...`,
-        }));
+        // 3. Check if this draft is already translated
+        const currentDraft = draftsRef.current.find(item => item.draftId === d.draftId);
+        if (currentDraft?.isTranslated || d.isTranslated) {
+          continue;
+        }
+
+        // Update progress with active drafts count
+        const activeDrafts = draftsRef.current;
+        const curTotal = activeDrafts.reduce((acc, item) => acc + (item.photos?.length || (item.image ? 1 : 0)), 0);
+        const curTrans = activeDrafts.reduce((acc, item) => acc + (item.translatedPhotosCount ?? (item.isTranslated ? (item.photos?.length || 1) : 0)), 0);
+
+        setTranslationProgress({
+          current: curTrans,
+          total: curTotal,
+          currentProductTitle: `Translating: ${d.draftTitle || 'Product'}...`,
+          percent: curTotal > 0 ? Math.round((curTrans / curTotal) * 100) : 0
+        });
 
         try {
-          const res = await translateSingleDraft({
+          // Timeout guard (45s) so slow external APIs never hang the frontend loop permanently
+          const translatePromise = translateSingleDraft({
             draftId: d.draftId,
             bolAccountId: selectedAccount
           }).unwrap();
 
-          if (res.success && res.data?.photos) {
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Translation request timed out")), 45000)
+          );
+
+          const res = await Promise.race([translatePromise, timeoutPromise]);
+
+          if (res?.success && res.data?.photos) {
             const newPhotos = res.data.photos;
-            const photoCount = newPhotos.length || draftPhotoCount;
+            const photoCount = newPhotos.length || (d.photos?.length || 1);
 
-            liveTranslated += draftPhotoCount;
-            if (liveTranslated > totalImgs) liveTranslated = totalImgs;
-
-            // Immediately update the specific draft in local state so UI flips live in real time
             setDrafts(prev => prev.map(item => {
               if (item.draftId === d.draftId) {
                 return {
@@ -225,33 +272,34 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
               }
               return item;
             }));
-
-            setTranslationProgress({
-              current: liveTranslated,
-              total: totalImgs,
-              currentProductTitle: `✓ Translated: ${d.draftTitle || 'Product'} (${photoCount} photos ready)`,
-              percent: totalImgs > 0 ? Math.round((liveTranslated / totalImgs) * 100) : 0
-            });
           }
         } catch (draftErr) {
           console.error(`Failed translating images for draft ${d.draftId}:`, draftErr);
-          liveTranslated += draftPhotoCount;
-          setTranslationProgress({
-            current: Math.min(liveTranslated, totalImgs),
-            total: totalImgs,
-            currentProductTitle: `Processed: ${d.draftTitle || 'Product'}`,
-            percent: totalImgs > 0 ? Math.round((Math.min(liveTranslated, totalImgs) / totalImgs) * 100) : 0
-          });
         }
+
+        // Re-evaluate live progress after this draft
+        const updatedActive = draftsRef.current;
+        const updatedTotal = updatedActive.reduce((acc, item) => acc + (item.photos?.length || (item.image ? 1 : 0)), 0);
+        const updatedTrans = updatedActive.reduce((acc, item) => acc + (item.translatedPhotosCount ?? (item.isTranslated ? (item.photos?.length || 1) : 0)), 0);
+
+        setTranslationProgress({
+          current: updatedTrans,
+          total: updatedTotal,
+          currentProductTitle: `Processed: ${d.draftTitle || 'Product'}`,
+          percent: updatedTotal > 0 ? Math.round((updatedTrans / updatedTotal) * 100) : 0
+        });
       }
 
+      // Final completion state based on remaining active drafts
+      const finalActive = draftsRef.current;
+      const finalTotal = finalActive.reduce((acc, item) => acc + (item.photos?.length || (item.image ? 1 : 0)), 0);
       setTranslationProgress({
-        current: totalImgs,
-        total: totalImgs,
+        current: finalTotal,
+        total: finalTotal,
         currentProductTitle: "✓ All product images successfully translated to Dutch!",
         percent: 100
       });
-      toast.success(`Translation complete! (${totalImgs}/${totalImgs} images translated)`);
+      toast.success("Translation complete!");
     } catch (err) {
       console.error("Bulk translate error:", err);
       toast.error("Failed to complete bulk translation");
@@ -277,13 +325,25 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
   const hasUntranslatedImages = untranslatedDrafts.length > 0;
 
   const handleRemoveDraft = (draftId) => {
-    setDrafts(prev => prev.filter(d => d.draftId !== draftId));
+    setDrafts(prev => {
+      const updated = prev.filter(d => d.draftId !== draftId);
+      if (updated.length > 0 && updated.every(d => d.isTranslated)) {
+        setIsTranslatingAll(false);
+      }
+      return updated;
+    });
     toast.success("Removed product from publish list");
   };
 
   const handleRemoveAllInvalidDrafts = () => {
     const invalidIds = new Set(invalidEanDrafts.map(d => d.draftId));
-    setDrafts(prev => prev.filter(d => !invalidIds.has(d.draftId)));
+    setDrafts(prev => {
+      const updated = prev.filter(d => !invalidIds.has(d.draftId));
+      if (updated.length > 0 && updated.every(d => d.isTranslated)) {
+        setIsTranslatingAll(false);
+      }
+      return updated;
+    });
     toast.success(`Removed ${invalidIds.size} invalid product(s) from list`);
   };
 
@@ -511,7 +571,20 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                     <Spin size="small" />
                     Translating Dutch Product Images ({translationProgress.current} / {translationProgress.total})
                   </span>
-                  <span className="font-bold text-blue-700">{translationProgress.percent}%</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-bold text-blue-700">{translationProgress.percent}%</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cancelTranslationRef.current = true;
+                        setIsTranslatingAll(false);
+                        toast.success("Translation stopped");
+                      }}
+                      className="text-[11px] text-rose-600 hover:text-rose-800 font-semibold underline cursor-pointer"
+                    >
+                      Stop
+                    </button>
+                  </div>
                 </div>
                 <div className="w-full bg-blue-100 rounded-full h-2.5 overflow-hidden">
                   <div 
