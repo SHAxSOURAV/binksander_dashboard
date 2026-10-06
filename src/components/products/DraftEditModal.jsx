@@ -938,18 +938,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                             Product Description <span className="text-rose-500">*</span>
                           </label>
                           <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const cleaned = sanitizeAntiAmazonAndEmojiText(form.description || "", form.title || "");
-                                handleChange("description", cleaned);
-                                toast.success("Description formatted & cleaned for Bol.com!");
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-[4px] transition-all active:scale-95 shadow-2xs cursor-pointer"
-                              title="Strip Asian brackets 【】, remove Amazon terms, replace competitor brands, and format for Bol.com"
-                            >
-                              Clean for Bol.com
-                            </button>
+
                             <span className="text-xs text-gray-400 font-medium">
                               {(form.description || "").length} characters
                             </span>
