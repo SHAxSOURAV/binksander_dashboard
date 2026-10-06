@@ -122,12 +122,12 @@ const productApis = baseApis.injectEndpoints({
         if (search) query.append("search", search);
         if (sync_date_range) query.append("sync_date_range", sync_date_range);
         if (title_source) query.append("title_source", title_source);
-        if (filter_status) query.append("filter_status", filter_status);
+        if (filter_status && filter_status !== "all") query.append("filter_status", filter_status);
         if (filter_publish_status && filter_publish_status !== "all") query.append("filter_publish_status", filter_publish_status);
-        if (filter_stock) query.append("filter_stock", filter_stock);
-        if (filter_category) query.append("filter_category", filter_category);
-        if (filter_delivery) query.append("filter_delivery", filter_delivery);
-        if (filter_brand) query.append("filter_brand", filter_brand);
+        if (filter_stock && filter_stock !== "all") query.append("filter_stock", filter_stock);
+        if (filter_category && filter_category !== "all") query.append("filter_category", filter_category);
+        if (filter_delivery && filter_delivery !== "all") query.append("filter_delivery", filter_delivery);
+        if (filter_brand && filter_brand !== "all") query.append("filter_brand", filter_brand);
         if (filter_return_rate) query.append("filter_return_rate", filter_return_rate);
         if (multiplier) query.append("multiplier", multiplier);
         if (filter_min_price) query.append("filter_min_price", filter_min_price);

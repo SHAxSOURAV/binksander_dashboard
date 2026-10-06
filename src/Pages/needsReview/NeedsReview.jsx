@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Empty, Checkbox, message, Tooltip, Button, Select, Input, Modal, Dropdown } from "antd";
 import { 
   FiAlertCircle, FiCopy, FiExternalLink, FiCheck, 
@@ -461,9 +461,54 @@ const NeedsReview = () => {
   );
 
   const rawItems = data?.items || [];
-  const items = [...rawItems].sort(
-    (a, b) => new Date(b.created_at || b.updated_at || 0) - new Date(a.created_at || a.updated_at || 0)
-  );
+
+  const items = useMemo(() => {
+    let result = [...rawItems];
+
+    // 1. Instant client-side search across title, ASIN, EAN, Brand
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((item) => {
+        const title = (getTitle(item) || "").toLowerCase();
+        const asin = (item.asin || "").toLowerCase();
+        const ean = String(item.ean || item.EAN || "").toLowerCase();
+        const brand = (item.product_brand || item.brand || "").toLowerCase();
+        return title.includes(q) || asin.includes(q) || ean.includes(q) || brand.includes(q);
+      });
+    }
+
+    // 2. Instant client-side brand filter
+    if (filterBrand && filterBrand !== "all") {
+      const fb = filterBrand.trim().toLowerCase();
+      result = result.filter((item) => {
+        const brand = (item.product_brand || item.brand || "").toLowerCase();
+        const title = (getTitle(item) || "").toLowerCase();
+        return brand === fb || title.startsWith(fb);
+      });
+    }
+
+    // 3. Instant client-side reason filter
+    if (filterReason && filterReason !== "all") {
+      const fr = filterReason.trim().toLowerCase();
+      result = result.filter((item) => {
+        const reasons = (item.validation_reasons || []).join(" ").toLowerCase();
+        const checks = Object.entries(item.validation_checks || {})
+          .filter(([, v]) => v === "fail")
+          .map(([k]) => k.toLowerCase())
+          .join(" ");
+        if (fr.includes("stock")) return reasons.includes("stock") || checks.includes("in_stock");
+        if (fr.includes("ean")) return reasons.includes("ean") || checks.includes("duplicate_ean");
+        if (fr.includes("brand")) return reasons.includes("brand") || checks.includes("duplicate_brand") || checks.includes("blacklist");
+        if (fr.includes("rating")) return reasons.includes("rating") || checks.includes("low_rating");
+        return reasons.includes(fr);
+      });
+    }
+
+    return result.sort(
+      (a, b) => new Date(b.created_at || b.updated_at || 0) - new Date(a.created_at || a.updated_at || 0)
+    );
+  }, [rawItems, search, filterBrand, filterReason]);
+
   const totalPages = data?.total_pages || 0;
   const totalItems = data?.total || 0;
 
@@ -479,7 +524,7 @@ const NeedsReview = () => {
       setSelectedRowKeys([]);
       setSelectAllMatching(false);
     } else if (selectedRowKeys.length === items.length) {
-      // 2nd click: If all 50 on page already selected, select all matching products across all pages
+      // 2nd click: If all on page already selected, select all matching products across all pages
       if (totalItems > items.length) {
         setSelectAllMatching(true);
         message.info({
@@ -508,10 +553,25 @@ const NeedsReview = () => {
     return `Select all ${items.length} products on this page`;
   };
 
-  const brandOptions = [
-    { value: "all", label: "All Brands" },
-    ...(filtersMeta?.brands || []).map((b) => ({ value: b, label: b }))
-  ];
+  const brandOptions = useMemo(() => {
+    const brandsSet = new Set();
+    (rawItems || []).forEach((item) => {
+      const b = item.product_brand || item.brand;
+      if (b && typeof b === "string" && b.trim()) {
+        brandsSet.add(b.trim());
+      }
+    });
+    (filtersMeta?.brands || []).forEach((b) => {
+      if (b && typeof b === "string" && b.trim()) {
+        brandsSet.add(b.trim());
+      }
+    });
+    const sorted = Array.from(brandsSet).sort((a, b) => a.localeCompare(b));
+    return [
+      { value: "all", label: "All Brands" },
+      ...sorted.map((b) => ({ value: b, label: b }))
+    ];
+  }, [rawItems, filtersMeta?.brands]);
 
   const hasSelection = selectAllMatching || selectedRowKeys.length > 0;
   const selectedCountDisplay = selectAllMatching ? totalItems : selectedRowKeys.length;
@@ -603,17 +663,22 @@ const NeedsReview = () => {
 
             <Select
               value={filterBrand || "all"}
+              showSearch
+              filterOption={(input, option) =>
+                (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+              }
               onChange={(val) => { setFilterBrand(val === "all" ? null : val); setPage(1); }}
-              className="w-36 h-9 custom-select"
+              className="w-40 h-9 custom-select"
               options={brandOptions}
             />
 
             <Select
               value={filterReason || "all"}
               onChange={(val) => { setFilterReason(val === "all" ? null : val); setPage(1); }}
-              className="w-40 h-9 custom-select"
+              className="w-44 h-9 custom-select"
               options={[
                 { value: "all", label: "All reasons" },
+                { value: "Out of stock on Amazon", label: "Out of Stock" },
                 { value: "Blacklisted Brand", label: "Blacklisted Brand" },
                 { value: "Already on bol.com (EAN)", label: "Duplicate EAN" },
                 { value: "Already on bol.com (Brand)", label: "Duplicate Brand" },

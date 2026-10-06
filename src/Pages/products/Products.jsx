@@ -58,6 +58,7 @@ const DATE_FILTER_OPTIONS = [
 ];
 
 const Products = () => {
+  const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || "";
   const [view, setView] = useState("grid");
@@ -114,15 +115,23 @@ const Products = () => {
     setSearch(urlSearch);
   }, [urlSearch]);
 
-  // Debounce the search box and reset to page 1 when the term changes.
+  // Debounce search with snappy 250ms delay, or instant reset if cleared
   useEffect(() => {
+    if (!search) {
+      setDebouncedSearch("");
+      setPage(1);
+      setSelectedProducts([]);
+      setSelectAllMatching(false);
+      setAllFetchedProducts(null);
+      return;
+    }
     const t = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
       setSelectedProducts([]);
       setSelectAllMatching(false);
       setAllFetchedProducts(null);
-    }, 400);
+    }, 250);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -147,19 +156,29 @@ const Products = () => {
 
   const titleSource = (!columns.title && columns.sheetTitle) ? "sheet" : "amazon";
 
-  const { data, isLoading, isFetching, isError } = useGetProductsQuery({
-    page,
-    limit,
-    search: debouncedSearch,
-    sync_date_range: syncDateRange || undefined,
-    title_source: titleSource,
-    sortBy,
-    sortOrder,
-    spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
-    bol_account_id: activeBolAccountId,
-    filter_publish_status: publishFilter !== "all" ? publishFilter : (activeFilters.filter_publish_status || undefined),
-    ...activeFilters
-  }, {
+  const queryParams = useMemo(() => {
+    const params = {
+      page,
+      limit,
+      search: debouncedSearch,
+      sync_date_range: syncDateRange || undefined,
+      title_source: titleSource,
+      sortBy,
+      sortOrder,
+      spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+      bol_account_id: activeBolAccountId,
+      ...activeFilters,
+    };
+    if (publishFilter !== "all") {
+      params.filter_publish_status = publishFilter;
+    }
+    if (stockFilter !== "all") {
+      params.filter_stock = stockFilter;
+    }
+    return params;
+  }, [page, limit, debouncedSearch, syncDateRange, titleSource, sortBy, sortOrder, selectedSpreadsheetUrl, activeBolAccountId, publishFilter, stockFilter, activeFilters]);
+
+  const { data, isLoading, isFetching, isError } = useGetProductsQuery(queryParams, {
     pollingInterval,
     // Keep the previous page/filter results visible while new data loads,
     // preventing the jarring blank-skeleton flash on every interaction.
@@ -268,6 +287,9 @@ const Products = () => {
             sync_date_range: syncDateRange || undefined,
             title_source: titleSource,
             spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            bol_account_id: activeBolAccountId,
+            filter_publish_status: publishFilter !== "all" ? publishFilter : (activeFilters.filter_publish_status || undefined),
+            filter_stock: stockFilter !== "all" ? stockFilter : (activeFilters.filter_stock || undefined),
             ...activeFilters,
           })
         ).unwrap();
@@ -306,6 +328,16 @@ const Products = () => {
 
   const applyFilters = () => {
     setActiveFilters(filters);
+    if (filters.filter_stock) {
+      setStockFilter(filters.filter_stock);
+    } else {
+      setStockFilter("all");
+    }
+    if (filters.filter_publish_status) {
+      setPublishFilter(filters.filter_publish_status);
+    } else {
+      setPublishFilter("all");
+    }
     setPage(1);
     setFilterOpen(false);
   };
@@ -314,6 +346,29 @@ const Products = () => {
   const total = data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const loading = isLoading || (isFetching && !data);
+
+  // Prefetch next page into RTK Query cache for instant pagination
+  useEffect(() => {
+    if (page < totalPages && !isLoading && !isFetching) {
+      dispatch(
+        productApis.endpoints.getProducts.initiate(
+          { ...queryParams, page: page + 1 },
+          { subscribe: false, forceRefetch: false }
+        )
+      );
+    }
+  }, [page, totalPages, isLoading, isFetching, queryParams, dispatch]);
+
+  const availableBrands = useMemo(() => {
+    const metaBrands = filtersMeta?.brands || [];
+    if (metaBrands.length > 0) return metaBrands;
+    const s = new Set();
+    products.forEach((p) => {
+      const b = p.product_brand || p.brand;
+      if (b && typeof b === "string" && b.trim()) s.add(b.trim());
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [filtersMeta?.brands, products]);
 
   const [syncConnectedSheet, { isLoading: isSyncingSheet }] = useSyncConnectedSheetMutation();
 
@@ -597,6 +652,18 @@ const Products = () => {
               value={publishFilter}
               onChange={(val) => {
                 setPublishFilter(val);
+                setActiveFilters(prev => {
+                  const next = { ...prev };
+                  if (!val || val === "all") delete next.filter_publish_status;
+                  else next.filter_publish_status = val;
+                  return next;
+                });
+                setFilters(prev => {
+                  const next = { ...prev };
+                  if (!val || val === "all") delete next.filter_publish_status;
+                  else next.filter_publish_status = val;
+                  return next;
+                });
                 setPage(1);
               }}
               className="w-36 h-9 custom-select"
@@ -604,6 +671,58 @@ const Products = () => {
                 { value: 'all', label: 'All Products' },
                 { value: 'published', label: 'Published' },
                 { value: 'unpublished', label: 'Publishable' },
+              ]}
+            />
+
+            <Select
+              value={stockFilter}
+              onChange={(val) => {
+                setStockFilter(val);
+                setActiveFilters(prev => {
+                  const next = { ...prev };
+                  if (!val || val === "all") delete next.filter_stock;
+                  else next.filter_stock = val;
+                  return next;
+                });
+                setFilters(prev => {
+                  const next = { ...prev };
+                  if (!val || val === "all") delete next.filter_stock;
+                  else next.filter_stock = val;
+                  return next;
+                });
+                setPage(1);
+              }}
+              className="w-36 h-9 custom-select"
+              options={[
+                { value: 'all', label: 'All Stock' },
+                { value: 'in_stock', label: 'In Stock' },
+                { value: 'low_stock', label: 'Low Stock (1-3)' },
+                { value: 'out_of_stock', label: 'Out of Stock' },
+              ]}
+            />
+
+            <Select
+              value={activeFilters.filter_brand || "all"}
+              onChange={(val) => {
+                const newF = { ...activeFilters };
+                if (!val || val === "all") {
+                  delete newF.filter_brand;
+                } else {
+                  newF.filter_brand = val;
+                }
+                setActiveFilters(newF);
+                setFilters(newF);
+                setPage(1);
+              }}
+              showSearch
+              placeholder="All Brands"
+              className="w-36 h-9 custom-select"
+              filterOption={(input, option) =>
+                (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+              options={[
+                { value: 'all', label: 'All Brands' },
+                ...availableBrands.map((b) => ({ value: b, label: b }))
               ]}
             />
 
@@ -675,23 +794,95 @@ const Products = () => {
         )}
 
         {/* Active Filter Chips (if any filter is selected) */}
-        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all") && (
+        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all" || stockFilter !== "all" || syncDateRange || debouncedSearch) && (
           <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-2 text-sm font-medium border-b border-gray-100 flex-wrap">
             <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider mr-1">Filters</span>
+
+            {debouncedSearch && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
+                Search: "{debouncedSearch}"
+                <button
+                  onClick={() => {
+                    setSearch("");
+                    setDebouncedSearch("");
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
             {publishFilter !== "all" && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-800 text-[11px] font-medium">
                 Bol: {publishFilter === 'published' ? 'Published' : 'Publishable'}
                 <button
                   onClick={() => {
                     setPublishFilter("all");
+                    setActiveFilters(prev => {
+                      const next = { ...prev };
+                      delete next.filter_publish_status;
+                      return next;
+                    });
+                    setFilters(prev => {
+                      const next = { ...prev };
+                      delete next.filter_publish_status;
+                      return next;
+                    });
                     setPage(1);
                   }}
-                  className="hover:text-red-500 font-bold ml-0.5"
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear publish filter"
                 >
                   ✕
                 </button>
               </span>
             )}
+
+            {stockFilter !== "all" && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-medium">
+                Stock: {stockFilter === "in_stock" ? "In Stock" : stockFilter === "low_stock" ? "Low Stock (1-3)" : stockFilter === "out_of_stock" ? "Out of Stock" : stockFilter}
+                <button
+                  onClick={() => {
+                    setStockFilter("all");
+                    setActiveFilters(prev => {
+                      const next = { ...prev };
+                      delete next.filter_stock;
+                      return next;
+                    });
+                    setFilters(prev => {
+                      const next = { ...prev };
+                      delete next.filter_stock;
+                      return next;
+                    });
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear stock filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {syncDateRange && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-800 text-[11px] font-medium">
+                Synced: {DATE_FILTER_OPTIONS.find(d => d.key === syncDateRange)?.label || syncDateRange}
+                <button
+                  onClick={() => {
+                    setSyncDateRange("");
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear sync date filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
             {activeFilters.filter_brand && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
                 Brand: {activeFilters.filter_brand}
@@ -703,12 +894,14 @@ const Products = () => {
                     setFilters(newF);
                     setPage(1);
                   }}
-                  className="hover:text-red-500 font-bold ml-0.5"
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear brand filter"
                 >
                   ✕
                 </button>
               </span>
             )}
+
             {activeFilters.filter_category && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
                 Category: {activeFilters.filter_category}
@@ -720,20 +913,162 @@ const Products = () => {
                     setFilters(newF);
                     setPage(1);
                   }}
-                  className="hover:text-red-500 font-bold ml-0.5"
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear category filter"
                 >
                   ✕
                 </button>
               </span>
             )}
+
+            {activeFilters.filter_status && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
+                Status: {activeFilters.filter_status}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_status;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear status filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+
+            {(activeFilters.filter_min_price != null || activeFilters.filter_max_price != null) && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-800 text-[11px] font-medium">
+                Price: €{activeFilters.filter_min_price ?? 0} - €{activeFilters.filter_max_price ?? '1000'}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_min_price;
+                    delete newF.filter_max_price;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear price filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {(activeFilters.filter_min_purchase != null || activeFilters.filter_max_purchase != null) && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-800 text-[11px] font-medium">
+                Purchase: €{activeFilters.filter_min_purchase ?? 0} - €{activeFilters.filter_max_purchase ?? '1000'}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_min_purchase;
+                    delete newF.filter_max_purchase;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear purchase price filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {activeFilters.filter_min_rating && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-yellow-200 bg-yellow-50 text-yellow-800 text-[11px] font-medium">
+                Rating: {activeFilters.filter_min_rating}+ ★
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_min_rating;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear rating filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {activeFilters.filter_delivery && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
+                Delivery: {activeFilters.filter_delivery}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_delivery;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear delivery filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {activeFilters.filter_return_rate && activeFilters.filter_return_rate !== "All" && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-medium">
+                Return Rate: {activeFilters.filter_return_rate}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_return_rate;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear return rate filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
+            {activeFilters.filter_is_valid_amazon !== undefined && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-800 text-[11px] font-medium">
+                Amazon Link: {activeFilters.filter_is_valid_amazon ? 'Valid Only' : 'Invalid Only'}
+                <button
+                  onClick={() => {
+                    const newF = { ...activeFilters };
+                    delete newF.filter_is_valid_amazon;
+                    setActiveFilters(newF);
+                    setFilters(newF);
+                    setPage(1);
+                  }}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  title="Clear amazon link filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+
             <button
               onClick={() => {
                 setActiveFilters({});
                 setFilters({});
                 setPublishFilter("all");
+                setStockFilter("all");
+                setSyncDateRange("");
+                setSearch("");
+                setDebouncedSearch("");
                 setPage(1);
               }}
-              className="text-[11px] text-gray-500 hover:text-gray-900 font-medium ml-1"
+              className="text-[11px] text-red-600 hover:text-red-800 hover:underline font-semibold ml-2 cursor-pointer"
             >
               Clear All Filters
             </button>
@@ -1396,9 +1731,16 @@ const Products = () => {
               className="w-full"
               allowClear
               placeholder="Select Stock Status"
-              value={filters.filter_stock}
-              onChange={v => setFilters({ ...filters, filter_stock: v })}
-              options={["In Stock", "Low Stock (≤3)", "Out of Stock"].map(s => ({ label: s, value: s }))}
+              value={filters.filter_stock || (stockFilter !== "all" ? stockFilter : undefined)}
+              onChange={v => {
+                setStockFilter(v || "all");
+                setFilters({ ...filters, filter_stock: v || undefined });
+              }}
+              options={[
+                { label: "In Stock (>3)", value: "in_stock" },
+                { label: "Low Stock (1-3)", value: "low_stock" },
+                { label: "Out of Stock (0)", value: "out_of_stock" },
+              ]}
             />
           </div>
           <div>
@@ -1543,6 +1885,11 @@ const Products = () => {
             <Button onClick={() => {
               setFilters({});
               setActiveFilters({});
+              setPublishFilter("all");
+              setStockFilter("all");
+              setSyncDateRange("");
+              setSearch("");
+              setDebouncedSearch("");
               setPage(1);
               setFilterOpen(false);
             }}>Clear All</Button>
