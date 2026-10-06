@@ -75,9 +75,10 @@ const NeedsReview = () => {
     },
     { pollingInterval: 30000 }
   );
-  const { data: filtersMeta } = useGetFiltersMetaQuery(
-    selectedSpreadsheetUrl !== "all" ? { spreadsheet_url: selectedSpreadsheetUrl } : undefined
-  );
+  const { data: filtersMeta } = useGetFiltersMetaQuery({
+    spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+    validation_status: "NEEDS_REVIEW"
+  });
   const [revalidateItem] = useRevalidateItemMutation();
   const [revalidateInventoryItems, { isLoading: isRevalidatingBulk }] = useRevalidateInventoryItemsMutation();
   const [deleteItem, { isLoading: isDeletingSingle }] = useDeleteNeedsReviewItemMutation();

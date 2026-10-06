@@ -167,10 +167,18 @@ const productApis = baseApis.injectEndpoints({
     getFiltersMeta: builder.query({
       query: (params = {}) => {
         const sheetUrl = typeof params === "string" ? params : params?.spreadsheet_url;
+        const validationStatus = typeof params === "object" ? params?.validation_status : undefined;
+        
+        const urlParams = new URLSearchParams();
         if (sheetUrl && sheetUrl !== "all") {
-          return `/spreadsheet/filters-meta?spreadsheet_url=${encodeURIComponent(sheetUrl)}`;
+          urlParams.append("spreadsheet_url", sheetUrl);
         }
-        return "/spreadsheet/filters-meta";
+        if (validationStatus) {
+          urlParams.append("validation_status", validationStatus);
+        }
+        
+        const qs = urlParams.toString();
+        return qs ? `/spreadsheet/filters-meta?${qs}` : "/spreadsheet/filters-meta";
       },
       providesTags: ["Products"],
     }),
