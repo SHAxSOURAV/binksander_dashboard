@@ -19,7 +19,7 @@ const parseStockQuantity = (it) => {
 
 // Map a backend scrape-items row into the shape the product UI expects.
 const mapItem = (it, i) => ({
-  id: it.asin || it.item_id || it._id || `item-${i}`,
+  id: it.item_id || it._id || it.asin || `item-${i}`,
   itemId: it.item_id || it._id || null,
   asin: it.asin || "",
   // Items whose live scrape failed come back without a title; show the ASIN

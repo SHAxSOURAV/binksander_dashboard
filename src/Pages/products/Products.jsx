@@ -178,11 +178,8 @@ const Products = () => {
     return params;
   }, [page, limit, debouncedSearch, syncDateRange, titleSource, sortBy, sortOrder, selectedSpreadsheetUrl, activeBolAccountId, publishFilter, stockFilter, activeFilters]);
 
-  const { data, isLoading, isFetching, isError } = useGetProductsQuery(queryParams, {
+  const { data, currentData, isLoading, isFetching, isError } = useGetProductsQuery(queryParams, {
     pollingInterval,
-    // Keep the previous page/filter results visible while new data loads,
-    // preventing the jarring blank-skeleton flash on every interaction.
-    keepPreviousData: true,
   });
 
   useEffect(() => {
@@ -342,10 +339,11 @@ const Products = () => {
     setFilterOpen(false);
   };
 
-  const products = data?.items || [];
-  const total = data?.total || 0;
+  const displayData = currentData ?? data;
+  const products = isFetching && !currentData ? [] : (displayData?.items || []);
+  const total = isFetching && !currentData ? 0 : (displayData?.total || 0);
   const totalPages = Math.max(1, Math.ceil(total / limit));
-  const loading = isLoading || (isFetching && !data);
+  const loading = isLoading || (isFetching && !currentData);
 
   // Prefetch next page into RTK Query cache for instant pagination
   useEffect(() => {
