@@ -236,11 +236,10 @@ const DashboardHome = () => {
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`px-4 py-2.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === key
+              className={`px-4 py-2.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === key
                   ? "bg-gray-900 text-white shadow-sm"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
+                }`}
             >
               <Icon size={15} /> {label}
             </button>
@@ -350,7 +349,7 @@ const DashboardHome = () => {
                 </div>
               ) : visibleAlerts.length === 0 ? (
                 <p className="text-xs text-gray-400 py-8 text-center">
-                  No low stock alerts. Everything is in stock.
+                  There is no recent low stock alerts.
                 </p>
               ) : (
                 <>
