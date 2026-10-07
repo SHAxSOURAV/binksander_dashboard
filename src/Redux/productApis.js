@@ -12,78 +12,94 @@ const parseStockQuantity = (it) => {
   if (!it.STOCK) return null;
   const str = String(it.STOCK).trim().toLowerCase();
   if (str.includes("out of stock") || str.includes("unavailable") || str.includes("cant sell")) return 0;
-  const match = str.match(/\d+/);
-  if (match) return parseInt(match[0], 10);
   return null;
 };
 
 // Map a backend scrape-items row into the shape the product UI expects.
-const mapItem = (it, i) => ({
-  id: it.item_id || it._id || it.asin || `item-${i}`,
-  itemId: it.item_id || it._id || null,
-  asin: it.asin || "",
-  // Items whose live scrape failed come back without a title; show the ASIN
-  // as a stand-in and flag them so the card can render a "syncing" state.
-  title: it.product_title || (it.asin ? `ASIN ${it.asin}` : "Syncing…"),
-  brand: it.brand || it.product_brand || "",
-  product_brand: it.product_brand || it.brand || "",
-  // The backend normalises every spelling of the sheet's category column into
-  // "Product category". Deliberately no `it.country` fallback — that is what made every
-  // card show "NL" as its category when the column wasn't being read.
-  category:
-    it["Product category"] ||
-    it["PRODUCT CATEGORY"] ||
-    it.category ||
-    "",
-  subcategory: "",
-  amazonPrice: parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
-  // The backend computes this with the selected Bol account's own multiplier, so the
-  // catalog price tracks whatever that account is set to. The local formula is only a
-  // fallback for responses predating that field — it assumes the default 2.5x.
-  price: (() => {
-    if (typeof it.selling_price === "number" && it.selling_price > 0) {
-      return it.selling_price;
-    }
-    const rawP = parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]);
-    if (!rawP || rawP <= 0) return 39.95;
-    const baseP = rawP * 2.5;
-    const roundedP = Math.floor(baseP / 10) * 10 + 9.95;
-    return Math.max(39.95, Math.round(roundedP * 100) / 100);
-  })(),
-  priceMultiplier: it.price_multiplier ?? 2.5,
-  purchasePrice: parsePrice(it["Purchase price"]),
-  deliveryTime: it["DELIVERY TIME"] || "",
-  rating: parseFloat(it.product_star_rating) || 0,
-  reviews: parseInt(it.product_num_ratings, 10) || 0,
-  image: it.product_photo || "",
-  // Small S3 companion object for list views; falls back to the full-size photo for
-  // products scraped before thumbnails existed.
-  thumbnail: it.product_photo_thumb || it.product_photo || "",
-  productUrl: it.product_url || "",
-  ean: it.spreadsheet_ean || "",
-  stock: it.STOCK || "",
-  stockQuantity: parseStockQuantity(it),
-  stockSellerName: it.stock_seller_name || "",
-  stockSyncedAt: it.stock_synced_at || "",
-  status: it.STATUS || "",
-  spreadsheetUrl: it.spreadsheet_url || "",
-  spreadsheetTitle: it.spreadsheet_title || "",
-  sheetId: it.sheet_id || "",
-  isValidAmazon: !!it.is_valid_amazon,
-  lastUpdated: "",
-  syncedAt: it.synced_at || "",
-  published: false,
-  publishStatus: it.publish_status || "unpublished",
-  publishError: it.publish_error || "",
-  description: it["Product notes"] || "",
-  scrapePending: !!it.scrape_pending,
-  bol_offer_id: it.bol_offer_id || "",
-  bol_on_hold: !!it.bol_on_hold,
-  bol_stock: it.bol_stock || 0,
-  bolStock: it.bol_stock ?? null,
-  pending_process_id: it.pending_process_id || "",
-  pending_action: it.pending_action || "",
-});
+const mapItem = (it, i) => {
+  const isOutOfStock = (() => {
+    if (it.is_in_stock === false) return true;
+    if (typeof it.stock_quantity === "number" && it.stock_quantity === 0) return true;
+    const s = String(it.STOCK || it.stock_status || "").trim().toLowerCase();
+    return s.includes("out of stock") || s.includes("unavailable") || s.includes("cant sell");
+  })();
+
+  const offerCount = (() => {
+    if (typeof it.offer_count === "number") return it.offer_count;
+    if (it.offerCount != null && !isNaN(Number(it.offerCount))) return Number(it.offerCount);
+    return isOutOfStock ? 0 : 1;
+  })();
+
+  return {
+    id: it.item_id || it._id || it.asin || `item-${i}`,
+    itemId: it.item_id || it._id || null,
+    asin: it.asin || "",
+    // Items whose live scrape failed come back without a title; show the ASIN
+    // as a stand-in and flag them so the card can render a "syncing" state.
+    title: it.product_title || (it.asin ? `ASIN ${it.asin}` : "Syncing…"),
+    brand: it.brand || it.product_brand || "",
+    product_brand: it.product_brand || it.brand || "",
+    // The backend normalises every spelling of the sheet's category column into
+    // "Product category". Deliberately no `it.country` fallback — that is what made every
+    // card show "NL" as its category when the column wasn't being read.
+    category:
+      it["Product category"] ||
+      it["PRODUCT CATEGORY"] ||
+      it.category ||
+      "",
+    subcategory: "",
+    amazonPrice: parsePrice(it.purchase_price) || parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]),
+    // The backend computes this with the selected Bol account's own multiplier, so the
+    // catalog price tracks whatever that account is set to. The local formula is only a
+    // fallback for responses predating that field — it assumes the default 2.5x.
+    price: (() => {
+      if (typeof it.selling_price === "number" && it.selling_price > 0) {
+        return it.selling_price;
+      }
+      const rawP = parsePrice(it.purchase_price) || parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]);
+      if (!rawP || rawP <= 0) return 39.95;
+      const baseP = rawP * 2.5;
+      const roundedP = Math.floor(baseP / 10) * 10 + 9.95;
+      return Math.max(39.95, Math.round(roundedP * 100) / 100);
+    })(),
+    priceMultiplier: it.price_multiplier ?? 2.5,
+    purchasePrice: parsePrice(it.purchase_price) || parsePrice(it["Purchase price"]),
+    deliveryTime: it["DELIVERY TIME"] || "",
+    rating: parseFloat(it.product_star_rating) || 0,
+    reviews: parseInt(it.product_num_ratings, 10) || 0,
+    image: it.product_photo || "",
+    // Small S3 companion object for list views; falls back to the full-size photo for
+    // products scraped before thumbnails existed.
+    thumbnail: it.product_photo_thumb || it.product_photo || "",
+    productUrl: it.product_url || "",
+    ean: it.spreadsheet_ean || "",
+    offerCount,
+    isInStock: !isOutOfStock,
+    stockStatus: isOutOfStock ? "Out of stock" : "In stock",
+    stock: isOutOfStock ? "Out of stock" : "In stock",
+    stockQuantity: isOutOfStock ? 0 : null,
+    stockSellerName: it.stock_seller_name || "",
+    stockSyncedAt: it.stock_synced_at || "",
+    status: it.STATUS || "",
+    spreadsheetUrl: it.spreadsheet_url || "",
+    spreadsheetTitle: it.spreadsheet_title || "",
+    sheetId: it.sheet_id || "",
+    isValidAmazon: !!it.is_valid_amazon,
+    lastUpdated: "",
+    syncedAt: it.synced_at || "",
+    published: false,
+    publishStatus: it.publish_status || "unpublished",
+    publishError: it.publish_error || "",
+    description: it["Product notes"] || "",
+    scrapePending: !!it.scrape_pending,
+    bol_offer_id: it.bol_offer_id || "",
+    bol_on_hold: !!it.bol_on_hold,
+    bol_stock: it.bol_stock || 0,
+    bolStock: it.bol_stock ?? null,
+    pending_process_id: it.pending_process_id || "",
+    pending_action: it.pending_action || "",
+  };
+};
 
 const productApis = baseApis.injectEndpoints({
   endpoints: (builder) => ({
@@ -442,14 +458,18 @@ const productApis = baseApis.injectEndpoints({
         method: "POST",
         body: { asin, country }
       }),
-      invalidatesTags: ["Products", "StockAlerts"],
+      // Do NOT invalidate "Products" here — doing so triggers full-page refetches for all active pages & filters.
+      // Instead, surgically update the affected item in the Redux cache below.
+      invalidatesTags: [],
       async onQueryStarted({ asin }, { dispatch, queryFulfilled, getState }) {
         try {
           const { data: result } = await queryFulfilled;
           if (result?.success && result?.data) {
-            const newStock = result.data.stock;
-            const sellerName = result.data.seller_name || "";
-            // Update every active getProducts cache entry to reflect the new stock
+            const offerCount = result.data.offer_count ?? result.data.stock ?? 1;
+            const isInStock = result.data.is_in_stock !== false;
+            const newPrice = result.data.selling_price;
+
+            // Update every active getProducts cache entry in-place
             const queries = getState().adminApis?.queries || {};
             Object.keys(queries).forEach((key) => {
               if (key.startsWith("getProducts(")) {
@@ -460,9 +480,14 @@ const productApis = baseApis.injectEndpoints({
                       if (draft?.items) {
                         const product = draft.items.find((p) => p.asin === asin);
                         if (product) {
-                          product.stockQuantity = newStock != null ? newStock : product.stockQuantity;
-                          product.stock = newStock > 0 ? `${newStock} in stock` : "Out of stock";
-                          if (sellerName) product.stockSellerName = sellerName;
+                          product.offerCount = offerCount;
+                          product.isInStock = isInStock;
+                          product.stockStatus = isInStock ? "In stock" : "Out of stock";
+                          product.stock = isInStock ? "In stock" : "Out of stock";
+                          product.stockQuantity = isInStock ? null : 0;
+                          if (newPrice) {
+                            product.price = newPrice;
+                          }
                         }
                       }
                     })
@@ -472,7 +497,7 @@ const productApis = baseApis.injectEndpoints({
             });
           }
         } catch {
-          // Mutation failed – invalidatesTags will still refetch
+          // Mutation failed silently
         }
       },
     }),

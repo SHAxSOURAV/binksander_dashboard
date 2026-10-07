@@ -88,20 +88,12 @@ const Products = () => {
   const [isFetchingAllForPublish, setIsFetchingAllForPublish] = useState(false);
   const [allFetchedProducts, setAllFetchedProducts] = useState(null);
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
-  const [stockFilter, setStockFilter] = useState("all");
 
   const getStockBadgeColor = (p) => {
-    const q = p.stockQuantity;
-    if (q === 0 || p.stock?.toLowerCase() === "out of stock") {
+    if (p.isInStock === false || p.stockStatus === "Out of stock" || p.stockQuantity === 0) {
       return 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200';
     }
-    if (q === 1 || q === 2) {
-      return 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300';
-    }
-    if (q == null) {
-      return 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200';
-    }
-    return 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-200';
+    return 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200';
   };
 
   const [columns, setColumns] = useState({
@@ -172,11 +164,8 @@ const Products = () => {
     if (publishFilter !== "all") {
       params.filter_publish_status = publishFilter;
     }
-    if (stockFilter !== "all") {
-      params.filter_stock = stockFilter;
-    }
     return params;
-  }, [page, limit, debouncedSearch, syncDateRange, titleSource, sortBy, sortOrder, selectedSpreadsheetUrl, activeBolAccountId, publishFilter, stockFilter, activeFilters]);
+  }, [page, limit, debouncedSearch, syncDateRange, titleSource, sortBy, sortOrder, selectedSpreadsheetUrl, activeBolAccountId, publishFilter, activeFilters]);
 
   const { data, currentData, isLoading, isFetching, isError } = useGetProductsQuery(queryParams, {
     pollingInterval,
@@ -192,9 +181,8 @@ const Products = () => {
     const hasProcessing = data?.items?.some(p => p.publishStatus === 'processing');
     const hasPendingScrape = data?.items?.some(p => p.scrapePending);
     const hasMissingImage = data?.items?.some(p => p.isValidAmazon && !p.image);
-    const hasPendingStock = data?.items?.some(p => p.isValidAmazon && p.stockQuantity == null);
     
-    if ((hasPendingScrape || hasMissingImage || hasPendingStock) && scrapePollCount < 35) {
+    if ((hasPendingScrape || hasMissingImage) && scrapePollCount < 35) {
       setPollingInterval(8000);
       setScrapePollCount(prev => prev + 1);
     } else if (hasProcessing) {
@@ -286,7 +274,6 @@ const Products = () => {
             spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
             bol_account_id: activeBolAccountId,
             filter_publish_status: publishFilter !== "all" ? publishFilter : (activeFilters.filter_publish_status || undefined),
-            filter_stock: stockFilter !== "all" ? stockFilter : (activeFilters.filter_stock || undefined),
             ...activeFilters,
           })
         ).unwrap();
@@ -325,11 +312,6 @@ const Products = () => {
 
   const applyFilters = () => {
     setActiveFilters(filters);
-    if (filters.filter_stock) {
-      setStockFilter(filters.filter_stock);
-    } else {
-      setStockFilter("all");
-    }
     if (filters.filter_publish_status) {
       setPublishFilter(filters.filter_publish_status);
     } else {
@@ -673,33 +655,6 @@ const Products = () => {
             />
 
             <Select
-              value={stockFilter}
-              onChange={(val) => {
-                setStockFilter(val);
-                setActiveFilters(prev => {
-                  const next = { ...prev };
-                  if (!val || val === "all") delete next.filter_stock;
-                  else next.filter_stock = val;
-                  return next;
-                });
-                setFilters(prev => {
-                  const next = { ...prev };
-                  if (!val || val === "all") delete next.filter_stock;
-                  else next.filter_stock = val;
-                  return next;
-                });
-                setPage(1);
-              }}
-              className="w-36 h-9 custom-select"
-              options={[
-                { value: 'all', label: 'All Stock' },
-                { value: 'in_stock', label: 'In Stock' },
-                { value: 'low_stock', label: 'Low Stock (1-3)' },
-                { value: 'out_of_stock', label: 'Out of Stock' },
-              ]}
-            />
-
-            <Select
               value={activeFilters.filter_brand || "all"}
               onChange={(val) => {
                 const newF = { ...activeFilters };
@@ -792,7 +747,7 @@ const Products = () => {
         )}
 
         {/* Active Filter Chips (if any filter is selected) */}
-        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all" || stockFilter !== "all" || syncDateRange || debouncedSearch) && (
+        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all" || syncDateRange || debouncedSearch) && (
           <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-2 text-sm font-medium border-b border-gray-100 flex-wrap">
             <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider mr-1">Filters</span>
 
@@ -833,32 +788,6 @@ const Products = () => {
                   }}
                   className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
                   title="Clear publish filter"
-                >
-                  ✕
-                </button>
-              </span>
-            )}
-
-            {stockFilter !== "all" && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-medium">
-                Stock: {stockFilter === "in_stock" ? "In Stock" : stockFilter === "low_stock" ? "Low Stock (1-3)" : stockFilter === "out_of_stock" ? "Out of Stock" : stockFilter}
-                <button
-                  onClick={() => {
-                    setStockFilter("all");
-                    setActiveFilters(prev => {
-                      const next = { ...prev };
-                      delete next.filter_stock;
-                      return next;
-                    });
-                    setFilters(prev => {
-                      const next = { ...prev };
-                      delete next.filter_stock;
-                      return next;
-                    });
-                    setPage(1);
-                  }}
-                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
-                  title="Clear stock filter"
                 >
                   ✕
                 </button>
@@ -1060,7 +989,6 @@ const Products = () => {
                 setActiveFilters({});
                 setFilters({});
                 setPublishFilter("all");
-                setStockFilter("all");
                 setSyncDateRange("");
                 setSearch("");
                 setDebouncedSearch("");
@@ -1145,29 +1073,25 @@ const Products = () => {
                       </span>
                     )}
                     {columns.stock && (
-                      <button
-                        type="button"
-                        disabled={resyncingStockAsin === p.asin}
-                        onClick={(e) => handleResyncStock(p, e)}
-                        title="Click to resync live stock quantity from Amazon"
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-semibold backdrop-blur-md border flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-75 ${getStockBadgeColor(p)}`}
-                      >
-                        <span>
-                          {resyncingStockAsin === p.asin ? (
-                            "Resyncing..."
-                          ) : p.stockQuantity != null ? (
-                            p.stockQuantity > 0 ? `${p.stockQuantity} in stock` : "Out of stock"
-                          ) : p.bolStock != null ? (
-                            `${p.bolStock} in stock`
-                          ) : (
-                            "Checking stock..."
-                          )}
-                        </span>
-                        <LuRefreshCw
-                          size={11}
-                          className={`${resyncingStockAsin === p.asin ? "animate-spin" : "opacity-60"}`}
-                        />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={resyncingStockAsin === p.asin}
+                          onClick={(e) => handleResyncStock(p, e)}
+                          title="Click to resync live stock & price from Amazon"
+                          className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-blue-50/90 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-xs backdrop-blur-md flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-75"
+                        >
+                          <span>
+                            {resyncingStockAsin === p.asin
+                              ? "Resyncing..."
+                              : `${p.offerCount ?? 1} ${(p.offerCount ?? 1) === 1 ? "offer" : "offers"}`}
+                          </span>
+                          <LuRefreshCw
+                            size={10}
+                            className={`${resyncingStockAsin === p.asin ? "animate-spin" : "opacity-60"}`}
+                          />
+                        </button>
+                      </div>
                     )}
                   </div>
                   {p.thumbnail ? (
@@ -1467,21 +1391,25 @@ const Products = () => {
 
                       {columns.stock && (
                         <td className="py-2 px-2 text-right">
-                          {p.stockQuantity == null ? (
-                            <span className="text-gray-300 text-[11px]">—</span>
-                          ) : (
-                            <span
-                              className={`text-[11px] font-semibold tabular-nums ${
-                                p.stockQuantity === 0
-                                  ? "text-red-600"
-                                  : p.stockQuantity <= 2
-                                    ? "text-amber-700"
-                                    : "text-gray-700"
-                              }`}
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              disabled={resyncingStockAsin === p.asin}
+                              onClick={(e) => handleResyncStock(p, e)}
+                              title="Click to resync live stock & price from Amazon"
+                              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-75"
                             >
-                              {p.stockQuantity}
-                            </span>
-                          )}
+                              <span>
+                                {resyncingStockAsin === p.asin
+                                  ? "Resyncing..."
+                                  : `${p.offerCount ?? 1} ${(p.offerCount ?? 1) === 1 ? "offer" : "offers"}`}
+                              </span>
+                              <LuRefreshCw
+                                size={10}
+                                className={`${resyncingStockAsin === p.asin ? "animate-spin" : "opacity-60"}`}
+                              />
+                            </button>
+                          </div>
                         </td>
                       )}
 
@@ -1724,24 +1652,6 @@ const Products = () => {
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-gray-600 mb-2 block">Stock</label>
-            <Select
-              className="w-full"
-              allowClear
-              placeholder="Select Stock Status"
-              value={filters.filter_stock || (stockFilter !== "all" ? stockFilter : undefined)}
-              onChange={v => {
-                setStockFilter(v || "all");
-                setFilters({ ...filters, filter_stock: v || undefined });
-              }}
-              options={[
-                { label: "In Stock (>3)", value: "in_stock" },
-                { label: "Low Stock (1-3)", value: "low_stock" },
-                { label: "Out of Stock (0)", value: "out_of_stock" },
-              ]}
-            />
-          </div>
-          <div>
             <label className="text-xs font-semibold text-gray-600 mb-2 block">Brand</label>
             <Select
               className="w-full"
@@ -1884,7 +1794,6 @@ const Products = () => {
               setFilters({});
               setActiveFilters({});
               setPublishFilter("all");
-              setStockFilter("all");
               setSyncDateRange("");
               setSearch("");
               setDebouncedSearch("");

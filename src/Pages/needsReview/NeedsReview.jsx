@@ -4,7 +4,7 @@ import {
   FiAlertCircle, FiCopy, FiExternalLink, FiCheck, 
   FiCheckCircle, FiSearch, FiTrash2 
 } from "react-icons/fi";
-import { LuRefreshCw, LuShieldCheck, LuDownload } from "react-icons/lu";
+import { LuRefreshCw, LuShieldCheck, LuDownload, LuClock } from "react-icons/lu";
 import { SiGooglesheets } from "react-icons/si";
 import { BsGrid, BsListUl } from "react-icons/bs";
 import { 
@@ -41,7 +41,20 @@ const NeedsReview = () => {
   const [selectedFailure, setSelectedFailure] = useState(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [selectAllMatching, setSelectAllMatching] = useState(false);
-  const [view, setView] = useState("list");
+  const [view, setView] = useState(() => {
+    try {
+      return localStorage.getItem("needsReview:viewMode") || "grid";
+    } catch (_) {
+      return "grid";
+    }
+  });
+
+  const handleSetView = (newView) => {
+    setView(newView);
+    try {
+      localStorage.setItem("needsReview:viewMode", newView);
+    } catch (_) {}
+  };
 
   // Modal states for delete confirmation
   const [itemToDelete, setItemToDelete] = useState(null);
@@ -441,9 +454,23 @@ const NeedsReview = () => {
     );
   };
 
+  const formatReviewTime = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const diffSec = Math.floor((now - d) / 1000);
+    if (diffSec < 60) return "Just now";
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 86400 * 2) return "Yesterday";
+    if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)}d ago`;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
   /** Small neutral chip per failing check; click opens the failure detail. */
   const CheckChips = ({ record, className = "" }) => (
-    <div className={`flex flex-wrap gap-1 ${className}`}>
+    <div className={`flex flex-wrap items-center gap-1 ${className}`}>
       {failingChecks(record).map(([key, val]) => (
         <button
           key={key}
@@ -458,6 +485,15 @@ const NeedsReview = () => {
           {CHECK_LABELS[key] || key}
         </button>
       ))}
+
+      {record.needs_review_at && (
+        <Tooltip title={`Moved to Needs Review: ${new Date(record.needs_review_at).toLocaleString()}`}>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50/80 text-gray-500 text-[9px] font-medium tracking-tight">
+            <LuClock size={10} className="text-gray-400 shrink-0" />
+            {formatReviewTime(record.needs_review_at)}
+          </span>
+        </Tooltip>
+      )}
     </div>
   );
 
@@ -691,13 +727,13 @@ const NeedsReview = () => {
 
             <div className="flex bg-gray-100 rounded p-0.5">
               <button
-                onClick={() => setView("grid")}
+                onClick={() => handleSetView("grid")}
                 className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${view === "grid" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-700"}`}
               >
                 <BsGrid size={15} />
               </button>
               <button
-                onClick={() => setView("list")}
+                onClick={() => handleSetView("list")}
                 className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${view === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-700"}`}
               >
                 <BsListUl size={16} />
