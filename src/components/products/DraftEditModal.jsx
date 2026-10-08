@@ -1,6 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Modal, Input, Select, Button, Spin, InputNumber, Tabs, Image, DatePicker } from "antd";
 import toast from "react-hot-toast";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import {
   useGetDraftQuery,
   useUpdateDraftMutation,
@@ -625,6 +631,27 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     }
   }, [activeBolAccountId]);
 
+  // Auto-start image translation if draft has untranslated images
+  const autoTranslateTriggeredRef = useRef(null);
+  useEffect(() => {
+    if (
+      draftId &&
+      draft &&
+      draft.images_translated !== true &&
+      draft.photos?.length > 0 &&
+      autoTranslateTriggeredRef.current !== draftId &&
+      !translatingAll
+    ) {
+      const hasUntranslated = (draft.photos || []).some(
+        (p) => typeof p === "string" && !p.includes("translated-images")
+      );
+      if (hasUntranslated) {
+        autoTranslateTriggeredRef.current = draftId;
+        handleTranslateAllImages();
+      }
+    }
+  }, [draftId, draft, translatingAll]);
+
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
@@ -680,6 +707,11 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
     try {
       if (scheduleEnabled && form.schedule_at) {
+        const amsDate = dayjs(form.schedule_at).tz("Europe/Amsterdam");
+        if (amsDate.isBefore(dayjs())) {
+          toast.error("Scheduled publish time must be in the future.");
+          return;
+        }
         const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || getToken() || "";
         const res = await fetch(`${API_URL}/bol/drafts/bulk-publish`, {
           method: "POST",
@@ -692,7 +724,7 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
             account_id: selectedAccount,
             condition: form.condition,
             delivery_code: form.delivery_code,
-            schedule_at: form.schedule_at.toISOString()
+            schedule_at: amsDate.toISOString()
           })
         });
         const data = await res.json();
@@ -859,10 +891,34 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                             {scheduleEnabled && (
                                 <Field label="Publish Date & Time (Europe/Amsterdam)">
                                     <DatePicker 
-                                    showTime 
-                                    className="w-full h-10 rounded-[4px] border-gray-200" 
-                                    onChange={(v) => handleChange("schedule_at", v?.toDate() || null)}
+                                      showTime 
+                                      className="w-full h-10 rounded-[4px] border-gray-200" 
+                                      disabledDate={(current) => {
+                                        const todayAms = dayjs().tz("Europe/Amsterdam").startOf("day");
+                                        return current && current < todayAms;
+                                      }}
+                                      onChange={(v) => {
+                                        if (!v) {
+                                          handleChange("schedule_at", null);
+                                          return;
+                                        }
+                                        const dateStr = v.format("YYYY-MM-DD HH:mm:ss");
+                                        const amsDt = dayjs.tz(dateStr, "Europe/Amsterdam");
+                                        handleChange("schedule_at", amsDt);
+                                      }}
                                     />
+                                    {form.schedule_at && (
+                                      <div className="text-[11px] text-gray-500 mt-1.5 bg-blue-50/60 border border-blue-100 rounded px-2.5 py-1.5 flex flex-col gap-0.5">
+                                        <div className="text-blue-900 font-medium flex items-center justify-between">
+                                          <span>Amsterdam (Bol.com):</span>
+                                          <span className="font-semibold">{dayjs(form.schedule_at).tz("Europe/Amsterdam").format("DD MMM YYYY, HH:mm")} (CET/CEST)</span>
+                                        </div>
+                                        <div className="text-gray-500 flex items-center justify-between text-[10px]">
+                                          <span>Your Local Time:</span>
+                                          <span>{dayjs(form.schedule_at).local().format("DD MMM YYYY, HH:mm")}</span>
+                                        </div>
+                                      </div>
+                                    )}
                                 </Field>
                             )}
                         </div>

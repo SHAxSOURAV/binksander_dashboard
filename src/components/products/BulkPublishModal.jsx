@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Modal, Select, DatePicker, Button, Spin, InputNumber } from "antd";
 import toast from "react-hot-toast";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import {
   useGetBolCredentialsQuery,
 } from "../../Redux/connectionApis";
@@ -372,6 +378,18 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
     }
   };
 
+  // Auto-start bulk image translation when drafts are loaded and any are untranslated
+  const autoBulkTranslateTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!isGeneratingDrafts && drafts.length > 0 && !isTranslatingAll && !autoBulkTranslateTriggeredRef.current) {
+      const hasUntranslated = drafts.some(d => !d.isTranslated);
+      if (hasUntranslated) {
+        autoBulkTranslateTriggeredRef.current = true;
+        handleTranslateAllInBulk();
+      }
+    }
+  }, [isGeneratingDrafts, drafts, isTranslatingAll]);
+
   // Validation: Missing or invalid 13-digit EANs
   const invalidEanDrafts = drafts.filter(
     d => !d.ean || d.ean.length !== 13 || !/^\d+$/.test(d.ean)
@@ -457,6 +475,15 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
         stock_overrides[d.draftId] = typeof d.draftStock === 'number' ? d.draftStock : 10;
       });
 
+      if (scheduleEnabled && form.schedule_at) {
+        const amsDate = dayjs(form.schedule_at).tz("Europe/Amsterdam");
+        if (amsDate.isBefore(dayjs())) {
+          toast.error("Scheduled publish time must be in the future.");
+          setIsPublishing(false);
+          return;
+        }
+      }
+
       const token = localStorage.getItem("bol_access_token") || localStorage.getItem("bol_access_token_v2") || getToken() || "";
       const res = await fetch(`${API_URL}/bol/drafts/bulk-publish`, {
         method: "POST",
@@ -470,7 +497,7 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
           condition: form.condition,
           delivery_code: form.delivery_code,
           stock_overrides: stock_overrides,
-          schedule_at: scheduleEnabled && form.schedule_at ? form.schedule_at.toISOString() : null
+          schedule_at: scheduleEnabled && form.schedule_at ? dayjs(form.schedule_at).tz("Europe/Amsterdam").toISOString() : null
         })
       });
       const data = await res.json();
@@ -834,8 +861,32 @@ const BulkPublishModal = ({ products, onClose, onClearSelection }) => {
                   showTime 
                   className="w-full h-10" 
                   format="YYYY-MM-DD HH:mm:ss"
-                  onChange={(d) => handleChange("schedule_at", d)} 
+                  disabledDate={(current) => {
+                    const todayAms = dayjs().tz("Europe/Amsterdam").startOf("day");
+                    return current && current < todayAms;
+                  }}
+                  onChange={(d) => {
+                    if (!d) {
+                      handleChange("schedule_at", null);
+                      return;
+                    }
+                    const dateStr = d.format("YYYY-MM-DD HH:mm:ss");
+                    const amsDt = dayjs.tz(dateStr, "Europe/Amsterdam");
+                    handleChange("schedule_at", amsDt);
+                  }}
                 />
+                {form.schedule_at && (
+                  <div className="text-[11px] text-gray-500 mt-1.5 bg-blue-50/60 border border-blue-100 rounded px-2.5 py-1.5 flex flex-col gap-0.5">
+                    <div className="text-blue-900 font-medium flex items-center justify-between">
+                      <span>Amsterdam (Bol.com):</span>
+                      <span className="font-semibold">{dayjs(form.schedule_at).tz("Europe/Amsterdam").format("DD MMM YYYY, HH:mm")} (CET/CEST)</span>
+                    </div>
+                    <div className="text-gray-500 flex items-center justify-between text-[10px]">
+                      <span>Your Local Time:</span>
+                      <span>{dayjs(form.schedule_at).local().format("DD MMM YYYY, HH:mm")}</span>
+                    </div>
+                  </div>
+                )}
               </Field>
             )}
           </div>
