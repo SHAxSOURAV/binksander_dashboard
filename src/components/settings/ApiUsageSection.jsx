@@ -82,55 +82,55 @@ const ApiUsageSection = () => {
 
       {/* Top 3 Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-5">
-        {/* Amazon Scraper Quota */}
+        {/* Amazon SP-API Catalog */}
         <div className="border border-gray-200 rounded p-3 bg-white">
           <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-            <span>Amazon Scraper</span>
+            <span>Amazon SP-API (Catalog)</span>
             <StatusDot status={scraper.status} />
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-lg font-semibold text-gray-900 font-mono">
-              {formatNum(scraper.requests_remaining)}
+              2.0 req/s
             </span>
             <span className="text-[11px] text-gray-400 font-mono">
-              / {formatNum(scraper.requests_limit)} left
+              (Burst: 2)
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-1 mt-2 overflow-hidden">
+          <div className="w-full bg-emerald-50 rounded-full h-1 mt-2 overflow-hidden">
             <div
-              className="bg-gray-800 h-1 rounded-full transition-all"
-              style={{ width: `${Math.min(100, scraper.usage_percent || 0)}%` }}
+              className="bg-emerald-500 h-1 rounded-full transition-all"
+              style={{ width: "100%" }}
             />
           </div>
           <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-mono">
-            <span>{scraper.usage_percent || 0}% used</span>
-            <span>Resets in ~{scraper.reset_in_days || 0}d</span>
+            <span>Official Seller Partner API</span>
+            <span>Batch: 20 ASINs</span>
           </div>
         </div>
 
-        {/* Amazon Stock Quota */}
+        {/* Amazon SP-API Pricing & Stock */}
         <div className="border border-gray-200 rounded p-3 bg-white">
           <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-            <span>Amazon Stock (Accurate)</span>
+            <span>Amazon SP-API (Pricing & Stock)</span>
             <StatusDot status={stock.status} />
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-lg font-semibold text-gray-900 font-mono">
-              {formatNum(stock.requests_remaining)}
+              0.5 req/s
             </span>
             <span className="text-[11px] text-gray-400 font-mono">
-              / {formatNum(stock.requests_limit)} left
+              (Burst: 1)
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-1 mt-2 overflow-hidden">
+          <div className="w-full bg-emerald-50 rounded-full h-1 mt-2 overflow-hidden">
             <div
-              className="bg-gray-800 h-1 rounded-full transition-all"
-              style={{ width: `${Math.min(100, stock.usage_percent || 0)}%` }}
+              className="bg-emerald-500 h-1 rounded-full transition-all"
+              style={{ width: "100%" }}
             />
           </div>
           <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-mono">
-            <span>{stock.usage_percent || 0}% used</span>
-            <span>Resets in ~{stock.reset_in_days || 0}d</span>
+            <span>Live BuyBox & Stock Sync</span>
+            <span>Batch: 20 ASINs</span>
           </div>
         </div>
 
@@ -147,90 +147,86 @@ const ApiUsageSection = () => {
             <span className="text-[11px] text-gray-400">calls saved</span>
           </div>
           <p className="text-[10px] text-gray-400 mt-3 truncate font-mono">
-            {formatNum(cache.rapidapi_cache)} Amazon • {formatNum(cache.brand_cache)} Brand • {formatNum(cache.translation_cache)} Images
+            {formatNum(cache.catalog_cache || cache.rapidapi_cache)} Catalog • {formatNum(cache.brand_cache)} Brand • {formatNum(cache.translation_cache)} Images
           </p>
         </div>
       </div>
 
-      {/* 1. RapidAPI Services Breakdown */}
+      {/* 1. Amazon SP-API Official Services Breakdown */}
       <div className="mb-5">
         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-          RapidAPI Services (3 Integrations)
+          Amazon Selling Partner API (Official Direct Integration)
         </p>
         <div className="border border-gray-200 rounded divide-y divide-gray-100 bg-white">
-          {/* Service 1: Scraper */}
+          {/* Service 1: Catalog Items */}
           <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-gray-900">
-                  {scraper.name || "Real-Time Amazon Data"}
+                  Amazon SP-API Catalog Items (v2022-04-01)
                 </span>
                 <StatusDot status={scraper.status} />
               </div>
               <p className="text-[11px] text-gray-400 font-mono mt-0.5">
-                {scraper.host || "real-time-amazon-data.p.rapidapi.com"}
+                {scraper.host || "sellingpartnerapi-eu.amazon.com"} • Marketplace: Amazon.nl (A1805IZSGTT6HS)
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs font-mono text-gray-600 sm:text-right">
               <div>
-                <span className="text-[10px] text-gray-400 block font-sans">Remaining</span>
-                <span className="font-semibold text-gray-900">
-                  {formatNum(scraper.requests_remaining)}
-                </span>
+                <span className="text-[10px] text-gray-400 block font-sans">Rate Limit</span>
+                <span className="font-semibold text-gray-900">2.0 req/s</span>
               </div>
               <div>
-                <span className="text-[10px] text-gray-400 block font-sans">Used</span>
-                <span>{formatNum(scraper.requests_used)}</span>
+                <span className="text-[10px] text-gray-400 block font-sans">Batch Size</span>
+                <span>20 ASINs</span>
               </div>
               <div>
-                <span className="text-[10px] text-gray-400 block font-sans">Limit</span>
-                <span>{formatNum(scraper.requests_limit)}</span>
+                <span className="text-[10px] text-gray-400 block font-sans">Burst</span>
+                <span>2 reqs</span>
               </div>
             </div>
           </div>
 
-          {/* Service 2: Stock Most Complete */}
+          {/* Service 2: Competitive Pricing & Offers */}
           <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-gray-900">
-                  {stock.name || "Real-Time Amazon Stock (Most Complete)"}
+                  Amazon SP-API Pricing & Offers (v0)
                 </span>
                 <StatusDot status={stock.status} />
               </div>
               <p className="text-[11px] text-gray-400 font-mono mt-0.5">
-                {stock.host || "real-time-amazon-data-the-most-complete.p.rapidapi.com"}
+                {stock.host || "sellingpartnerapi-eu.amazon.com"} • Live Landed Prices, BuyBox & Stock
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs font-mono text-gray-600 sm:text-right">
               <div>
-                <span className="text-[10px] text-gray-400 block font-sans">Remaining</span>
-                <span className="font-semibold text-gray-900">
-                  {formatNum(stock.requests_remaining)}
-                </span>
+                <span className="text-[10px] text-gray-400 block font-sans">Rate Limit</span>
+                <span className="font-semibold text-gray-900">0.5 req/s</span>
               </div>
               <div>
-                <span className="text-[10px] text-gray-400 block font-sans">Used</span>
-                <span>{formatNum(stock.requests_used)}</span>
+                <span className="text-[10px] text-gray-400 block font-sans">Batch Size</span>
+                <span>20 ASINs</span>
               </div>
               <div>
-                <span className="text-[10px] text-gray-400 block font-sans">Limit</span>
-                <span>{formatNum(stock.requests_limit)}</span>
+                <span className="text-[10px] text-gray-400 block font-sans">Burst</span>
+                <span>1 req</span>
               </div>
             </div>
           </div>
 
-          {/* Service 3: Torii Image Translator */}
+          {/* Service 3: Image Translation Pipeline */}
           <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-gray-900">
-                  {torii.name || "Torii Image Translator"}
+                  Product Image Translation Pipeline
                 </span>
-                <StatusDot status={torii.status} />
+                <StatusDot status="ONLINE" />
               </div>
               <p className="text-[11px] text-gray-400 font-mono mt-0.5">
-                {torii.host || "torii-image-translator.p.rapidapi.com"}
+                EasyOCR + Google Translate Pipeline • AWS S3 Permanent Bucket
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs font-mono text-gray-600 sm:text-right">
@@ -242,7 +238,7 @@ const ApiUsageSection = () => {
               </div>
               <div>
                 <span className="text-[10px] text-gray-400 block font-sans">Engine</span>
-                <span>EasyOCR</span>
+                <span>Google / OCR</span>
               </div>
             </div>
           </div>
