@@ -381,6 +381,7 @@ const NeedsReview = () => {
     r.TITLE || r.Title || r.title || r.product_title || "No title";
 
   const CHECK_LABELS = {
+    valid_supplier_link: "Invalid Link",
     brand_blacklist: "Blacklisted Brand",
     bolcom_duplicate_ean: "Duplicate EAN",
     bolcom_duplicate_brand: "Duplicate Brand",
@@ -390,6 +391,7 @@ const NeedsReview = () => {
 
   const formatReason = (text) => {
     if (!text) return "Validation failed";
+    if (text.includes("Supplier Link") || text.includes("Amazon URL") || text.includes("supplier link") || text.includes("Invalid link") || text.includes("invalid link")) return "Invalid Amazon Link";
     if (text.includes("Blacklisted Brand") || text.includes("blacklist") || text.includes("Blacklist")) return text;
     if (text.includes("Rating") || text.includes("3.5")) return text;
     if (text.includes("EAN")) return "EAN already listed";
@@ -537,6 +539,7 @@ const NeedsReview = () => {
         if (fr.includes("ean")) return reasons.includes("ean") || checks.includes("duplicate_ean");
         if (fr.includes("brand")) return reasons.includes("brand") || checks.includes("duplicate_brand") || checks.includes("blacklist");
         if (fr.includes("rating")) return reasons.includes("rating") || checks.includes("low_rating");
+        if (fr.includes("invalid") || fr.includes("link")) return reasons.includes("link") || checks.includes("valid_supplier_link") || item.validation_status === "INVALID_LINK";
         return reasons.includes(fr);
       });
     }
@@ -715,6 +718,7 @@ const NeedsReview = () => {
               className="w-44 h-9 custom-select"
               options={[
                 { value: "all", label: "All reasons" },
+                { value: "Invalid or Missing Supplier Link", label: "Invalid Amazon Link" },
                 { value: "Out of stock on Amazon", label: "Out of Stock" },
                 { value: "Blacklisted Brand", label: "Blacklisted Brand" },
                 { value: "Already on bol.com (EAN)", label: "Duplicate EAN" },

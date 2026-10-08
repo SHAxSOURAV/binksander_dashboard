@@ -58,6 +58,16 @@ const ValidationFailureModal = ({ open, onClose, record, checkKey }) => {
         pass: "Rating is 3.5 stars or higher."
       },
       fix: "Review product quality and customer feedback on Amazon before publishing."
+    },
+    valid_supplier_link: {
+      title: "Supplier Link Check",
+      desc: "Checks that the Google Sheet supplier link is a valid Amazon product URL with an ASIN.",
+      causes: {
+        fail: "The supplier link in your Google Sheet (Column C) is not a valid Amazon URL or does not contain a product ASIN (/dp/B0...).",
+        uncertain: "Supplier link could not be verified.",
+        pass: "Supplier link is valid."
+      },
+      fix: "Update Column C in your Google Sheet with a valid Amazon URL (e.g. https://www.amazon.nl/dp/ASIN) and click Re-validate."
     }
   };
 
