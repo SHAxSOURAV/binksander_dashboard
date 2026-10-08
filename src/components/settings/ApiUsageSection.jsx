@@ -242,7 +242,7 @@ const ApiUsageSection = () => {
               </div>
               <div>
                 <span className="text-[10px] text-gray-400 block font-sans">Engine</span>
-                <span>Gemini 2.0</span>
+                <span>EasyOCR</span>
               </div>
             </div>
           </div>
@@ -285,13 +285,13 @@ const ApiUsageSection = () => {
           {/* AI Providers */}
           <div className="p-2.5 px-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900">AI Intelligence</span>
-              <span className="text-gray-400 font-mono">Gemini & Claude</span>
+              <span className="font-medium text-gray-900">AI Intelligence (OpenCode Go)</span>
+              <span className="text-gray-400 font-mono">DeepSeek & GPT Luna</span>
             </div>
             <div className="flex items-center gap-3 text-gray-600 font-mono text-[11px]">
-              <span>Gemini: {ai.gemini?.model || "gemini-2.0-flash"}</span>
-              <span>Claude: {ai.anthropic?.model || "claude-haiku"}</span>
-              <StatusDot status={ai.gemini?.status} />
+              <span>Primary: {ai.opencode_primary?.model || "deepseek-v4.1-flash"}</span>
+              <span>Fallback: {ai.opencode_fallback?.model || "gpt-6-luna"}</span>
+              <StatusDot status={ai.opencode_primary?.status || ai.openai?.status} />
             </div>
           </div>
 

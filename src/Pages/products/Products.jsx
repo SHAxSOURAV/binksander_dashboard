@@ -180,15 +180,14 @@ const Products = () => {
 
     const hasProcessing = data?.items?.some(p => p.publishStatus === 'processing');
     const hasPendingScrape = data?.items?.some(p => p.scrapePending);
-    const hasMissingImage = data?.items?.some(p => p.isValidAmazon && !p.image);
     
-    if ((hasPendingScrape || hasMissingImage) && scrapePollCount < 35) {
-      setPollingInterval(8000);
+    if (hasPendingScrape && scrapePollCount < 10) {
+      setPollingInterval(20000);
       setScrapePollCount(prev => prev + 1);
     } else if (hasProcessing) {
-      setPollingInterval(12000);
+      setPollingInterval(15000);
     } else {
-      setPollingInterval(30000);
+      setPollingInterval(0);
     }
   }, [data, editingDraftId, connectOpen, filterOpen, bulkPublishOpen, scrapePollCount]);
 
@@ -327,15 +326,18 @@ const Products = () => {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const loading = isLoading || (isFetching && !currentData);
 
-  // Prefetch next page into RTK Query cache for instant pagination
+  // Prefetch next page into RTK Query cache with a 2.5s debounce to avoid prefetch storms during rapid clicks
   useEffect(() => {
     if (page < totalPages && !isLoading && !isFetching) {
-      dispatch(
-        productApis.endpoints.getProducts.initiate(
-          { ...queryParams, page: page + 1 },
-          { subscribe: false, forceRefetch: false }
-        )
-      );
+      const timer = setTimeout(() => {
+        dispatch(
+          productApis.endpoints.getProducts.initiate(
+            { ...queryParams, page: page + 1 },
+            { subscribe: false, forceRefetch: false }
+          )
+        );
+      }, 2500);
+      return () => clearTimeout(timer);
     }
   }, [page, totalPages, isLoading, isFetching, queryParams, dispatch]);
 
@@ -603,7 +605,7 @@ const Products = () => {
                         checked={columns[col]}
                         onChange={e => setColumns(prev => ({ ...prev, [col]: e.target.checked }))}
                       >
-                        {col.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                        {col === 'stock' ? 'Offers' : col.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                       </Checkbox>
                     ))}
                 </div>
@@ -680,7 +682,7 @@ const Products = () => {
             />
 
             <Select
-              value={sortBy ? `${sortBy}-${sortOrder}` : "default"}
+              value={sortBy ? (sortBy === 'stock' ? `offers-${sortOrder}` : `${sortBy}-${sortOrder}`) : "default"}
               onChange={(val) => {
                 if (val === "default") {
                   setSortBy("");
@@ -699,8 +701,8 @@ const Products = () => {
                 { value: 'creation-asc', label: 'Oldest first' },
                 { value: 'price-desc', label: 'Price: high first' },
                 { value: 'price-asc', label: 'Price: low first' },
-                { value: 'stock-desc', label: 'Stock: high first' },
-                { value: 'stock-asc', label: 'Stock: low first' },
+                { value: 'offers-desc', label: 'Offers: high first' },
+                { value: 'offers-asc', label: 'Offers: low first' },
                 { value: 'title-asc', label: 'Title: A–Z' },
                 { value: 'title-desc', label: 'Title: Z–A' },
               ]}
@@ -1078,7 +1080,7 @@ const Products = () => {
                           type="button"
                           disabled={resyncingStockAsin === p.asin}
                           onClick={(e) => handleResyncStock(p, e)}
-                          title="Click to resync live stock & price from Amazon"
+                          title="Active Amazon seller offers. Click to resync live stock & price"
                           className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-blue-50/90 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-xs backdrop-blur-md flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-75"
                         >
                           <span>
@@ -1278,7 +1280,7 @@ const Products = () => {
                   {columns.ean && <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider w-40">EAN</th>}
                   {columns.category && <th className="py-2 px-2 text-left text-[10px] font-semibold uppercase tracking-wider w-32">Category</th>}
                   {columns.price && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-24">Price</th>}
-                  {columns.stock && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-20">Stock</th>}
+                  {columns.stock && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-20">Offers</th>}
                   {columns.ratings && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-20">Rating</th>}
                   {columns.publishAction && <th className="py-2 px-2 text-right text-[10px] font-semibold uppercase tracking-wider w-40">Action</th>}
                 </tr>
@@ -1396,7 +1398,7 @@ const Products = () => {
                               type="button"
                               disabled={resyncingStockAsin === p.asin}
                               onClick={(e) => handleResyncStock(p, e)}
-                              title="Click to resync live stock & price from Amazon"
+                              title="Active Amazon seller offers. Click to resync live stock & price"
                               className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-75"
                             >
                               <span>
