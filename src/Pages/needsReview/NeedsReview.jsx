@@ -538,7 +538,7 @@ const NeedsReview = () => {
         if (fr.includes("stock")) return reasons.includes("stock") || checks.includes("in_stock");
         if (fr.includes("ean")) return reasons.includes("ean") || checks.includes("duplicate_ean");
         if (fr.includes("brand")) return reasons.includes("brand") || checks.includes("duplicate_brand") || checks.includes("blacklist");
-        if (fr.includes("rating")) return reasons.includes("rating") || checks.includes("low_rating");
+        if (fr.includes("delivery") || fr.includes("8 day")) return reasons.includes("delivery") || checks.includes("delivery_time") || reasons.includes("8 day");
         if (fr.includes("invalid") || fr.includes("link")) return reasons.includes("link") || checks.includes("valid_supplier_link") || item.validation_status === "INVALID_LINK";
         return reasons.includes(fr);
       });
@@ -720,10 +720,10 @@ const NeedsReview = () => {
                 { value: "all", label: "All reasons" },
                 { value: "Invalid or Missing Supplier Link", label: "Invalid Amazon Link" },
                 { value: "Out of stock on Amazon", label: "Out of Stock" },
+                { value: "Long Delivery Time", label: "Long Delivery (> 8 days)" },
                 { value: "Blacklisted Brand", label: "Blacklisted Brand" },
                 { value: "Already on bol.com (EAN)", label: "Duplicate EAN" },
                 { value: "Already on bol.com (Brand)", label: "Duplicate Brand" },
-                { value: "Low Amazon Rating", label: "Low Rating" },
                 { value: "Bol Connection Error", label: "Bol Connection Error" },
                 { value: "search error", label: "Search Service Error" },
               ]}

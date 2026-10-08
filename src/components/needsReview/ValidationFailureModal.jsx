@@ -49,15 +49,15 @@ const ValidationFailureModal = ({ open, onClose, record, checkKey }) => {
       },
       fix: "The system automatically re-checks this product every 30 days. When Amazon restocks it, it will automatically move to the Inventory Catalog."
     },
-    amazon_low_rating: {
-      title: "Amazon Rating Check",
-      desc: "Checks customer reviews and ratings on Amazon (minimum threshold: 3.5 stars).",
+    delivery_time: {
+      title: "Amazon Delivery Time Check (8-Day Maximum)",
+      desc: "Checks estimated delivery timeframe from Amazon SP-API (must be 8 business days or faster).",
       causes: {
-        fail: "Product has an average Amazon rating below 3.5 stars.",
-        uncertain: "Product rating could not be determined.",
-        pass: "Rating is 3.5 stars or higher."
+        fail: "This product has a delivery timeframe exceeding 8 business days or is backordered on Amazon.",
+        uncertain: "Delivery timeframe could not be determined from Amazon.",
+        pass: "Delivery timeframe is 8 days or faster."
       },
-      fix: "Review product quality and customer feedback on Amazon before publishing."
+      fix: "Products requiring more than 8 days to deliver cannot meet standard Bol.com customer delivery commitments."
     },
     valid_supplier_link: {
       title: "Supplier Link Check",
