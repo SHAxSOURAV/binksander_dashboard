@@ -622,13 +622,23 @@ const Products = () => {
                 <FiEye size={16} />
               </button>
             </Popover>
-            <button
-              onClick={() => setFilterOpen(true)}
-              title="Filter products"
-              className={`w-9 h-9 rounded border flex items-center justify-center transition-colors ${Object.keys(activeFilters).length || publishFilter !== "all" ? 'border-gray-900 text-gray-900 bg-gray-100' : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-            >
-              <FiFilter size={16} />
-            </button>
+            <Tooltip title="Filter products">
+              <button
+                onClick={() => setFilterOpen(true)}
+                className={`relative w-9 h-9 rounded border flex items-center justify-center transition-colors ${
+                  Object.keys(activeFilters).length || publishFilter !== "all" 
+                    ? 'border-gray-900 text-gray-900 bg-gray-100' 
+                    : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <FiFilter size={16} />
+                {Object.keys(activeFilters).length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-semibold pointer-events-none">
+                    {Object.keys(activeFilters).length}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
 
             <Select
               value={publishFilter}

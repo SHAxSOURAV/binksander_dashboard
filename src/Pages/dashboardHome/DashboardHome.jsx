@@ -18,6 +18,7 @@ import {
   FiBarChart2,
   FiX,
   FiArrowRight,
+  FiLink2,
 } from "react-icons/fi";
 import { LuRefreshCw } from "react-icons/lu";
 import toast from "react-hot-toast";
@@ -45,6 +46,7 @@ import {
   useGetFiltersMetaQuery,
   useGetConnectionQuery,
 } from "../../Redux/productApis";
+import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
 
 const PERIOD_OPTIONS = [
@@ -65,7 +67,8 @@ const TABS = [
 const ALERTS_PAGE_SIZE = 10;
 
 const DashboardHome = () => {
-  const { activeBolAccountId } = useUI();
+  const { activeBolAccountId, openSettings } = useUI();
+  const { data: bolCreds = [], isLoading: credsLoading } = useGetBolCredentialsQuery();
   const [activeTab, setActiveTab] = useState("overview");
 
   // ── Prefetch Inventory Catalog data in the background ──
@@ -259,6 +262,36 @@ const DashboardHome = () => {
           />
         </div>
       </div>
+
+      {/* Missing Bol.com API Access Banner */}
+      {!credsLoading && bolCreds.length === 0 && (
+        <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white border border-blue-200 rounded-xl p-5 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
+              <FiLink2 size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900">
+                  Connect Bol.com API Access
+                </h3>
+                <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full">
+                  Action Required
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed max-w-2xl">
+                Your store metrics (Revenue, Net Income, Open Orders, Returns, and Review Score) are loaded directly from your Bol.com Retailer API. Add your API credentials to see live performance data.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => openSettings("connection")}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-bold shadow-sm hover:shadow transition-all whitespace-nowrap self-start md:self-center cursor-pointer"
+          >
+            <FiLink2 size={14} /> Add Bol.com API Access
+          </button>
+        </div>
+      )}
 
       {/* Tab 1: Overview */}
       {activeTab === "overview" && (

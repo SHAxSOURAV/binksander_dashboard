@@ -579,10 +579,14 @@ const productApis = baseApis.injectEndpoints({
 
     // GET /bol/offers?refresh=true (Forced Sync)
     syncBolOffers: builder.mutation({
-      query: () => ({
-        url: "/bol/offers?refresh=true",
-        method: "GET",
-      }),
+      query: (accountId) => {
+        const params = new URLSearchParams({ refresh: "true" });
+        if (accountId) params.append("bol_account_id", accountId);
+        return {
+          url: `/bol/offers?${params.toString()}`,
+          method: "GET",
+        };
+      },
       invalidatesTags: ["BolOffers"],
     }),
 
