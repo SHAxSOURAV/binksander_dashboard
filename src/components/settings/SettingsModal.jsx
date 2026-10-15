@@ -326,16 +326,23 @@ const SettingsModal = () => {
   });
 
   const handleFetchPublicTabs = async () => {
-    if (!publicLinkUrl) return toast.error("Please enter a link");
+    if (!publicLinkUrl.trim()) {
+      return toast.error("Please enter a Google Spreadsheet link");
+    }
     try {
-      const res = await getSpreadsheetTabs({ spreadsheet_url: publicLinkUrl }).unwrap();
-      setTabsList(res.tabs || []);
-      setSelectedSheetUrl(publicLinkUrl);
+      const res = await getSpreadsheetTabs({ spreadsheet_url: publicLinkUrl.trim() }).unwrap();
+      const tabs = res.tabs || [];
+      if (tabs.length === 0) {
+        toast.error("No tabs found in this spreadsheet.");
+        return;
+      }
+      setSelectedSheetUrl(publicLinkUrl.trim());
       setIsPublicTabSelect(true);
+      setTabsList(tabs);
       setPublicLinkModalOpen(false);
       setTabsModalOpen(true);
     } catch (err) {
-      toast.error(err?.data?.detail || "Failed to fetch tabs");
+      toast.error(err?.data?.detail || "Failed to fetch tabs. Ensure link sharing is enabled.");
     }
   };
 
@@ -842,9 +849,20 @@ const SettingsModal = () => {
           placeholder="https://docs.google.com/spreadsheets/d/..." 
           value={publicLinkUrl} 
           onChange={e => setPublicLinkUrl(e.target.value)} 
+          onKeyDown={e => {
+            if (e.key === 'Enter' && publicLinkUrl.trim() && !fetchingTabs) {
+              e.preventDefault();
+              handleFetchPublicTabs();
+            }
+          }}
           className="mb-4 h-10 rounded-lg"
         />
-        <Button type="primary" onClick={handleFetchPublicTabs} loading={fetchingTabs} className="w-full h-10 rounded-lg button-color font-semibold">
+        <Button 
+          type="primary" 
+          onClick={handleFetchPublicTabs} 
+          loading={fetchingTabs} 
+          className="w-full h-10 rounded-lg button-color font-semibold"
+        >
           Next
         </Button>
       </div>
