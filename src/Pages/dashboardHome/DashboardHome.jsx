@@ -353,9 +353,9 @@ const DashboardHome = () => {
                     <FiAlertTriangle size={16} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 text-sm">Low Stock Alerts</h3>
+                    <h3 className="font-bold text-gray-900 text-sm">Stock Alerts</h3>
                     <p className="text-xs text-gray-400">
-                      Live supplier stock levels mapped to catalog items
+                      Live supplier stock status mapped to catalog items
                     </p>
                   </div>
                 </div>
@@ -382,7 +382,7 @@ const DashboardHome = () => {
                 </div>
               ) : visibleAlerts.length === 0 ? (
                 <p className="text-xs text-gray-400 py-8 text-center">
-                  There is no recent low stock alerts.
+                  There is no recent stock alerts.
                 </p>
               ) : (
                 <>

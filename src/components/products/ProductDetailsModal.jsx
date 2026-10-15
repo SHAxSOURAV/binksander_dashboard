@@ -114,7 +114,7 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
 
   // Live-scrape the full Amazon product (all photos, description) for this ASIN.
   const { data: details, isFetching: loadingDetails } = useScrapeAsinQuery(
-    { asin: product?.asin, country: "NL" },
+    { asin: product?.asin, country: product?.country || "NL" },
     { skip: !open || !product?.asin },
   );
 
@@ -131,19 +131,18 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
         : [product?.image].filter(Boolean);
     const amazonNum = parsePrice(details?.price ?? product?.amazonPrice);
     
-    const amazonTitle = details?.title || product?.title || "";
-    const sheetTitle = product?.spreadsheetTitle || amazonTitle;
+    const amazonTitle = details?.amazonTitle || details?.title || product?.title || "";
+    const sheetTitle = details?.sheetTitle || product?.spreadsheetTitle || amazonTitle;
     const finalTitle = useSheetTitle ? sheetTitle : amazonTitle;
 
-    // The catalog row already carries the price the backend computed with this
-    // account's multiplier — prefer it so the modal can't disagree with the card.
-    // Only fall back to a local calculation (using the same multiplier) when the
-    // row has no server price, e.g. an unscraped item.
+    // Prefer markup from live/scraped Amazon price when available. If only serverPrice is known
+    // (e.g. from catalog row), use it; fall back to 39.95 minimum floor.
     const serverPrice = parsePrice(product?.price);
+    const markupPrice = amazonNum > 0 ? calcSellingPrice(amazonNum, product?.priceMultiplier ?? 2.5) : null;
     const calculatedPrice =
-      serverPrice && serverPrice > 0
+      serverPrice && serverPrice > 0 && (!markupPrice || serverPrice >= markupPrice)
         ? serverPrice
-        : calcSellingPrice(amazonNum, product?.priceMultiplier ?? 2.5);
+        : (markupPrice || serverPrice || 39.95);
 
     return {
       amazonTitle,
@@ -248,33 +247,19 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-5 text-sm">
-               <div className="flex items-center gap-1 text-gray-600 text-[11px] font-medium">
-                  <FaStar className="text-gray-400 mb-[1px]" size={11} />
-                  <span>{view.rating || "—"}</span>
-               </div>
-               <span className="text-gray-400 text-[11px]">
-                 {view.reviews} reviews
-               </span>
-               
-               {product?.asin && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await syncAsin({ asin: product.asin, country: "NL" }).unwrap();
-                      toast.success("Successfully synced ASIN");
-                    } catch (err) {
-                      toast.error(err?.data?.detail || "Failed to sync ASIN");
-                    }
-                  }}
-                  disabled={isSyncing}
-                  className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 transition-colors disabled:opacity-50 font-medium px-2.5 py-1 rounded text-[11px] ml-auto"
-                >
-                  <FiRefreshCw className={isSyncing ? "animate-spin" : ""} size={12} />
-                  {isSyncing ? "Syncing..." : "Sync Latest Data"}
-                </button>
-              )}
-            </div>
+            {Boolean(view.rating && view.rating !== "—") && (
+              <div className="flex items-center gap-5 text-sm">
+                 <div className="flex items-center gap-1 text-gray-600 text-[11px] font-medium">
+                    <FaStar className="text-amber-400 mb-[1px]" size={11} />
+                    <span>{view.rating}</span>
+                 </div>
+                 {view.reviews ? (
+                   <span className="text-gray-400 text-[11px]">
+                     {view.reviews} reviews
+                   </span>
+                 ) : null}
+              </div>
+            )}
           </div>
         </div>
         
@@ -343,10 +328,10 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                             </div>
                          </div>
                          
-                         {/* Category & Bullet Features */}
+                         {/* Category Classification */}
                          <div className="border border-gray-200 rounded p-3">
-                            <h3 className="text-[10px] font-semibold text-gray-400 mb-2.5 uppercase tracking-wider">CATEGORY & HIGHLIGHTS</h3>
-                            <div className="mb-4">
+                            <h3 className="text-[10px] font-semibold text-gray-400 mb-2.5 uppercase tracking-wider">CATEGORY CLASSIFICATION</h3>
+                            <div>
                                <p className="text-[11px] text-gray-500 mb-1.5 font-medium">Internal Mapped Category</p>
                                <Select
                                  defaultValue={view.category}
@@ -354,20 +339,6 @@ const ProductDetailsModal = ({ open, onClose, product, onDraftCreated, onOpenDra
                                  options={[{ value: view.category, label: view.category }]}
                                />
                             </div>
-                            
-                            {view.features?.length > 0 && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-3 font-medium">Key Highlights</p>
-                                <ul className="space-y-2.5">
-                                  {view.features.slice(0, 5).map((feat, i) => (
-                                    <li key={i} className="text-[13px] text-gray-700 flex items-start gap-2.5 leading-snug">
-                                       <FaCheckCircle className="text-gray-300 mt-0.5 flex-shrink-0" size={12} />
-                                       <span className="font-medium text-gray-600">{feat}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
                          </div>
                        </div>
                      )

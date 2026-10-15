@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Popover, Input, Select } from "antd";
-import { FiSearch, FiSettings, FiLogOut, FiBell, FiAlertTriangle, FiTrash2, FiCheck } from "react-icons/fi";
+import { FiSearch, FiSettings, FiLogOut, FiBell, FiAlertTriangle, FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { HiMenuAlt2 } from "react-icons/hi";
 import { useUI } from "../../../Provider/ContextProvider";
 import { getUser } from "../../../utils/session";
@@ -20,7 +20,13 @@ const AVATAR = "/Deafult Profile/profile.webp";
 
 const formatTimeAgo = (dateStr) => {
   if (!dateStr) return "";
-  const d = new Date(dateStr);
+  let cleanStr = String(dateStr).trim();
+  // If no timezone offset is present, append Z to ensure UTC interpretation in local browser time
+  if (!cleanStr.endsWith("Z") && !/[+-]\d{2}(?::?\d{2})?$/.test(cleanStr)) {
+    cleanStr += "Z";
+  }
+  const d = new Date(cleanStr);
+  if (isNaN(d.getTime())) return "";
   const now = new Date();
   const diffSec = Math.floor((now - d) / 1000);
   if (diffSec < 60) return "Just now";
@@ -85,10 +91,15 @@ const Navbar = ({ onMenuClick }) => {
       }
     }
     setNotifOpen(false);
+    const isOut = notif.type === "OUT_OF_STOCK" || notif.is_in_stock === false || (notif.stock_quantity ?? 0) <= 0;
     if (notif.asin) {
-      navigate(`/low-stock?search=${encodeURIComponent(notif.asin)}`);
+      if (isOut) {
+        navigate(`/needs-review?search=${encodeURIComponent(notif.asin)}`);
+      } else {
+        navigate(`/products?search=${encodeURIComponent(notif.asin)}`);
+      }
     } else {
-      navigate("/low-stock");
+      navigate(isOut ? "/needs-review" : "/products");
     }
   };
 
@@ -148,59 +159,69 @@ const Navbar = ({ onMenuClick }) => {
             </div>
             <p className="text-xs font-semibold text-gray-700">No notifications</p>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              All monitored products currently have adequate stock.
+              All monitored products currently in stock.
             </p>
           </div>
         ) : (
-          notifications.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => handleNotifClick(n)}
-              className={`p-3 flex items-start gap-3 transition-colors cursor-pointer group ${
-                !n.is_read ? "bg-amber-50/30 hover:bg-amber-50/60" : "hover:bg-gray-50"
-              }`}
-            >
-              {n.image ? (
-                <img
-                  src={n.image}
-                  alt=""
-                  className="w-10 h-10 rounded object-cover border border-gray-100 shrink-0 mt-0.5"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <FiAlertTriangle size={18} />
-                </div>
-              )}
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1">
-                  <p className="text-xs font-semibold text-gray-900 truncate">
-                    {n.title || "Low Stock Alert"}
-                  </p>
-                  <span className="text-[10px] text-gray-400 whitespace-nowrap shrink-0">
-                    {formatTimeAgo(n.created_at)}
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-600 line-clamp-2 mt-0.5 leading-relaxed">
-                  {n.message}
-                </p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  {n.asin && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
-                      {n.asin}
-                    </span>
-                  )}
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      (n.stock_quantity ?? 0) <= 0
-                        ? "bg-rose-100 text-rose-800"
-                        : "bg-amber-100 text-amber-800"
+          notifications.map((n) => {
+            const isOut = n.type === "OUT_OF_STOCK" || n.is_in_stock === false || (n.stock_quantity ?? 0) <= 0;
+            return (
+              <div
+                key={n.id}
+                onClick={() => handleNotifClick(n)}
+                className={`p-3 flex items-start gap-3 transition-colors cursor-pointer group ${
+                  !n.is_read
+                    ? isOut
+                      ? "bg-rose-50/30 hover:bg-rose-50/60"
+                      : "bg-emerald-50/30 hover:bg-emerald-50/60"
+                    : "hover:bg-gray-50"
+                }`}
+              >
+                {n.image ? (
+                  <img
+                    src={n.image}
+                    alt=""
+                    className="w-10 h-10 rounded object-cover border border-gray-100 shrink-0 mt-0.5"
+                  />
+                ) : (
+                  <div
+                    className={`w-10 h-10 rounded flex items-center justify-center shrink-0 mt-0.5 ${
+                      isOut ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
                     }`}
                   >
-                    Stock: {n.stock_quantity ?? 0}
-                  </span>
+                    {isOut ? <FiX size={18} /> : <FiCheck size={18} />}
+                  </div>
+                )}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-xs font-semibold text-gray-900 truncate">
+                      {n.title || (isOut ? "Product Out of Stock" : "Product Back in Stock")}
+                    </p>
+                    <span className="text-[10px] text-gray-400 whitespace-nowrap shrink-0">
+                      {formatTimeAgo(n.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-600 line-clamp-2 mt-0.5 leading-relaxed">
+                    {n.message}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {n.asin && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                        {n.asin}
+                      </span>
+                    )}
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                        isOut
+                          ? "bg-rose-50 text-rose-800 border-rose-200"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      }`}
+                    >
+                      {isOut ? "Out of stock" : "In stock"}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
               <div className="flex flex-col items-center gap-2 shrink-0 pt-1">
                 {!n.is_read && (
@@ -215,8 +236,9 @@ const Navbar = ({ onMenuClick }) => {
                 </button>
               </div>
             </div>
-          ))
-        )}
+          );
+        })
+      )}
       </div>
 
       {/* Footer */}
@@ -228,7 +250,7 @@ const Navbar = ({ onMenuClick }) => {
           }}
           className="text-xs font-semibold text-gray-700 hover:text-gray-900 transition-colors"
         >
-          View all low stock alerts &rarr;
+          View all stock alerts &rarr;
         </button>
       </div>
     </div>
