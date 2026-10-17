@@ -105,6 +105,8 @@ const PerformanceTab = ({ accountId: propAccountId }) => {
     refetch,
   } = useGetPerformanceQuery(currentAccountId, {
     pollingInterval: 60000,
+    skipPollingIfUnfocused: true,
+    refetchOnMountOrArgChange: true,
     skip: !currentAccountId,
   });
 

@@ -6,6 +6,7 @@ export const notificationApis = baseApis.injectEndpoints({
       query: ({ page = 1, limit = 20, unreadOnly = false } = {}) =>
         `/notifications?page=${page}&limit=${limit}&unread_only=${unreadOnly}`,
       providesTags: ["Notifications"],
+      keepUnusedDataFor: 300,
     }),
     markNotificationAsRead: builder.mutation({
       query: (id) => ({
