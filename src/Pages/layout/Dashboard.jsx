@@ -45,6 +45,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const spreadsheetDebounceRef = useRef(null);
   const bolOffersDebounceRef = useRef(null);
+  const bolOrdersDebounceRef = useRef(null);
 
   useEffect(() => {
     const token = getToken();
@@ -148,12 +149,20 @@ const Dashboard = () => {
         bolOffersDebounceRef.current = setTimeout(() => {
           dispatch(baseApis.util.invalidateTags(["BolOffers"]));
         }, 1500);
+      } else if (event.data === "BOL_ORDERS_UPDATED") {
+        if (bolOrdersDebounceRef.current) {
+          clearTimeout(bolOrdersDebounceRef.current);
+        }
+        bolOrdersDebounceRef.current = setTimeout(() => {
+          dispatch(baseApis.util.invalidateTags(["Analytics"]));
+        }, 1500);
       }
     };
 
     return () => {
       if (spreadsheetDebounceRef.current) clearTimeout(spreadsheetDebounceRef.current);
       if (bolOffersDebounceRef.current) clearTimeout(bolOffersDebounceRef.current);
+      if (bolOrdersDebounceRef.current) clearTimeout(bolOrdersDebounceRef.current);
       eventSource.close();
     };
   }, [dispatch, navigate]);

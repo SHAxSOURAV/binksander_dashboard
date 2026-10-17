@@ -602,13 +602,15 @@ const SettingsModal = () => {
                                         Auth Expired
                                       </span>
                                     ) : s.is_syncing ? (
-                                      <span
-                                        title={isPublic ? "Public Google Sheet: changes automatically sync every 60 seconds." : "Google Drive push notifications actively streaming changes."}
-                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
-                                      >
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                        {isPublic ? "Auto-Syncing (60s)" : "Live Syncing"}
-                                      </span>
+                                      !isPublic ? (
+                                        <span
+                                          title="Google Drive push notifications actively streaming changes."
+                                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
+                                        >
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                          Live Syncing
+                                        </span>
+                                      ) : null
                                     ) : (
                                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200 flex-shrink-0">
                                         <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />

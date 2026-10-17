@@ -119,10 +119,17 @@ const ProductTable = ({ title, subtitle, icon, rows, isLoading, metric }) => {
 
 const SalesAnalysisTab = ({ range }) => {
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const { data, isLoading } = useGetSalesAnalysisQuery({
-    range,
-    category: selectedCategory,
-  });
+  const { data, isLoading } = useGetSalesAnalysisQuery(
+    {
+      range,
+      category: selectedCategory,
+    },
+    {
+      pollingInterval: 60000,
+      skipPollingIfUnfocused: true,
+      refetchOnMountOrArgChange: true,
+    }
+  );
 
   const res = data || {};
   const bestSelling = res.best_selling_items || [];

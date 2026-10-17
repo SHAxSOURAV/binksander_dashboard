@@ -564,7 +564,7 @@ const Products = () => {
                     ? "Google authorization expired · Click Reconnect below or in Settings"
                     : `${connectedSheet.item_count} items imported · ${
                         connectedSheet.sync_mode === "auto_polling_60s"
-                          ? "auto-syncing every 60s"
+                          ? "spreadsheet connected"
                           : connectedSheet.is_syncing
                           ? "live push syncing"
                           : "sync paused"
@@ -613,7 +613,7 @@ const Products = () => {
                     ? "Authorization expired (sync paused)"
                     : connectedSheet.is_syncing
                     ? connectedSheet.sync_mode === "auto_polling_60s"
-                      ? "Spreadsheet auto-syncing (60s)"
+                      ? "Spreadsheet connected"
                       : "Spreadsheet live syncing"
                     : "Spreadsheet connected"
                   : "No spreadsheet connected"}
@@ -807,8 +807,8 @@ const Products = () => {
           </div>
         )}
 
-        {/* Active Filter Chips (if any filter is selected) */}
-        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all" || syncDateRange || debouncedSearch) && (
+        {/* Active Filter Chips (hidden from Frontend only) */}
+        {false && (Object.keys(activeFilters).length > 0 || publishFilter !== "all" || syncDateRange || debouncedSearch) && (
           <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-2 text-sm font-medium border-b border-gray-100 flex-wrap">
             <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider mr-1">Filters</span>
 

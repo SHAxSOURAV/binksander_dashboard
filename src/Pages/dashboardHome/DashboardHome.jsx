@@ -112,16 +112,26 @@ const DashboardHome = () => {
     setLookupTerm("");
   };
 
-  const { data: dash } = useGetDashboardQuery(range);
-  const { data: kpisData } = useGetKpisQuery(range);
-  const { data: ordersData } = useGetBolOrdersQuery({ page: 1, limit: 5 });
+  // ── Auto-refresh Overview queries every 60s in the background ──
+  // - pollingInterval: 60000 (1 minute)
+  // - skipPollingIfUnfocused: true (pauses polling when browser tab is inactive)
+  // - refetchOnMountOrArgChange: true (ensures fresh data when returning to Overview)
+  const autoRefreshOptions = {
+    pollingInterval: 60000,
+    skipPollingIfUnfocused: true,
+    refetchOnMountOrArgChange: true,
+  };
+
+  const { data: dash } = useGetDashboardQuery(range, autoRefreshOptions);
+  const { data: kpisData } = useGetKpisQuery(range, autoRefreshOptions);
+  const { data: ordersData } = useGetBolOrdersQuery({ page: 1, limit: 5 }, autoRefreshOptions);
   const [syncNow, { isLoading: syncing }] = useSyncNowMutation();
 
   const [alertPage, setAlertPage] = useState(1);
   const { data: alertsRes, isLoading: loadingAlerts } = useGetLowStockAlertsQuery({
     page: alertPage,
     limit: ALERTS_PAGE_SIZE,
-  });
+  }, autoRefreshOptions);
   const [dismissAlert] = useDismissLowStockAlertMutation();
   const [resyncStock] = useResyncStockMutation();
   const [resyncingAsin, setResyncingAsin] = useState(null);
@@ -412,7 +422,7 @@ const DashboardHome = () => {
             {/* Right column */}
             <div className="space-y-5">
               <div className="bg-white rounded-lg card-shadow overflow-hidden">
-                <OrdersDonut data={donut} range={range} onRangeChange={setRange} />
+                <OrdersDonut data={donut} />
               </div>
 
               <div className="bg-white rounded-lg p-5 card-shadow space-y-3">

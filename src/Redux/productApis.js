@@ -845,11 +845,28 @@ const productApis = baseApis.injectEndpoints({
       }),
       providesTags: ["Drafts"],
     }),
+
+    // GET /bol/categories/recommendations
+    getCategoryRecommendations: builder.query({
+      query: ({ title, description, category, bolAccountId } = {}) => {
+        const params = new URLSearchParams();
+        if (title) params.append("title", title);
+        if (description) params.append("description", description);
+        if (category) params.append("category", category);
+        return {
+          url: `/bol/categories/recommendations?${params.toString()}`,
+          method: "GET",
+          headers: bolAccountId ? { "x-bol-account-id": bolAccountId } : {},
+        };
+      },
+    }),
   }),
   overrideExisting: false,
 });
 
 export const {
+  useGetCategoryRecommendationsQuery,
+  useLazyGetCategoryRecommendationsQuery,
   useGetConnectionQuery,
   useGetProductsQuery,
   useGetFiltersMetaQuery,
