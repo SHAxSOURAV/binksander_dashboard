@@ -1,19 +1,17 @@
 import { useState } from "react";
 import { Popconfirm, Tooltip } from "antd";
-import { FiBox, FiExternalLink, FiX, FiAlertTriangle } from "react-icons/fi";
+import { FiBox, FiExternalLink, FiX, FiCheck } from "react-icons/fi";
 import { LuRefreshCw } from "react-icons/lu";
 import CopyField from "../shared/CopyField";
 
 /**
- * One low-stock alert row. Shared by the dashboard card and the full Low Stock page so
- * the two never drift apart.
+ * One stock alert row. Shared by the dashboard card and the full Stock Alerts page.
  */
 const LowStockRow = ({ record, onResync, onDismiss, resyncing }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const country = (record.country || "NL").toLowerCase();
   const amazonUrl = `https://www.amazon.${country}/dp/${record.asin}`;
-  const qty = record.stock ?? record.stock_quantity ?? 0;
-  const isOut = Number(qty) === 0;
+  const isOut = record.is_in_stock === false || record.stock_status === "OUT_OF_STOCK" || Number(record.stock ?? record.stock_quantity ?? 0) === 0;
 
   return (
     <div className="flex items-center gap-3 py-2.5">
@@ -61,15 +59,16 @@ const LowStockRow = ({ record, onResync, onDismiss, resyncing }) => {
           : "—"}
       </span>
 
-      <Tooltip title={isOut ? "Out of stock" : `Low stock — ${qty} left`}>
+      <Tooltip title={isOut ? "Out of stock on Amazon (Needs Review)" : "In stock on Amazon (Inventory Catalog)"}>
         <span
-          className={`inline-flex items-center justify-center w-7 h-7 rounded-md border shrink-0 ${
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border shrink-0 text-[11px] font-semibold ${
             isOut
               ? "border-red-200 bg-red-50 text-red-600"
-              : "border-amber-200 bg-amber-50 text-amber-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700"
           }`}
         >
-          {isOut ? <FiX size={14} /> : <FiAlertTriangle size={13} />}
+          {isOut ? <FiX size={13} /> : <FiCheck size={13} />}
+          {isOut ? "Out of stock" : "In stock"}
         </span>
       </Tooltip>
 

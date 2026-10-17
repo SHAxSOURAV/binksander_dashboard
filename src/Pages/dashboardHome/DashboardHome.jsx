@@ -18,6 +18,7 @@ import {
   FiBarChart2,
   FiX,
   FiArrowRight,
+  FiLink2,
 } from "react-icons/fi";
 import { LuRefreshCw } from "react-icons/lu";
 import toast from "react-hot-toast";
@@ -45,6 +46,7 @@ import {
   useGetFiltersMetaQuery,
   useGetConnectionQuery,
 } from "../../Redux/productApis";
+import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
 
 const PERIOD_OPTIONS = [
@@ -65,7 +67,8 @@ const TABS = [
 const ALERTS_PAGE_SIZE = 10;
 
 const DashboardHome = () => {
-  const { activeBolAccountId } = useUI();
+  const { activeBolAccountId, openSettings } = useUI();
+  const { data: bolCreds = [], isLoading: credsLoading } = useGetBolCredentialsQuery();
   const [activeTab, setActiveTab] = useState("overview");
 
   // ── Prefetch Inventory Catalog data in the background ──
@@ -109,16 +112,26 @@ const DashboardHome = () => {
     setLookupTerm("");
   };
 
-  const { data: dash } = useGetDashboardQuery(range);
-  const { data: kpisData } = useGetKpisQuery(range);
-  const { data: ordersData } = useGetBolOrdersQuery({ page: 1, limit: 5 });
+  // ── Auto-refresh Overview queries every 60s in the background ──
+  // - pollingInterval: 60000 (1 minute)
+  // - skipPollingIfUnfocused: true (pauses polling when browser tab is inactive)
+  // - refetchOnMountOrArgChange: true (ensures fresh data when returning to Overview)
+  const autoRefreshOptions = {
+    pollingInterval: 60000,
+    skipPollingIfUnfocused: true,
+    refetchOnMountOrArgChange: true,
+  };
+
+  const { data: dash } = useGetDashboardQuery(range, autoRefreshOptions);
+  const { data: kpisData } = useGetKpisQuery(range, autoRefreshOptions);
+  const { data: ordersData } = useGetBolOrdersQuery({ page: 1, limit: 5 }, autoRefreshOptions);
   const [syncNow, { isLoading: syncing }] = useSyncNowMutation();
 
   const [alertPage, setAlertPage] = useState(1);
   const { data: alertsRes, isLoading: loadingAlerts } = useGetLowStockAlertsQuery({
     page: alertPage,
     limit: ALERTS_PAGE_SIZE,
-  });
+  }, autoRefreshOptions);
   const [dismissAlert] = useDismissLowStockAlertMutation();
   const [resyncStock] = useResyncStockMutation();
   const [resyncingAsin, setResyncingAsin] = useState(null);
@@ -260,6 +273,36 @@ const DashboardHome = () => {
         </div>
       </div>
 
+      {/* Missing Bol.com API Access Banner */}
+      {!credsLoading && bolCreds.length === 0 && (
+        <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white border border-blue-200 rounded-xl p-5 card-shadow flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
+              <FiLink2 size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900">
+                  Connect Bol.com API Access
+                </h3>
+                <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full">
+                  Action Required
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed max-w-2xl">
+                Your store metrics (Revenue, Net Income, Open Orders, Returns, and Review Score) are loaded directly from your Bol.com Retailer API. Add your API credentials to see live performance data.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => openSettings("connection")}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-bold shadow-sm hover:shadow transition-all whitespace-nowrap self-start md:self-center cursor-pointer"
+          >
+            <FiLink2 size={14} /> Add Bol.com API Access
+          </button>
+        </div>
+      )}
+
       {/* Tab 1: Overview */}
       {activeTab === "overview" && (
         <div className="space-y-5 animate-fade-in">
@@ -320,9 +363,9 @@ const DashboardHome = () => {
                     <FiAlertTriangle size={16} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-900 text-sm">Low Stock Alerts</h3>
+                    <h3 className="font-bold text-gray-900 text-sm">Stock Alerts</h3>
                     <p className="text-xs text-gray-400">
-                      Live supplier stock levels mapped to catalog items
+                      Live supplier stock status mapped to catalog items
                     </p>
                   </div>
                 </div>
@@ -349,7 +392,7 @@ const DashboardHome = () => {
                 </div>
               ) : visibleAlerts.length === 0 ? (
                 <p className="text-xs text-gray-400 py-8 text-center">
-                  There is no recent low stock alerts.
+                  There is no recent stock alerts.
                 </p>
               ) : (
                 <>
@@ -379,7 +422,7 @@ const DashboardHome = () => {
             {/* Right column */}
             <div className="space-y-5">
               <div className="bg-white rounded-lg card-shadow overflow-hidden">
-                <OrdersDonut data={donut} range={range} onRangeChange={setRange} />
+                <OrdersDonut data={donut} />
               </div>
 
               <div className="bg-white rounded-lg p-5 card-shadow space-y-3">

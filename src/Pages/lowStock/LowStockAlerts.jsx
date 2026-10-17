@@ -90,9 +90,9 @@ const LowStockAlerts = () => {
             <FiAlertTriangle size={17} />
           </div>
           <div>
-            <h1 className="font-bold text-gray-900 text-base">Low Stock Alerts</h1>
+            <h1 className="font-bold text-gray-900 text-base">Stock Alerts</h1>
             <p className="text-xs text-gray-400">
-              Live supplier stock levels mapped to catalog items
+              Live supplier stock status mapped to catalog items
             </p>
           </div>
         </div>
@@ -124,12 +124,12 @@ const LowStockAlerts = () => {
           <div className="py-16 flex flex-col items-center justify-center text-center">
             <FiInbox size={30} className="text-gray-300" />
             <p className="text-sm font-semibold text-gray-600 mt-3">
-              {search ? "No alerts match your search" : "No low stock alerts"}
+              {search ? "No alerts match your search" : "No stock alerts"}
             </p>
             <p className="text-xs text-gray-400 mt-1">
               {search
                 ? "Try a different title, ASIN or EAN."
-                : "Every mapped catalog item is in stock."}
+                : "Every mapped catalog item is currently in stock."}
             </p>
           </div>
         ) : (
