@@ -18,7 +18,6 @@ build/
 coverage/
 
 # Editor & IDE directories and files
-.vscode/
 .idea/
 .claude/
 .DS_Store
@@ -37,8 +36,6 @@ desktop.ini
 *.bak
 
 # Environment files
-.env
-.env.*
 !.env.example
 
 # Windows duplicate copies
@@ -61,3 +58,4 @@ public/fonts/
 *.otf
 *.eot
 
+config.bat
