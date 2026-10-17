@@ -16,6 +16,7 @@ import {
   useRevertSingleImageMutation,
   useEnrichDraftAttributesMutation,
   useGetDraftBolPayloadPreviewQuery,
+  useLazyGetCategoryRecommendationsQuery,
 } from "../../Redux/productApis";
 import { useGetBolCredentialsQuery } from "../../Redux/connectionApis";
 import { useUI } from "../../Provider/ContextProvider";
@@ -138,13 +139,46 @@ const sanitizeAntiAmazonAndEmojiText = (text, sourceTitle = "") => {
 const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const { setSettingsOpen, setSettingsTab, activeBolAccountId } = useUI();
   const [selectedAccount, setSelectedAccount] = useState(activeBolAccountId || null);
+  const [activeTab, setActiveTab] = useState("1");
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [originalPhotos, setOriginalPhotos] = useState([]);
+  const [isBackgroundTranslating, setIsBackgroundTranslating] = useState(false);
+  const [isChunkResolving, setIsChunkResolving] = useState(false);
+  const initialLoadedDraftIdRef = useRef(null);
+  const chunkResolveAttemptsRef = useRef(0);
 
-  const { data: draftRes, isFetching: loadingDraft } = useGetDraftQuery(draftId, {
+  const { data: draftRes, isLoading: isInitialLoadingDraft, refetch: refetchDraft } = useGetDraftQuery(draftId, {
     skip: !draftId,
+    pollingInterval: (isBackgroundTranslating || isChunkResolving) ? 2000 : 0,
   });
   const draft = draftRes?.data;
+  const isInitialLoading = !draft && isInitialLoadingDraft;
+
+  const [fetchCategoryRecs, { isFetching: fetchingRecs }] = useLazyGetCategoryRecommendationsQuery();
+
+  useEffect(() => {
+    chunkResolveAttemptsRef.current = 0;
+  }, [draftId]);
+
+  useEffect(() => {
+    if (draft) {
+      const stillTranslating = draft.images_translated !== true && (draft.photos?.length > 0) && (draft.translation_progress?.in_progress !== false);
+      setIsBackgroundTranslating(Boolean(stillTranslating));
+
+      const hasChunk = Boolean(draft.chunk_id || (draft.chunk_recommendations && draft.chunk_recommendations.length > 0));
+      if (!hasChunk) {
+        chunkResolveAttemptsRef.current += 1;
+        // Stop polling for chunk after 15 attempts (30s) if Bol API fails or has no recommendations
+        if (chunkResolveAttemptsRef.current <= 15) {
+          setIsChunkResolving(true);
+        } else {
+          setIsChunkResolving(false);
+        }
+      } else {
+        setIsChunkResolving(false);
+      }
+    }
+  }, [draft]);
 
   const { data: bolCreds = [] } = useGetBolCredentialsQuery();
 
@@ -201,6 +235,22 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
     if (logoRemovedIndexes.has(index)) return true;
     return false;
   };
+
+  // Translation Progress calculation for sleek background progress indicator
+  const translationProgress = draft?.translation_progress || {
+    completed: (draft?.photos || []).filter(p => typeof p === 'string' && p.includes("translated-images")).length,
+    total: draft?.photos?.length || 0,
+    in_progress: draft?.images_translated !== true && (draft?.photos?.length > 0)
+  };
+  const isProgressActive = Boolean(
+    translationProgress && 
+    translationProgress.in_progress && 
+    translationProgress.total > 0
+  );
+  const progressPercent = Math.min(
+    100, 
+    Math.round(((translationProgress.completed || 0) / (translationProgress.total || 1)) * 100)
+  );
 
   // Translation & Validation State Checks for all selected photos
   const selectedCount = selectedPhotos.length;
@@ -514,13 +564,22 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   };
 
   const handleAttributeChange = (attrKey, value) => {
-    setForm(prev => ({
-      ...prev,
-      attributes: {
+    setForm(prev => {
+      const updatedAttrs = {
         ...prev.attributes,
         [attrKey]: value
+      };
+      const isBrandAttr = attrKey.toLowerCase() === "brand" || attrKey.toLowerCase() === "merk";
+      if (isBrandAttr) {
+        updatedAttrs["Brand"] = value;
+        updatedAttrs["Merk"] = value;
       }
-    }));
+      return {
+        ...prev,
+        attributes: updatedAttrs,
+        ...(isBrandAttr ? { brand: value } : {})
+      };
+    });
   };
 
   useEffect(() => {
@@ -561,7 +620,10 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
       // Enforce Brand strictly as the first word of the sheet title and CE Marking as Zichtbaar
       const firstWord = (cleanTitle || draft.spreadsheet_title || "").trim().split(/\s+/)[0]?.replace(/[®™©:,\(\)\[\]\.\-_/]/g, "") || "Warmara";
-      cleanAttrs["Brand"] = firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+      const detectedBrand = firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+      const effectiveBrand = (draft.brand && draft.brand !== "VFANDV") ? draft.brand : detectedBrand;
+      cleanAttrs["Brand"] = effectiveBrand;
+      cleanAttrs["Merk"] = effectiveBrand;
       cleanAttrs["CE Marking"] = "Zichtbaar";
 
       // If Number of Pieces is missing in cleanAttrs, extract from title
@@ -579,22 +641,45 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
 
       const deliveryCodeDefault = (draft.delivery_code && draft.delivery_code !== "24uurs-23") ? draft.delivery_code : "1-8d";
 
-      setForm({
-        title: cleanTitle,
-        ean: draft.ean || "",
-        bol_price: roundedPrice,
-        stock_amount: draft.stock_amount ?? 10,
-        condition: draft.condition || "NEW",
-        delivery_code: deliveryCodeDefault,
-        reference: (draft.reference && !/^B0[A-Z0-9]{8}$/i.test(draft.reference)) ? draft.reference : "",
-        description: cleanDesc,
-        attributes: cleanAttrs,
-        photos: draft.photos || [],
-        product_category: draft.product_category || "",
-        chunk_id: draft.chunk_id || null,
-        chunk_name: draft.chunk_name || "",
-        chunk_recommendations: draft.chunk_recommendations || [],
-      });
+      // If opening this draft for the first time, populate entire form
+      if (initialLoadedDraftIdRef.current !== draftId) {
+        initialLoadedDraftIdRef.current = draftId;
+        setActiveTab("1");
+        setForm({
+          title: cleanTitle,
+          brand: effectiveBrand,
+          ean: draft.ean || "",
+          bol_price: roundedPrice,
+          stock_amount: draft.stock_amount ?? 10,
+          condition: draft.condition || "NEW",
+          delivery_code: deliveryCodeDefault,
+          reference: (draft.reference && !/^B0[A-Z0-9]{8}$/i.test(draft.reference)) ? draft.reference : "",
+          description: cleanDesc,
+          attributes: cleanAttrs,
+          photos: draft.photos || [],
+          product_category: draft.product_category || "",
+          chunk_id: draft.chunk_id || null,
+          chunk_name: draft.chunk_name || "",
+          chunk_recommendations: draft.chunk_recommendations || [],
+        });
+        if (draft.photos?.length > 0) {
+          setSelectedPhotos(draft.photos.map((_, i) => i));
+        } else {
+          setSelectedPhotos([]);
+        }
+      } else {
+        // Incremental background update: sync photos, enriched attributes, and resolved chunk recommendations without overwriting user form edits
+        setForm((prev) => ({
+          ...prev,
+          brand: prev.brand || effectiveBrand,
+          photos: draft.photos || prev.photos,
+          attributes: { ...cleanAttrs, ...prev.attributes },
+          chunk_id: prev.chunk_id || (draft.chunk_id ? String(draft.chunk_id) : null),
+          chunk_name: prev.chunk_id ? prev.chunk_name : (draft.chunk_name || prev.chunk_name),
+          chunk_recommendations: (prev.chunk_recommendations?.length ? prev.chunk_recommendations : draft.chunk_recommendations) || [],
+        }));
+      }
+
       const isTranslated = draft.images_translated === true;
       setIsDraftTranslated(isTranslated);
       if (draft.verified_photo_indexes?.length) {
@@ -617,40 +702,14 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
       setPhotosMetadata(draft.photos_metadata || []);
 
       setOriginalPhotos(draft.original_photos || draft.photos || []);
-      if (draft.photos?.length > 0) {
-        setSelectedPhotos(draft.photos.map((_, i) => i));
-      } else {
-        setSelectedPhotos([]);
-      }
     }
-  }, [draft]);
+  }, [draft, draftId]);
 
   useEffect(() => {
     if (activeBolAccountId && !selectedAccount) {
       setSelectedAccount(activeBolAccountId);
     }
   }, [activeBolAccountId]);
-
-  // Auto-start image translation if draft has untranslated images
-  const autoTranslateTriggeredRef = useRef(null);
-  useEffect(() => {
-    if (
-      draftId &&
-      draft &&
-      draft.images_translated !== true &&
-      draft.photos?.length > 0 &&
-      autoTranslateTriggeredRef.current !== draftId &&
-      !translatingAll
-    ) {
-      const hasUntranslated = (draft.photos || []).some(
-        (p) => typeof p === "string" && !p.includes("translated-images")
-      );
-      if (hasUntranslated) {
-        autoTranslateTriggeredRef.current = draftId;
-        handleTranslateAllImages();
-      }
-    }
-  }, [draftId, draft, translatingAll]);
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -667,13 +726,15 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
   const handleSave = async () => {
     try {
       const photosToSave = form.photos.filter((_, i) => selectedPhotos.includes(i));
+      const explicitBrand = form.brand || form.attributes?.["Brand"] || form.attributes?.["Merk"] || "";
       await updateDraft({
         id: draftId,
         account_id: selectedAccount,
         ...form,
+        brand: explicitBrand,
         photos: photosToSave,
       }).unwrap();
-      return { id: draftId, ...form, photos: photosToSave };
+      return { id: draftId, ...form, brand: explicitBrand, photos: photosToSave };
     } catch (err) {
       toast.error(err?.data?.detail || "Failed to update draft");
       return false;
@@ -775,14 +836,15 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
           </div>
         </div>
 
-        {loadingDraft ? (
+        {isInitialLoading ? (
           <div className="flex justify-center items-center h-64">
             <Spin size="large" />
           </div>
         ) : (
           <div className="flex flex-col">
             <Tabs
-              defaultActiveKey="1"
+              activeKey={activeTab}
+              onChange={setActiveTab}
               className="custom-tabs"
               items={[
                 {
@@ -824,13 +886,51 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/60 p-4 rounded-[4px] border border-gray-200">
-                        <Field label="Bol.com Product Group (Chunk ID)" required>
-                          {form.chunk_recommendations?.length > 0 ? (
+                        <Field
+                          label={
+                            <div className="flex items-center justify-between w-full">
+                              <span>Bol.com Product Group (Chunk ID)</span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const res = await fetchCategoryRecs({
+                                      title: form.title,
+                                      description: form.description,
+                                      category: form.product_category,
+                                      bolAccountId: selectedAccount
+                                    }).unwrap();
+                                    if (res?.recommendations?.length > 0) {
+                                      const top = res.recommendations[0];
+                                      setForm(prev => ({
+                                        ...prev,
+                                        chunk_id: String(top.chunkId || top.chunk_id),
+                                        chunk_name: top.chunkName || top.chunk_name || prev.chunk_name,
+                                        chunk_recommendations: res.recommendations
+                                      }));
+                                      toast.success(`Selected: ${top.chunkName || top.chunk_name} (${top.chunkId || top.chunk_id})`);
+                                    } else {
+                                      toast.error("No category recommendations returned by Bol.com.");
+                                    }
+                                  } catch (err) {
+                                    toast.error(err?.data?.detail || "Failed to detect category from Bol.com");
+                                  }
+                                }}
+                                disabled={fetchingRecs}
+                                className="text-[10px] text-brand hover:underline font-normal normal-case flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                {fetchingRecs ? <Spin size="small" /> : "↻ Auto-detect"}
+                              </button>
+                            </div>
+                          }
+                          required
+                        >
+                          {(form.chunk_recommendations?.length > 0 || form.chunk_id) ? (
                             <Select
                               value={form.chunk_id ? String(form.chunk_id) : undefined}
                               onChange={(val) => {
                                 const strVal = String(val);
-                                const found = form.chunk_recommendations.find(r => String(r.chunkId || r.chunk_id) === strVal);
+                                const found = form.chunk_recommendations?.find(r => String(r.chunkId || r.chunk_id) === strVal);
                                 setForm(prev => ({
                                   ...prev,
                                   chunk_id: strVal,
@@ -839,11 +939,23 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                               }}
                               placeholder="Select Bol Category Recommendation"
                               className="w-full h-10 draft-select"
-                              options={form.chunk_recommendations.map(r => ({
-                                value: String(r.chunkId || r.chunk_id),
-                                label: `${r.chunkName || r.chunk_name || form.product_category || 'Chunk'} (${r.chunkId || r.chunk_id}) ${r.probability ? `- ${(r.probability * 100).toFixed(0)}% Match` : ''}`
-                              }))}
+                              options={
+                                (form.chunk_recommendations?.length > 0)
+                                  ? form.chunk_recommendations.map(r => ({
+                                      value: String(r.chunkId || r.chunk_id),
+                                      label: `${r.chunkName || r.chunk_name || form.product_category || 'Chunk'} (${r.chunkId || r.chunk_id}) ${r.probability ? `- ${(r.probability * 100).toFixed(0)}% Match` : ''}`
+                                    }))
+                                  : (form.chunk_id ? [{
+                                      value: String(form.chunk_id),
+                                      label: `${form.chunk_name || form.product_category || 'Category'} (${form.chunk_id})`
+                                    }] : [])
+                              }
                             />
+                          ) : isChunkResolving ? (
+                            <div className="h-10 flex items-center px-3 bg-gray-50 border border-gray-200 rounded-[4px] text-[13px] text-gray-500 gap-2">
+                              <Spin size="small" />
+                              <span>Resolving Bol.com product group...</span>
+                            </div>
                           ) : (
                             <Input
                               value={form.chunk_id || ""}
@@ -1267,8 +1379,32 @@ const DraftEditModal = ({ draftId, onClose, isBulkMode = false }) => {
                   ),
                   children: (
                     <div className="py-4">
+                      {/* Sleek Minimalist Photo Translation Progress Bar */}
+                      {isProgressActive && (
+                        <div className="mb-4 p-3 bg-gray-50/90 border border-gray-200/80 rounded-[4px] space-y-2 transition-all">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 text-gray-700 font-medium">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                              <span>Translating product pictures • {translationProgress.completed} of {translationProgress.total} completed</span>
+                            </div>
+                            <span className="text-[11px] font-mono text-gray-500">
+                              {progressPercent}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200/80 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className="bg-emerald-500 h-full transition-all duration-500 ease-out rounded-full"
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                        <span className="text-[13px] text-gray-500 font-medium">Select at least 3 images to publish.</span>
+                        <div className="flex flex-col">
+                          <span className="text-[13px] text-gray-500 font-medium">Select at least 3 images to publish.</span>
+                          <span className="text-[11px] text-amber-600 mt-0.5">Bol.com validates and renders uploaded images in the background (takes 15–30 minutes) on their Partner Portal.</span>
+                        </div>
                         <button
                           type="button"
                           onClick={handleTranslateAllImages}

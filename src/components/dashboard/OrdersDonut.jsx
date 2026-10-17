@@ -1,23 +1,12 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import { Dropdown } from "antd";
-import { FiChevronDown } from "react-icons/fi";
 
 const COLORS = ["#333333", "#cccccc"];
 
-const ranges = [
-  { key: "this_month", label: "This Month" },
-  { key: "30d", label: "Last 30 Days" },
-  { key: "90d", label: "Last 90 Days" },
-  { key: "all", label: "All Time" },
-];
-
-const OrdersDonut = ({ data, range = "30d", onRangeChange }) => {
+const OrdersDonut = ({ data }) => {
   const chartData = [
     { name: "Completed Order", value: data.completed },
     { name: "Cancel Order", value: data.canceled },
   ];
-
-  const activeLabel = ranges.find((r) => r.key === range)?.label;
 
   const denom = data.completed + data.canceled;
   const completedPct = denom > 0 ? Math.round((data.completed / denom) * 100) : 0;
@@ -31,17 +20,6 @@ const OrdersDonut = ({ data, range = "30d", onRangeChange }) => {
             Completed vs cancelled orders
           </p>
         </div>
-        <Dropdown
-          menu={{
-            items: ranges.map((r) => ({ key: r.key, label: r.label })),
-            onClick: ({ key }) => onRangeChange?.(key),
-          }}
-          trigger={["click"]}
-        >
-          <button className="flex items-center gap-2 text-xs font-medium text-gray-900 border border-gray-300 rounded-full px-4 py-1.5 hover:bg-gray-100">
-            {activeLabel} <FiChevronDown />
-          </button>
-        </Dropdown>
       </div>
 
       <div className="relative h-[280px]">

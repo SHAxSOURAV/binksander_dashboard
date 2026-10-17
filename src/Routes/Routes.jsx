@@ -106,6 +106,8 @@ const router = createBrowserRouter([
         ),
       },
       { path: "/low-stock", element: <Lazy><LowStockAlerts /></Lazy> },
+      { path: "/connections", element: <Lazy><DashboardHome /></Lazy> },
+      { path: "/settings", element: <Lazy><DashboardHome /></Lazy> },
     ],
   },
   { path: "/login", element: <Login /> },

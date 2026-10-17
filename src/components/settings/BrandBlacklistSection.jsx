@@ -88,15 +88,21 @@ const BrandBlacklistSection = () => {
 
   // Fetch tabs for public sheet
   const handleFetchPublicTabs = async () => {
-    if (!publicUrl.trim()) {
+    const targetUrl = (publicUrl || "").trim();
+    if (!targetUrl) {
       return toast.error("Please enter a valid Google Spreadsheet URL");
     }
     try {
-      const res = await getSpreadsheetTabs({ spreadsheet_url: publicUrl.trim() }).unwrap();
-      setTabsList(res.tabs || []);
-      setSelectedSheetUrl(publicUrl.trim());
-      setSelectedSheetTitle("Brand Blacklist");
+      const res = await getSpreadsheetTabs({ spreadsheet_url: targetUrl }).unwrap();
+      const tabs = res.tabs || [];
+      if (tabs.length === 0) {
+        toast.error("No tabs found in this spreadsheet.");
+        return;
+      }
+      setSelectedSheetUrl(targetUrl);
+      setSelectedSheetTitle(res.document_title || "Brand Blacklist");
       setIsPublicImport(true);
+      setTabsList(tabs);
       setPublicModalOpen(false);
       setTabsModalOpen(true);
     } catch (err) {
@@ -126,7 +132,7 @@ const BrandBlacklistSection = () => {
     }
   };
 
-  // Import selected tab
+  // Import selected tab (OAuth modal)
   const handleImportTab = async (sheetId) => {
     setImportingTabId(sheetId);
     try {
@@ -157,9 +163,12 @@ const BrandBlacklistSection = () => {
   };
 
   // Sync single sheet
-  const handleSyncSheet = async (url) => {
+  const handleSyncSheet = async (sheet) => {
     try {
-      const res = await syncBlacklistSheet({ spreadsheet_url: url }).unwrap();
+      const res = await syncBlacklistSheet({
+        spreadsheet_url: sheet.spreadsheet_url,
+        sheet_id: sheet.sheet_id,
+      }).unwrap();
       toast.success(res.message || "Blacklist re-synchronized!");
       refetchBlacklist?.();
     } catch (err) {
@@ -171,7 +180,10 @@ const BrandBlacklistSection = () => {
   const handleConfirmDisconnect = async () => {
     if (!sheetToDisconnect) return;
     try {
-      await unlinkBlacklistSheet({ spreadsheet_url: sheetToDisconnect.spreadsheet_url }).unwrap();
+      await unlinkBlacklistSheet({
+        spreadsheet_url: sheetToDisconnect.spreadsheet_url,
+        sheet_id: sheetToDisconnect.sheet_id,
+      }).unwrap();
       toast.success("Blacklist spreadsheet disconnected");
       setDisconnectModalOpen(false);
       setSheetToDisconnect(null);
@@ -221,17 +233,15 @@ const BrandBlacklistSection = () => {
                       </p>
 
                       {s.is_syncing ? (
-                        <span
-                          title={
-                            isPublic
-                              ? "Public Google Sheet: automatically scanned & checked."
-                              : "Google Drive OAuth connected: automatically scanned & checked."
-                          }
-                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {isPublic ? "Auto-Syncing (60s)" : "Live Syncing"}
-                        </span>
+                        !isPublic ? (
+                          <span
+                            title="Google Drive OAuth connected: automatically scanned & checked."
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Live Syncing
+                          </span>
+                        ) : null
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200 flex-shrink-0">
                           <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
@@ -267,7 +277,7 @@ const BrandBlacklistSection = () => {
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
-                      onClick={() => handleSyncSheet(s.spreadsheet_url)}
+                      onClick={() => handleSyncSheet(s)}
                       disabled={syncingSheet}
                       title="Re-sync blacklist brands and scan catalog"
                       className="flex items-center justify-center gap-1 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 px-2.5 py-1.5 rounded-[4px] disabled:opacity-50 transition-colors"
@@ -328,12 +338,18 @@ const BrandBlacklistSection = () => {
             Paste the link to your public Google Spreadsheet containing blacklisted brands.
           </p>
           <p className="text-xs text-gray-400 mb-4">
-            Column A should have a header (e.g. &quot;BlackListed&quot; or &quot;Brand&quot;) followed by brand names.
+            Column A should have brand names (e.g. &quot;BlackListed&quot; or &quot;Brand&quot;).
           </p>
           <Input
             placeholder="https://docs.google.com/spreadsheets/d/..."
             value={publicUrl}
             onChange={(e) => setPublicUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && publicUrl.trim() && !fetchingTabs) {
+                e.preventDefault();
+                handleFetchPublicTabs();
+              }
+            }}
             className="mb-4 h-10 rounded-lg"
           />
           <Button

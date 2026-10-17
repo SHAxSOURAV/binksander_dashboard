@@ -9,6 +9,26 @@ const ValidationFailureModal = ({ open, onClose, record, checkKey }) => {
   const status = checkKey ? checks[checkKey] : null;
 
   const checkDescriptions = {
+    prohibited_assortment: {
+      title: "Prohibited Assortment & Policy Check",
+      desc: "Checks against Bol.com Permitted Articles Policy (Verboden Assortiment) and prohibited categories (speelgoed/toys browse node 27399747031, knives, vapes, tobacco, alcohol, adult items, single-use plastics, restricted licences).",
+      causes: {
+        fail: "This product belongs to an excluded category (e.g. Speelgoed/Toys browse node 27399747031), is a knife, vape/smoking product, alcoholic beverage, or contains restricted licenced brands.",
+        uncertain: "Category or title policy classification could not be determined.",
+        pass: "Product is fully compliant with marketplace assortment policies.",
+      },
+      fix: "Products in prohibited categories cannot be listed to safeguard merchant Chamber of Commerce (KvK) accounts against policy strikes.",
+    },
+    verified_ean: {
+      title: "Verified 13-Digit EAN Barcode Check",
+      desc: "Checks that the product has an official verified 13-digit EAN barcode from the supplier catalog.",
+      causes: {
+        fail: "The product lacks a verified 13-digit EAN barcode or has an invalid barcode format.",
+        uncertain: "EAN barcode could not be verified from the supplier catalog.",
+        pass: "Verified 13-digit EAN barcode confirmed.",
+      },
+      fix: "Ensure the product has a valid 13-digit EAN barcode in your connected Google Sheet or on the supplier listing.",
+    },
     brand_blacklist: {
       title: "Blacklisted Brand Check",
       desc: "Checks the product's brand against your connected Brand Blacklist Google Sheets.",

@@ -1,7 +1,20 @@
 import { useState, useEffect } from "react";
 import { InputNumber } from "antd";
 import toast from "react-hot-toast";
-import { FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiLoader } from "react-icons/fi";
+import {
+  FiAlertTriangle,
+  FiAlertCircle,
+  FiCheckCircle,
+  FiLoader,
+  FiShoppingBag,
+  FiPlay,
+  FiEdit2,
+  FiTrash2,
+  FiKey,
+  FiCopy,
+  FiBriefcase,
+  FiPlus,
+} from "react-icons/fi";
 import BolAccountForm from "./BolAccountForm";
 import { useUpdateBolMultiplierMutation, useTestBolAccountMutation } from "../../Redux/connectionApis";
 
@@ -48,10 +61,12 @@ const MultiplierQuickEdit = ({ accountId, value }) => {
     return (
       <button
         onClick={() => setEditing(true)}
-        title="Click to change the price multiplier"
-        className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors tabular-nums"
+        type="button"
+        title="Click to edit price multiplier"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 hover:bg-gray-100 border border-gray-200/80 hover:border-gray-300 text-[11px] font-medium text-gray-700 transition-colors tabular-nums cursor-pointer"
       >
-        ×{value}
+        <span>×{value}</span>
+        <FiEdit2 size={9} className="text-gray-400" />
       </button>
     );
   }
@@ -77,7 +92,7 @@ const MultiplierQuickEdit = ({ accountId, value }) => {
         max={100}
         controls={false}
         prefix="×"
-        className="w-[70px]"
+        className="w-[65px] text-xs"
       />
     </span>
   );
@@ -109,142 +124,190 @@ const BolAccountsSection = ({
     }
   };
 
+  const populateEditForm = (cred) => {
+    form.setFieldsValue({
+      account_id: cred.account_id,
+      account_name: cred.account_name,
+      client_id: cred.client_id,
+      manufacturer_name: cred.manufacturer_name,
+      manufacturer_email: cred.manufacturer_email,
+      manufacturer_address: cred.manufacturer_address,
+      economic_operator_id: cred.economic_operator_id,
+      fulfilment_profile_id: cred.fulfilment_profile_id,
+      price_multiplier: cred.price_multiplier ?? 2.5,
+    });
+    setEditOpen(true);
+  };
+
   return (
-  <>
-      {/* Bol.com credentials */}
-      <div className="flex items-center justify-between mb-2 pt-4 border-t border-gray-100">
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
           Bol.com API Accounts
         </p>
         {!editOpen && (
           <button
+            type="button"
             onClick={() => {
               form.resetFields();
               form.setFieldsValue({ price_multiplier: 2.5 });
               setEditOpen(true);
             }}
-            className="text-[11px] font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 rounded-[4px] shadow-2xs transition-colors cursor-pointer"
           >
+            <FiPlus size={12} className="text-gray-500" />
             Add account
           </button>
         )}
       </div>
 
-      <div className="space-y-2 mb-4">
-          {accounts.length === 0 ? (
-            <div className="rounded border border-dashed border-gray-200 px-4 py-6 text-center text-xs text-gray-400">
-              No Bol accounts connected.
+      <div className="space-y-3 mb-4">
+        {accounts.length === 0 ? (
+          <div className="rounded-[4px] border border-dashed border-gray-200 px-4 py-7 text-center bg-gray-50/40">
+            <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 border border-blue-100 mx-auto flex items-center justify-center mb-2">
+              <FiShoppingBag size={17} />
             </div>
-          ) : (
+            <p className="text-xs font-medium text-gray-700">No Bol.com accounts connected</p>
+            <p className="text-[11px] text-gray-400 mt-0.5 max-w-xs mx-auto">
+              Connect your Bol.com seller API credentials to sync orders, offers, and inventory.
+            </p>
+            {!editOpen && (
+              <button
+                type="button"
+                onClick={() => {
+                  form.resetFields();
+                  form.setFieldsValue({ price_multiplier: 2.5 });
+                  setEditOpen(true);
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-[4px] shadow-xs transition-colors cursor-pointer"
+              >
+                <FiPlus size={13} />
+                Connect Bol Account
+              </button>
+            )}
+          </div>
+        ) : (
           accounts.map((cred) => {
             const isAuthFailed = Boolean(cred.last_auth_error || cred.status === "AUTH_FAILED");
+            const isMissingManufacturer = !(
+              cred.manufacturer_name &&
+              cred.manufacturer_address &&
+              cred.manufacturer_email
+            );
+
             return (
               <div
                 key={cred.account_id}
-                className={`rounded border p-3 transition-colors ${
+                className={`rounded-[4px] border bg-white p-3.5 transition-all shadow-xs ${
                   isAuthFailed
-                    ? "border-red-300 bg-red-50/20"
-                    : "border-gray-200 bg-white"
+                    ? "border-gray-200 border-l-[3px] border-l-rose-500"
+                    : "border-gray-200 hover:border-gray-300"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      {isAuthFailed && (
-                        <FiAlertTriangle
-                          size={15}
-                          className="text-red-500 flex-shrink-0"
-                          title="Bol.com Authentication Failed"
-                        />
-                      )}
-                      <p className={`text-[13px] font-semibold truncate ${isAuthFailed ? "text-red-900 font-bold" : "text-gray-900"}`}>
-                        {cred.account_name}
-                      </p>
-                      {isAuthFailed ? (
-                        <span
-                          title={cred.last_auth_error || "Bol.com Authentication Failed"}
-                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-red-50 text-red-700 border border-red-200 flex-shrink-0"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                          Auth Failed
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 flex-shrink-0">
+                  {/* Left: Icon + Main Details */}
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <span
+                      className={`w-8 h-8 rounded-[4px] flex items-center justify-center flex-shrink-0 border ${
+                        isAuthFailed
+                          ? "bg-rose-50 text-rose-600 border-rose-200"
+                          : "bg-blue-50 text-blue-600 border-blue-100"
+                      }`}
+                    >
+                      <FiShoppingBag size={16} />
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      {/* Name & Status */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[13px] font-semibold text-gray-900 truncate">
+                          {cred.account_name}
+                        </p>
+
+                        {isAuthFailed ? (
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              cred.is_secret_set ? "bg-green-500" : "bg-amber-400"
-                            }`}
+                            title={cred.last_auth_error || "Bol.com Authentication Failed"}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200 flex-shrink-0"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                            Auth Failed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                cred.is_secret_set ? "bg-emerald-500" : "bg-amber-400"
+                              }`}
+                            />
+                            {cred.is_secret_set ? "Active" : "Incomplete"}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Meta Tags: Client ID, Multiplier */}
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-gray-500">
+                        {/* Client ID */}
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[3px] bg-gray-50 border border-gray-200/80 font-mono text-[11px] text-gray-600"
+                          title={`Client ID: ${cred.client_id || "—"}`}
+                        >
+                          <FiKey size={10} className="text-gray-400 flex-shrink-0" />
+                          <span className="truncate max-w-[210px]">
+                            {cred.client_id || "—"}
+                          </span>
+                          {cred.client_id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(cred.client_id);
+                                toast.success("Client ID copied!");
+                              }}
+                              className="text-gray-400 hover:text-gray-700 ml-0.5 cursor-pointer transition-colors"
+                              title="Copy Client ID"
+                            >
+                              <FiCopy size={10} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Price Multiplier */}
+                        <div className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+                          <span className="text-gray-400">Markup:</span>
+                          <MultiplierQuickEdit
+                            accountId={cred.account_id}
+                            value={cred.price_multiplier ?? 2.5}
                           />
-                          {cred.is_secret_set ? "Active" : "Incomplete"}
-                        </span>
-                      )}
-                    </div>
+                        </div>
+                      </div>
 
-                    <p className="text-[11px] text-gray-400 font-mono truncate mt-0.5">
-                      {cred.client_id || "—"}
-                    </p>
-
-                    {isAuthFailed && (
-                      <div className="text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-[3px] px-2.5 py-1.5 mt-2 leading-snug flex items-center justify-between gap-2 shadow-xs">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <FiAlertCircle className="text-red-500 flex-shrink-0" size={13} />
-                          <span className="truncate">
-                            <strong>Bol.com Error:</strong> {cred.last_auth_error || "Invalid Client ID or Client Secret (401 invalid_client)."}
+                      {/* Manufacturer */}
+                      {(cred.manufacturer_name || cred.manufacturer_email) && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-1.5 truncate">
+                          <FiBriefcase size={11} className="text-gray-400 flex-shrink-0" />
+                          <span
+                            className="truncate max-w-[340px]"
+                            title={[cred.manufacturer_name, cred.manufacturer_email]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          >
+                            {[cred.manufacturer_name, cred.manufacturer_email]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            form.setFieldsValue({
-                              account_id: cred.account_id,
-                              account_name: cred.account_name,
-                              client_id: cred.client_id,
-                              manufacturer_name: cred.manufacturer_name,
-                              manufacturer_email: cred.manufacturer_email,
-                              manufacturer_address: cred.manufacturer_address,
-                              economic_operator_id: cred.economic_operator_id,
-                              fulfilment_profile_id: cred.fulfilment_profile_id,
-                              price_multiplier: cred.price_multiplier,
-                            });
-                            setEditOpen(true);
-                          }}
-                          className="text-[11px] font-semibold text-red-700 underline hover:text-red-900 flex-shrink-0 cursor-pointer"
-                        >
-                          Update Keys
-                        </button>
-                      </div>
-                    )}
-
-                    {(cred.manufacturer_name || cred.manufacturer_email) && (
-                      <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                        {[cred.manufacturer_name, cred.manufacturer_email]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    )}
-
-                    {/* Bol rejects listings without these, so an account missing
-                        them cannot publish at all. Say so here rather than letting
-                        it surface as a failed publish later. */}
-                    {!(
-                      cred.manufacturer_name &&
-                      cred.manufacturer_address &&
-                      cred.manufacturer_email
-                    ) && (
-                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-[3px] px-1.5 py-1 mt-1.5 leading-snug">
-                        Manufacturer details missing — publishing is blocked for
-                        this account. Add them via Edit.
-                      </p>
-                    )}
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Right Actions */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       type="button"
                       onClick={() => handleTest(cred.account_id, cred.account_name)}
                       disabled={testingId === cred.account_id}
                       title="Test live API connection to Bol.com"
-                      className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2 py-1 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2 py-1 rounded-[4px] transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       {testingId === cred.account_id ? (
                         <>
@@ -252,45 +315,81 @@ const BolAccountsSection = ({
                           <span>Testing</span>
                         </>
                       ) : (
-                        "Test"
+                        <>
+                          <FiPlay size={10} className="text-gray-500" />
+                          <span>Test</span>
+                        </>
                       )}
                     </button>
-                    <MultiplierQuickEdit
-                      accountId={cred.account_id}
-                      value={cred.price_multiplier ?? 2.5}
-                    />
+
                     <button
-                      onClick={() => {
-                        form.setFieldsValue({
-                          account_id: cred.account_id,
-                          account_name: cred.account_name,
-                          client_id: cred.client_id,
-                          manufacturer_name: cred.manufacturer_name,
-                          manufacturer_email: cred.manufacturer_email,
-                          manufacturer_address: cred.manufacturer_address,
-                          economic_operator_id: cred.economic_operator_id,
-                          fulfilment_profile_id: cred.fulfilment_profile_id,
-                          price_multiplier: cred.price_multiplier ?? 2.5,
-                        });
-                        setEditOpen(true);
-                      }}
-                      className="text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2.5 py-1 rounded transition-colors"
+                      type="button"
+                      onClick={() => populateEditForm(cred)}
+                      title="Edit Account"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 px-2 py-1 rounded-[4px] transition-colors cursor-pointer"
                     >
-                      Edit
+                      <FiEdit2 size={10} className="text-gray-500" />
+                      <span>Edit</span>
                     </button>
+
                     <button
+                      type="button"
                       onClick={() => onDelete(cred.account_id)}
                       disabled={deleting}
-                      className="text-[11px] font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1 rounded transition-colors disabled:opacity-50"
+                      title="Delete Account"
+                      className="inline-flex items-center justify-center text-[11px] font-medium text-gray-400 hover:text-rose-600 bg-white border border-gray-200 hover:border-rose-200 hover:bg-rose-50/60 p-1.5 rounded-[4px] transition-colors disabled:opacity-50 cursor-pointer"
                     >
-                      Delete
+                      <FiTrash2 size={12} />
                     </button>
                   </div>
                 </div>
+
+                {/* Error Banner when auth fails */}
+                {isAuthFailed && (
+                  <div className="mt-3 rounded-[4px] bg-rose-50/70 border border-rose-200/80 px-3 py-2 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FiAlertCircle className="text-rose-600 flex-shrink-0" size={14} />
+                      <div className="text-[11px] leading-tight min-w-0">
+                        <span className="font-semibold text-rose-900">Auth Error: </span>
+                        <span className="text-rose-700 font-normal">
+                          {cred.last_auth_error || "Invalid Client ID or Client Secret (401 invalid_client)."}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => populateEditForm(cred)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 hover:text-rose-900 bg-rose-100/70 hover:bg-rose-100 px-2 py-0.5 rounded-[3px] transition-colors cursor-pointer flex-shrink-0"
+                    >
+                      <FiEdit2 size={10} />
+                      Update Keys
+                    </button>
+                  </div>
+                )}
+
+                {/* Missing manufacturer details banner */}
+                {isMissingManufacturer && !isAuthFailed && (
+                  <div className="mt-2.5 rounded-[4px] bg-amber-50/80 border border-amber-200/80 px-3 py-2 flex items-center justify-between gap-2 text-[11px] text-amber-800">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FiAlertTriangle className="text-amber-600 flex-shrink-0" size={13} />
+                      <span className="truncate">
+                        Manufacturer details missing — publishing to Bol.com is blocked until added.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => populateEditForm(cred)}
+                      className="text-amber-800 font-semibold underline hover:text-amber-900 text-[11px] flex-shrink-0 cursor-pointer"
+                    >
+                      Add details
+                    </button>
+                  </div>
+                )}
               </div>
             );
-          }))}
-        </div>
+          })
+        )}
+      </div>
 
       {editOpen && (
         <BolAccountForm
