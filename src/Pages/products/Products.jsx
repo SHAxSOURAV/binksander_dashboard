@@ -1,14 +1,13 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate, Tooltip } from "antd";
-import { FiSearch, FiPlus, FiLink, FiFilter, FiEye, FiCopy } from "react-icons/fi";
+import { Input, Empty, Popover, Checkbox, Drawer, Select, Button, Slider, Rate, Tooltip, Modal } from "antd";
+import { FiSearch, FiPlus, FiLink, FiFilter, FiEye, FiCopy, FiTrash2 } from "react-icons/fi";
 import { BsGrid, BsListUl, BsFileEarmarkSpreadsheet } from "react-icons/bs";
 import { FaStar } from "react-icons/fa";
 import { LuRefreshCw, LuShieldCheck } from "react-icons/lu";
 // Heavy modals are lazy-loaded — their JS is downloaded only when the user
 // actually opens one, keeping the initial Products page bundle small.
 const ProductDetailsModal = lazy(() => import("../../components/products/ProductDetailsModal"));
-const ConnectInventoryModal = lazy(() => import("../../components/products/ConnectInventoryModal"));
 const DraftEditModal = lazy(() => import("../../components/products/DraftEditModal"));
 const BulkPublishModal = lazy(() => import("../../components/products/BulkPublishModal"));
 import Pagination from "../../components/shared/Pagination";
@@ -23,6 +22,8 @@ import productApis, {
   useGetBolProcessStatusQuery,
   useRevalidateProductsContentMutation,
   useRevalidateInventoryItemsMutation,
+  useDeleteInventoryItemMutation,
+  useDeleteInventoryBulkMutation,
 } from "../../Redux/productApis";
 import toast from "react-hot-toast";
 import OfferActionMenu from "../bolListing/components/OfferActionMenu";
@@ -73,8 +74,7 @@ const Products = () => {
   });
   const [selected, setSelected] = useState(null);
   const [editingDraftId, setEditingDraftId] = useState(null);
-  const [connectOpen, setConnectOpen] = useState(false);
-  const { setSettingsOpen, setSettingsTab, selectedSpreadsheetUrl, activeBolAccountId } = useUI();
+  const { openSettings, settingsOpen, selectedSpreadsheetUrl, activeBolAccountId } = useUI();
   const [publishFilter, setPublishFilter] = useState("all");
 
   const [filters, setFilters] = useState({});
@@ -173,7 +173,7 @@ const Products = () => {
 
   useEffect(() => {
     // Pause background polling while editing a draft or when modals are active
-    if (editingDraftId || connectOpen || filterOpen || bulkPublishOpen) {
+    if (editingDraftId || settingsOpen || filterOpen || bulkPublishOpen) {
       setPollingInterval(0);
       return;
     }
@@ -189,7 +189,7 @@ const Products = () => {
     } else {
       setPollingInterval(0);
     }
-  }, [data, editingDraftId, connectOpen, filterOpen, bulkPublishOpen, scrapePollCount]);
+  }, [data, editingDraftId, settingsOpen, filterOpen, bulkPublishOpen, scrapePollCount]);
 
   useEffect(() => {
     setScrapePollCount(0);
@@ -227,6 +227,10 @@ const Products = () => {
 
   const [revalidateInventoryItems, { isLoading: isRevalidatingInventory }] = useRevalidateInventoryItemsMutation();
   const [revalidatingItemId, setRevalidatingItemId] = useState(null);
+  const [deleteInventoryItem, { isLoading: isDeletingSingle }] = useDeleteInventoryItemMutation();
+  const [deleteInventoryBulk, { isLoading: isDeletingBulk }] = useDeleteInventoryBulkMutation();
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
 
   const handleBulkRevalidate = async () => {
     if (!selectedProducts.length && !selectAllMatching) return;
@@ -494,6 +498,50 @@ const Products = () => {
   const hasSelection = selectAllMatching || selectedProducts.length > 0;
   const selectedCountDisplay = selectAllMatching ? totalItems : selectedProducts.length;
 
+  const handleDeleteSingle = async (item) => {
+    const targetId = item?.itemId || item?.id || item?._id;
+    if (!targetId || String(targetId).startsWith("item-")) {
+      toast.error("Invalid product ID");
+      return;
+    }
+    try {
+      await deleteInventoryItem(targetId).unwrap();
+      toast.success("Product deleted successfully");
+      setSelectedProducts((prev) => prev.filter((p) => (p.itemId || p.id) !== targetId));
+      setItemToDelete(null);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to delete product");
+    }
+  };
+
+  const handleDeleteBulk = async () => {
+    if (!selectedProducts.length && !selectAllMatching) return;
+    try {
+      const itemIds = selectedProducts
+        .map((p) => p.itemId || p.id || p._id)
+        .filter((id) => id && !String(id).startsWith("item-"));
+
+      const payload = selectAllMatching
+        ? {
+            select_all: true,
+            spreadsheet_url: selectedSpreadsheetUrl !== "all" ? selectedSpreadsheetUrl : undefined,
+            search: debouncedSearch || undefined,
+          }
+        : { item_ids: itemIds };
+
+      const res = await deleteInventoryBulk(payload).unwrap();
+      const count = selectAllMatching ? totalItems : selectedProducts.length;
+      toast.success(res.message || `Deleted ${count.toLocaleString()} product(s)`);
+      setSelectedProducts([]);
+      setSelectAllMatching(false);
+      setAllFetchedProducts(null);
+      setIsBulkDeleteOpen(false);
+    } catch (err) {
+      toast.error(err?.data?.detail || "Failed to delete selected products");
+    }
+  };
+
+
   return (
     <div className="bg-gray-50/50 flex-grow min-h-screen pb-24 relative">
       <div className="bg-white rounded-lg p-4 card-shadow relative overflow-hidden">
@@ -516,7 +564,7 @@ const Products = () => {
                     ? "Google authorization expired · Click Reconnect below or in Settings"
                     : `${connectedSheet.item_count} items imported · ${
                         connectedSheet.sync_mode === "auto_polling_60s"
-                          ? "auto-syncing every 60s"
+                          ? "spreadsheet connected"
                           : connectedSheet.is_syncing
                           ? "live push syncing"
                           : "sync paused"
@@ -544,7 +592,7 @@ const Products = () => {
                 </a>
               ) : (
                 <button
-                  onClick={() => setConnectOpen(true)}
+                  onClick={() => openSettings("connection")}
                   className="relative w-10 h-10 rounded-[4px] border border-dashed border-gray-300 hover:bg-gray-50 flex items-center justify-center text-gray-400 transition-colors shrink-0"
                 >
                   <BsFileEarmarkSpreadsheet size={16} />
@@ -565,7 +613,7 @@ const Products = () => {
                     ? "Authorization expired (sync paused)"
                     : connectedSheet.is_syncing
                     ? connectedSheet.sync_mode === "auto_polling_60s"
-                      ? "Spreadsheet auto-syncing (60s)"
+                      ? "Spreadsheet connected"
                       : "Spreadsheet live syncing"
                     : "Spreadsheet connected"
                   : "No spreadsheet connected"}
@@ -622,13 +670,23 @@ const Products = () => {
                 <FiEye size={16} />
               </button>
             </Popover>
-            <button
-              onClick={() => setFilterOpen(true)}
-              title="Filter products"
-              className={`w-9 h-9 rounded border flex items-center justify-center transition-colors ${Object.keys(activeFilters).length || publishFilter !== "all" ? 'border-gray-900 text-gray-900 bg-gray-100' : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-            >
-              <FiFilter size={16} />
-            </button>
+            <Tooltip title="Filter products">
+              <button
+                onClick={() => setFilterOpen(true)}
+                className={`relative w-9 h-9 rounded border flex items-center justify-center transition-colors ${
+                  Object.keys(activeFilters).length || publishFilter !== "all" 
+                    ? 'border-gray-900 text-gray-900 bg-gray-100' 
+                    : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <FiFilter size={16} />
+                {Object.keys(activeFilters).length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-semibold pointer-events-none">
+                    {Object.keys(activeFilters).length}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
 
             <Select
               value={publishFilter}
@@ -682,9 +740,11 @@ const Products = () => {
             />
 
             <Select
-              value={sortBy ? (sortBy === 'stock' ? `offers-${sortOrder}` : `${sortBy}-${sortOrder}`) : "default"}
+              placeholder="Sort by..."
+              allowClear
+              value={sortBy ? (sortBy === 'stock' ? `offers-${sortOrder}` : `${sortBy}-${sortOrder}`) : undefined}
               onChange={(val) => {
-                if (val === "default") {
+                if (!val || val === "default") {
                   setSortBy("");
                   setSortOrder("asc");
                 } else {
@@ -696,7 +756,6 @@ const Products = () => {
               }}
               className="w-40 h-9 custom-select"
               options={[
-                { value: 'default', label: 'Default order' },
                 { value: 'creation-desc', label: 'Newest first' },
                 { value: 'creation-asc', label: 'Oldest first' },
                 { value: 'price-desc', label: 'Price: high first' },
@@ -748,8 +807,8 @@ const Products = () => {
           </div>
         )}
 
-        {/* Active Filter Chips (if any filter is selected) */}
-        {(Object.keys(activeFilters).length > 0 || publishFilter !== "all" || syncDateRange || debouncedSearch) && (
+        {/* Active Filter Chips (hidden from Frontend only) */}
+        {false && (Object.keys(activeFilters).length > 0 || publishFilter !== "all" || syncDateRange || debouncedSearch) && (
           <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-2 text-sm font-medium border-b border-gray-100 flex-wrap">
             <span className="text-gray-400 text-[10px] font-semibold uppercase tracking-wider mr-1">Filters</span>
 
@@ -1006,7 +1065,7 @@ const Products = () => {
         {/* Connect prompt — only when nothing is imported yet and no spreadsheet is connected. */}
         {total === 0 && !connectedSheet && (
           <button
-            onClick={() => setConnectOpen(true)}
+            onClick={() => openSettings("connection")}
             className="w-full flex items-center justify-between rounded px-4 py-3 mb-4 text-left border border-dashed border-gray-300 hover:bg-gray-50 transition-colors"
           >
             <div>
@@ -1152,6 +1211,18 @@ const Products = () => {
                         </p>
                       )}
                       <div className="flex items-center gap-1.5 ml-auto">
+                        <Tooltip title="Delete Product">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setItemToDelete(p);
+                            }}
+                            className="p-1 rounded border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors flex items-center justify-center cursor-pointer"
+                          >
+                            <FiTrash2 size={13} />
+                          </button>
+                        </Tooltip>
                         <Tooltip title="Quality Re-validate (Bol Duplicate & Amazon Rating checks). If failed, moves to Needs Review.">
                           <button
                             type="button"
@@ -1424,6 +1495,18 @@ const Products = () => {
                       {columns.publishAction && (
                         <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
+                            <Tooltip title="Delete Product">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToDelete(p);
+                                }}
+                                className="p-1 rounded border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors flex items-center justify-center cursor-pointer"
+                              >
+                                <FiTrash2 size={12} />
+                              </button>
+                            </Tooltip>
                             <Tooltip title="Quality Re-validate (EAN, Brand, Rating)">
                               <button
                                 type="button"
@@ -1506,13 +1589,6 @@ const Products = () => {
           onClose={() => setEditingDraftId(null)}
         />
       </Suspense>
-      <Suspense fallback={null}>
-        <ConnectInventoryModal
-          open={connectOpen}
-          onClose={() => setConnectOpen(false)}
-          selectedProducts={selectedProducts}
-        />
-      </Suspense>
       {bulkPublishOpen && (
         <Suspense fallback={null}>
           <BulkPublishModal
@@ -1569,6 +1645,15 @@ const Products = () => {
               Cancel
             </Button>
             <Button
+              danger
+              type="default"
+              className="border-red-200 text-red-600 hover:text-red-700 hover:border-red-300 hover:bg-red-50 font-medium h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setIsBulkDeleteOpen(true)}
+            >
+              <FiTrash2 size={13} />
+              Delete ({(selectAllMatching ? totalItems : selectedProducts.length).toLocaleString()})
+            </Button>
+            <Button
               type="default"
               disabled={isRevalidatingInventory}
               className="border-gray-200 text-gray-700 hover:text-black font-medium h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
@@ -1592,6 +1677,80 @@ const Products = () => {
           </div>
         </div>
       )}
+
+      {/* Single Delete Confirmation Modal */}
+      <Modal
+        open={!!itemToDelete}
+        onCancel={() => setItemToDelete(null)}
+        footer={null}
+        centered
+        width={420}
+        className="rounded-md overflow-hidden"
+      >
+        <div className="p-4 text-center">
+          <div className="w-10 h-10 rounded border border-red-200 text-red-600 flex items-center justify-center mx-auto mb-3">
+            <FiTrash2 size={18} />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Delete Product</h3>
+          <p className="text-gray-500 text-xs mb-5 leading-relaxed">
+            Are you sure you want to delete <span className="font-semibold text-gray-800">"{itemToDelete?.title || itemToDelete?.TITLE || itemToDelete?.product_title || itemToDelete?.asin || "this product"}"</span> from Inventory Catalog? This action cannot be undone.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              className="h-9 px-4 rounded border-gray-200 text-gray-700 text-xs font-medium cursor-pointer"
+              onClick={() => setItemToDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              danger
+              type="primary"
+              loading={isDeletingSingle}
+              className="h-9 px-4 rounded text-xs font-medium bg-red-600 hover:bg-red-700 border-0 cursor-pointer text-white"
+              onClick={() => handleDeleteSingle(itemToDelete)}
+            >
+              Delete Product
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <Modal
+        open={isBulkDeleteOpen}
+        onCancel={() => setIsBulkDeleteOpen(false)}
+        footer={null}
+        centered
+        width={420}
+        className="rounded-md overflow-hidden"
+      >
+        <div className="p-4 text-center">
+          <div className="w-10 h-10 rounded border border-red-200 text-red-600 flex items-center justify-center mx-auto mb-3">
+            <FiTrash2 size={18} />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Delete Selected Products</h3>
+          <p className="text-gray-500 text-xs mb-5 leading-relaxed">
+            Are you sure you want to delete <strong className="text-gray-900 font-bold">{(selectAllMatching ? totalItems : selectedProducts.length).toLocaleString()}</strong> selected product(s) from Inventory Catalog? This action cannot be undone.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              className="h-9 px-4 rounded border-gray-200 text-gray-700 text-xs font-medium cursor-pointer"
+              onClick={() => setIsBulkDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              danger
+              type="primary"
+              loading={isDeletingBulk}
+              className="h-9 px-4 rounded text-xs font-medium bg-red-600 hover:bg-red-700 border-0 cursor-pointer text-white"
+              onClick={handleDeleteBulk}
+            >
+              Delete Selected ({(selectAllMatching ? totalItems : selectedProducts.length).toLocaleString()})
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Drawer
         title="Filter Products"
