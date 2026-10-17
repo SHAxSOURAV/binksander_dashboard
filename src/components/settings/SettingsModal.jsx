@@ -326,16 +326,23 @@ const SettingsModal = () => {
   });
 
   const handleFetchPublicTabs = async () => {
-    if (!publicLinkUrl) return toast.error("Please enter a link");
+    if (!publicLinkUrl.trim()) {
+      return toast.error("Please enter a Google Spreadsheet link");
+    }
     try {
-      const res = await getSpreadsheetTabs({ spreadsheet_url: publicLinkUrl }).unwrap();
-      setTabsList(res.tabs || []);
-      setSelectedSheetUrl(publicLinkUrl);
+      const res = await getSpreadsheetTabs({ spreadsheet_url: publicLinkUrl.trim() }).unwrap();
+      const tabs = res.tabs || [];
+      if (tabs.length === 0) {
+        toast.error("No tabs found in this spreadsheet.");
+        return;
+      }
+      setSelectedSheetUrl(publicLinkUrl.trim());
       setIsPublicTabSelect(true);
+      setTabsList(tabs);
       setPublicLinkModalOpen(false);
       setTabsModalOpen(true);
     } catch (err) {
-      toast.error(err?.data?.detail || "Failed to fetch tabs");
+      toast.error(err?.data?.detail || "Failed to fetch tabs. Ensure link sharing is enabled.");
     }
   };
 
@@ -538,189 +545,7 @@ const SettingsModal = () => {
                 Manage your inventory sources and Bol.com connection.
               </p>
 
-              {/* Inventory sheets */}
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Inventory Source
-              </p>
-
-              {loadingSheets ? (
-                <Spin />
-              ) : sheets.length === 0 ? (
-                <div className="rounded-[4px] border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-4">
-                  No spreadsheet connected. Please add one below.
-                </div>
-              ) : (
-                <div className="space-y-2 mb-4">
-                  {sheets.map((s) => {
-                    const isAuthExpired = s.status === "EXPIRED_AUTH";
-                    const isPublic = s.import_type === "public" || s.sync_mode === "auto_polling_60s";
-
-                    return (
-                      <div
-                        key={s.spreadsheet_url}
-                        className="rounded-[4px] border border-gray-200 bg-white p-3.5 transition-all hover:border-gray-300"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="w-8 h-8 rounded-[4px] bg-gray-50 text-gray-600 border border-gray-200 flex items-center justify-center flex-shrink-0">
-                            <BsFileEarmarkSpreadsheet size={15} />
-                          </span>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-[13px] font-semibold text-gray-900 truncate">
-                                {s.title || "Inventory Sheet"} ({s.item_count} {s.item_count === 1 ? "item" : "items"})
-                              </p>
-
-                              {isAuthExpired ? (
-                                <span
-                                  title={s.last_error || "Google OAuth authorization expired. Please reconnect."}
-                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0"
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                  Auth Expired
-                                </span>
-                              ) : s.is_syncing ? (
-                                <span
-                                  title={isPublic ? "Public Google Sheet: changes automatically sync every 60 seconds." : "Google Drive push notifications actively streaming changes."}
-                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                  {isPublic ? "Auto-Syncing (60s)" : "Live Syncing"}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200 flex-shrink-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
-                                  Disconnected
-                                </span>
-                              )}
-
-                              <span className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">
-                                {s.import_type === "oauth" ? "OAuth" : "Public Link"}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 mt-1.5">
-                              <FiLink2 size={11} className="text-gray-400 flex-shrink-0" />
-                              <a
-                                href={s.spreadsheet_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-gray-500 hover:text-gray-900 truncate underline-offset-2 hover:underline"
-                                title={s.spreadsheet_url}
-                              >
-                                {s.spreadsheet_url}
-                              </a>
-                            </div>
-
-                            {isAuthExpired && (
-                              <p className="text-[11px] text-amber-600 mt-1.5">
-                                Google authorization expired. Click Reconnect below to restore synchronization.
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            {isAuthExpired ? (
-                              <button
-                                onClick={() => {
-                                  reconnectingSheetRef.current = s;
-                                  loginWithGoogle();
-                                }}
-                                disabled={isReconnecting}
-                                className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 rounded-[4px] transition-colors shadow-xs disabled:opacity-50"
-                              >
-                                <LuRefreshCw size={12} className={isReconnecting ? "animate-spin" : ""} /> Reconnect
-                              </button>
-                            ) : s.is_syncing ? (
-                              <button
-                                onClick={() => handleOpenUnlink(s.spreadsheet_url, s.item_count)}
-                                disabled={unlinking}
-                                className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
-                              >
-                                <LuUnplug size={13} /> Disconnect
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    Modal.confirm({
-                                      title: "Delete All Data?",
-                                      content: "Are you sure you want to delete all products imported from this sheet? This action cannot be undone.",
-                                      okText: "Delete",
-                                      okType: "danger",
-                                      onOk: async () => {
-                                        try {
-                                          await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: true }).unwrap();
-                                          toast.success("Sheet and products deleted");
-                                        } catch (err) {
-                                          toast.error(err?.data?.detail || "Failed to delete sheet data");
-                                        }
-                                      }
-                                    });
-                                  }}
-                                  disabled={unlinking}
-                                  className="flex items-center justify-center text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
-                                >
-                                  Delete
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await resyncInventory().unwrap();
-                                      toast.success("Successfully connected and synced");
-                                    } catch (err) {
-                                      toast.error(err?.data?.detail || "Failed to sync");
-                                    }
-                                  }}
-                                  disabled={resyncing}
-                                  className="flex items-center justify-center text-[11px] font-medium text-gray-900 border border-gray-300 hover:bg-gray-50 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
-                                >
-                                  Sync
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Add Spreadsheet Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2 mb-6">
-                <button
-                  onClick={() => {
-                    if (!bolCreds || bolCreds.length === 0) {
-                      toast.error("You must connect a Bol.com account first before adding a spreadsheet.");
-                      return;
-                    }
-                    reconnectingSheetRef.current = null;
-                    loginWithGoogle();
-                  }}
-                  className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"
-                >
-                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
-                  Connect with Google
-                </button>
-                <button
-                  onClick={() => {
-                    if (!bolCreds || bolCreds.length === 0) {
-                      toast.error("You must connect a Bol.com account first before adding a spreadsheet.");
-                      return;
-                    }
-                    setPublicLinkModalOpen(true);
-                  }}
-                  className="flex-1 border border-gray-200 bg-white text-gray-700 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center"
-                >
-                  Add Public Link
-                </button>
-              </div>
-
-              {/* Brand Blacklist Sheets */}
-              <BrandBlacklistSection />
-
+              {/* Bol.com API Accounts */}
               <BolAccountsSection
                 accounts={bolCreds}
                 form={bolForm}
@@ -731,6 +556,196 @@ const SettingsModal = () => {
                 saving={savingCreds}
                 deleting={deletingCreds}
               />
+
+              {bolCreds && bolCreds.length > 0 ? (
+                <>
+                  {/* Inventory sheets */}
+                  <div className="pt-4 border-t border-gray-100 mt-4">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      Inventory Source
+                    </p>
+
+                    {loadingSheets ? (
+                      <Spin />
+                    ) : sheets.length === 0 ? (
+                      <div className="rounded-[4px] border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 mb-4">
+                        No spreadsheet connected. Please add one below.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 mb-4">
+                        {sheets.map((s) => {
+                          const isAuthExpired = s.status === "EXPIRED_AUTH";
+                          const isPublic = s.import_type === "public" || s.sync_mode === "auto_polling_60s";
+
+                          return (
+                            <div
+                              key={s.spreadsheet_url}
+                              className="rounded-[4px] border border-gray-200 bg-white p-3.5 transition-all hover:border-gray-300"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className="w-8 h-8 rounded-[4px] bg-gray-50 text-gray-600 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                  <BsFileEarmarkSpreadsheet size={15} />
+                                </span>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-[13px] font-semibold text-gray-900 truncate">
+                                      {s.title || "Inventory Sheet"} ({s.item_count} {s.item_count === 1 ? "item" : "items"})
+                                    </p>
+
+                                    {isAuthExpired ? (
+                                      <span
+                                        title={s.last_error || "Google OAuth authorization expired. Please reconnect."}
+                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                        Auth Expired
+                                      </span>
+                                    ) : s.is_syncing ? (
+                                      !isPublic ? (
+                                        <span
+                                          title="Google Drive push notifications actively streaming changes."
+                                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0"
+                                        >
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                          Live Syncing
+                                        </span>
+                                      ) : null
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200 flex-shrink-0">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                        Disconnected
+                                      </span>
+                                    )}
+
+                                    <span className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">
+                                      {s.import_type === "oauth" ? "OAuth" : "Public Link"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                    <FiLink2 size={11} className="text-gray-400 flex-shrink-0" />
+                                    <a
+                                      href={s.spreadsheet_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[11px] text-gray-500 hover:text-gray-900 truncate underline-offset-2 hover:underline"
+                                      title={s.spreadsheet_url}
+                                    >
+                                      {s.spreadsheet_url}
+                                    </a>
+                                  </div>
+
+                                  {isAuthExpired && (
+                                    <p className="text-[11px] text-amber-600 mt-1.5">
+                                      Google authorization expired. Click Reconnect below to restore synchronization.
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  {isAuthExpired ? (
+                                    <button
+                                      onClick={() => {
+                                        reconnectingSheetRef.current = s;
+                                        loginWithGoogle();
+                                      }}
+                                      disabled={isReconnecting}
+                                      className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 rounded-[4px] transition-colors shadow-xs disabled:opacity-50"
+                                    >
+                                      <LuRefreshCw size={12} className={isReconnecting ? "animate-spin" : ""} /> Reconnect
+                                    </button>
+                                  ) : s.is_syncing ? (
+                                    <button
+                                      onClick={() => handleOpenUnlink(s.spreadsheet_url, s.item_count)}
+                                      disabled={unlinking}
+                                      className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
+                                    >
+                                      <LuUnplug size={13} /> Disconnect
+                                    </button>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          Modal.confirm({
+                                            title: "Delete All Data?",
+                                            content: "Are you sure you want to delete all products imported from this sheet? This action cannot be undone.",
+                                            okText: "Delete",
+                                            okType: "danger",
+                                            onOk: async () => {
+                                              try {
+                                                await unlinkSheet({ spreadsheet_url: s.spreadsheet_url, delete_data: true }).unwrap();
+                                                toast.success("Sheet and products deleted");
+                                              } catch (err) {
+                                                toast.error(err?.data?.detail || "Failed to delete sheet data");
+                                              }
+                                            }
+                                          });
+                                        }}
+                                        disabled={unlinking}
+                                        className="flex items-center justify-center text-[11px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-red-600 hover:border-red-200 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
+                                      >
+                                        Delete
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          try {
+                                            await resyncInventory().unwrap();
+                                            toast.success("Successfully connected and synced");
+                                          } catch (err) {
+                                            toast.error(err?.data?.detail || "Failed to sync");
+                                          }
+                                        }}
+                                        disabled={resyncing}
+                                        className="flex items-center justify-center text-[11px] font-medium text-gray-900 border border-gray-300 hover:bg-gray-50 px-2.5 py-1.5 rounded-[4px] flex-shrink-0 disabled:opacity-50 transition-colors"
+                                      >
+                                        Sync
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add Spreadsheet Buttons */}
+                    <div className="flex flex-col sm:flex-row gap-2 mb-6">
+                      <button
+                        onClick={() => {
+                          reconnectingSheetRef.current = null;
+                          loginWithGoogle();
+                        }}
+                        className="flex-1 bg-white text-gray-700 border border-gray-200 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
+                        Connect with Google
+                      </button>
+                      <button
+                        onClick={() => setPublicLinkModalOpen(true)}
+                        className="flex-1 border border-gray-200 bg-white text-gray-700 text-xs font-medium py-2.5 rounded-[4px] hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center"
+                      >
+                        Add Public Link
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Brand Blacklist Sheets */}
+                  <BrandBlacklistSection />
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 p-4 text-center my-4">
+                  <p className="text-xs text-gray-700 font-semibold mb-1">
+                    Connect a Bol.com account to unlock Inventory Spreadsheets
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    Once your Bol.com API account is added above, you will be able to link Google Spreadsheets and import inventory.
+                  </p>
+                </div>
+              )}
 
               <RimcoAccountsSection />
 
@@ -836,9 +851,20 @@ const SettingsModal = () => {
           placeholder="https://docs.google.com/spreadsheets/d/..." 
           value={publicLinkUrl} 
           onChange={e => setPublicLinkUrl(e.target.value)} 
+          onKeyDown={e => {
+            if (e.key === 'Enter' && publicLinkUrl.trim() && !fetchingTabs) {
+              e.preventDefault();
+              handleFetchPublicTabs();
+            }
+          }}
           className="mb-4 h-10 rounded-lg"
         />
-        <Button type="primary" onClick={handleFetchPublicTabs} loading={fetchingTabs} className="w-full h-10 rounded-lg button-color font-semibold">
+        <Button 
+          type="primary" 
+          onClick={handleFetchPublicTabs} 
+          loading={fetchingTabs} 
+          className="w-full h-10 rounded-lg button-color font-semibold"
+        >
           Next
         </Button>
       </div>

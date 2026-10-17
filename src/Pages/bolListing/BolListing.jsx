@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   useGetBolOffersQuery, 
   useSyncBolOffersMutation,
-  useGetBolProductImagesBatchQuery,
   useGetBolOfferInsightsBatchQuery,
   useBulkDeleteBolOffersMutation,
   useBulkUpdateBolOfferStockMutation,
@@ -112,11 +111,12 @@ const BolListing = () => {
 
   const activeFilterCount = Object.keys(activeFilters).filter(k => activeFilters[k] !== undefined && activeFilters[k] !== "").length;
 
-  const { data, isLoading, isFetching, refetch, isError } = useGetBolOffersQuery({
+  const { data, currentData, isLoading, isFetching, refetch, isError } = useGetBolOffersQuery({
     page: page,
     limit: limit,
     search: debouncedSearch,
     sort: sort,
+    bol_account_id: activeBolAccountId,
     ...activeFilters
   });
 
@@ -124,7 +124,7 @@ const BolListing = () => {
 
   const handleRefresh = async () => {
     try {
-      await syncBolOffers().unwrap();
+      await syncBolOffers(activeBolAccountId).unwrap();
       setSelectedOffers([]);
       toast.success("Successfully synchronized with Bol.com");
     } catch (err) {
@@ -132,19 +132,22 @@ const BolListing = () => {
     }
   };
 
-  // Memoised so the batch-request args below keep a stable identity between renders.
-  const offers = useMemo(() => data?.data || [], [data]);
-  const brands = data?.brands || [];
-  const totalItems = data?.total_items || 0;
+  // Instant skeleton transition: whenever query args change (tab, filter, sort, search, page),
+  // currentData is undefined until the new fetch resolves. Show skeleton immediately!
+  const displayData = currentData ?? data;
+  const loading = isLoading || (isFetching && !currentData) || credsLoading;
+  const offers = useMemo(() => (isFetching && !currentData ? [] : displayData?.data || []), [displayData, isFetching, currentData]);
+  const brands = displayData?.brands || [];
+  const totalItems = displayData?.total_items || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
 
-  // Resolve every card's image and Bol metrics in two requests rather than two per
-  // card. Args are memoised so RTK Query doesn't refetch on unrelated re-renders.
-  const pageEans = useMemo(() => offers.map((o) => o.ean).filter(Boolean), [offers]);
+  // Insights are fetched in one batched request per page.
+  // When page is changing, skip fetching insights for stale offers.
+  // Insights: Only fetch batch for offers that do NOT already have embedded insights from MongoDB!
   const pageInsightArgs = useMemo(
     () =>
       offers
-        .filter((o) => o.offerId)
+        .filter((o) => o.offerId && (!o.insights || o.insights.commission == null))
         .map((o) => ({
           offer_id: o.offerId,
           ean: o.ean,
@@ -153,14 +156,10 @@ const BolListing = () => {
     [offers],
   );
 
-  const { data: imagesRes } = useGetBolProductImagesBatchQuery(pageEans, {
-    skip: pageEans.length === 0,
-  });
   const { data: insightsRes } = useGetBolOfferInsightsBatchQuery(pageInsightArgs, {
-    skip: pageInsightArgs.length === 0,
+    skip: pageInsightArgs.length === 0 || isPageChanging,
   });
 
-  const imageMap = imagesRes?.images || {};
   const insightMap = insightsRes?.insights || {};
 
   const handlePageSizeChange = (size) => {
@@ -379,23 +378,23 @@ const BolListing = () => {
               </button>
             </Popover>
 
-            <button
-              onClick={() => setFilterOpen(true)}
-              title="Filter offers"
-              className={`h-10 px-3 rounded-lg border flex items-center gap-2 transition-colors ${
-                activeFilterCount > 0
-                  ? 'border-gray-900 text-gray-900 bg-gray-100 font-medium' 
-                  : 'border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300'
-              }`}
-            >
-              <FiFilter size={16} />
-              <span className="text-xs font-medium">Filter</span>
-              {activeFilterCount > 0 && (
-                <span className="bg-gray-900 text-white text-[10px] w-4 h-4 rounded flex items-center justify-center font-semibold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+            <Tooltip title="Filter offers">
+              <button
+                onClick={() => setFilterOpen(true)}
+                className={`relative w-9 h-9 rounded border flex items-center justify-center transition-colors ${
+                  activeFilterCount > 0
+                    ? 'border-gray-900 text-gray-900 bg-gray-100' 
+                    : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <FiFilter size={16} />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-gray-900 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-semibold pointer-events-none">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
 
             <Select
               placeholder="Sort by..."
@@ -408,8 +407,6 @@ const BolListing = () => {
                 { value: "price_desc", label: "Price: High to Low" },
                 { value: "stock_desc", label: "Stock: High to Low" },
                 { value: "stock_asc", label: "Stock: Low to High" },
-                { value: "title_asc", label: "Title: A to Z" },
-                { value: "title_desc", label: "Title: Z to A" },
               ]}
             />
 
@@ -476,7 +473,7 @@ const BolListing = () => {
 
         {/* List / Grid View */}
         <div className="overflow-x-auto thin-scrollbar">
-          {isLoading || (isFetching && !data) || credsLoading ? (
+          {loading ? (
             view === "grid" ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {[...Array(10)].map((_, i) => (
@@ -533,7 +530,7 @@ const BolListing = () => {
                 const isSelected = selectedOffers.some(o => o.offerId === offer.offerId);
                 const forSale = isOfferForSale(offer);
                 const title =
-                  offer.store?.productTitle || offer.unknownProductTitle || "Unknown product";
+                  offer.title || offer.unknownProductTitle || offer.store?.productTitle || "Unknown product";
                 const unitPrice = offer.pricing?.bundlePrices?.[0]?.unitPrice;
                 const stockAmount = offer.stock?.amount ?? 0;
                 return (
@@ -578,7 +575,8 @@ const BolListing = () => {
 
                       <BolProductImage
                         ean={offer.ean}
-                        src={imageMap[offer.ean]}
+                        src={offer.image_url}
+                        disableQuery={true}
                         className="h-[86%] w-[86%] object-contain bg-transparent"
                       />
                     </div>
@@ -619,7 +617,7 @@ const BolListing = () => {
                         </div>
                       )}
 
-                      <OfferInsights insights={insightMap[offer.offerId]} />
+                      <OfferInsights insights={offer.insights || insightMap[offer.offerId]} />
                     </div>
 
                     {/* Footer mirrors the catalog's copyable identifier chips. */}
@@ -692,9 +690,9 @@ const BolListing = () => {
                       {columns.title && (
                         <td className="py-2 px-2 text-gray-700">
                           <div className="flex items-center gap-2">
-                            <BolProductImage ean={offer.ean} src={imageMap[offer.ean]} className="w-8 h-8 rounded object-cover" />
-                            <span className="text-gray-700 font-semibold line-clamp-1 max-w-[200px]" title={offer.store?.productTitle || offer.unknownProductTitle}>
-                              {offer.store?.productTitle || offer.unknownProductTitle || "Unknown Product"}
+                            <BolProductImage ean={offer.ean} src={offer.image_url} disableQuery={true} className="w-8 h-8 rounded object-cover" />
+                            <span className="text-gray-700 font-semibold line-clamp-1 max-w-[200px]" title={offer.title || offer.unknownProductTitle || offer.store?.productTitle}>
+                              {offer.title || offer.unknownProductTitle || offer.store?.productTitle || "Unknown Product"}
                             </span>
                           </div>
                         </td>
@@ -722,7 +720,7 @@ const BolListing = () => {
                         </td>
                       )}
                       <td className="py-2 px-2">
-                        <OfferInsights insights={insightMap[offer.offerId]} />
+                        <OfferInsights insights={offer.insights || insightMap[offer.offerId]} />
                       </td>
                       {columns.status && (
                         <td className="py-2 px-2">
@@ -981,6 +979,7 @@ const BolListing = () => {
 
       <OfferDetailsModal 
         offer={selectedOffer} 
+        insights={selectedOffer?.insights || (selectedOffer ? insightMap[selectedOffer.offerId] : null)}
         onClose={() => setSelectedOffer(null)} 
       />
     </div>
