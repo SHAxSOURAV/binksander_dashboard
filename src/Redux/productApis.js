@@ -53,14 +53,15 @@ const mapItem = (it, i) => {
     // catalog price tracks whatever that account is set to. The local formula is only a
     // fallback for responses predating that field — it assumes the default 2.5x.
     price: (() => {
+      const rawP = parsePrice(it.purchase_price) || parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]);
+      const markupP = rawP > 0 ? Math.max(39.95, Math.round((Math.floor((rawP * (it.price_multiplier ?? 2.5)) / 10) * 10 + 9.95) * 100) / 100) : null;
       if (typeof it.selling_price === "number" && it.selling_price > 0) {
+        if (it.selling_price === 39.95 && markupP && markupP > 39.95) {
+          return markupP;
+        }
         return it.selling_price;
       }
-      const rawP = parsePrice(it.purchase_price) || parsePrice(it.product_price) || parsePrice(it.PRICE) || parsePrice(it["Purchase price"]);
-      if (!rawP || rawP <= 0) return 39.95;
-      const baseP = rawP * 2.5;
-      const roundedP = Math.floor(baseP / 10) * 10 + 9.95;
-      return Math.max(39.95, Math.round(roundedP * 100) / 100);
+      return markupP || 39.95;
     })(),
     priceMultiplier: it.price_multiplier ?? 2.5,
     purchasePrice: parsePrice(it.purchase_price) || parsePrice(it["Purchase price"]),
@@ -253,6 +254,26 @@ const productApis = baseApis.injectEndpoints({
       invalidatesTags: ["Products"],
     }),
 
+    deleteInventoryItem: builder.mutation({
+      query: (itemId) => ({
+        url: `/spreadsheet/items/${itemId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Products"],
+    }),
+
+    deleteInventoryBulk: builder.mutation({
+      query: (arg) => {
+        const body = Array.isArray(arg) ? { item_ids: arg } : arg;
+        return {
+          url: "/spreadsheet/items/bulk-delete",
+          method: "POST",
+          body,
+        };
+      },
+      invalidatesTags: ["Products"],
+    }),
+
     revalidateItem: builder.mutation({
       query: (itemId) => ({
         url: `/spreadsheet/revalidate-item/${itemId}`,
@@ -310,7 +331,9 @@ const productApis = baseApis.injectEndpoints({
         // Fall back to the single main photo if the array is missing.
         if (photos.length === 0 && d.product_photo) photos.push(d.product_photo);
         return {
-          title: d.product_title || "",
+          title: d.amazon_title || d.product_title || "",
+          amazonTitle: d.amazon_title || d.product_title || "",
+          sheetTitle: d.spreadsheet_title || "",
           brand: d.product_byline || d.brand || "",
           description:
             d.product_description ||
@@ -579,10 +602,14 @@ const productApis = baseApis.injectEndpoints({
 
     // GET /bol/offers?refresh=true (Forced Sync)
     syncBolOffers: builder.mutation({
-      query: () => ({
-        url: "/bol/offers?refresh=true",
-        method: "GET",
-      }),
+      query: (accountId) => {
+        const params = new URLSearchParams({ refresh: "true" });
+        if (accountId) params.append("bol_account_id", accountId);
+        return {
+          url: `/bol/offers?${params.toString()}`,
+          method: "GET",
+        };
+      },
       invalidatesTags: ["BolOffers"],
     }),
 
@@ -818,11 +845,28 @@ const productApis = baseApis.injectEndpoints({
       }),
       providesTags: ["Drafts"],
     }),
+
+    // GET /bol/categories/recommendations
+    getCategoryRecommendations: builder.query({
+      query: ({ title, description, category, bolAccountId } = {}) => {
+        const params = new URLSearchParams();
+        if (title) params.append("title", title);
+        if (description) params.append("description", description);
+        if (category) params.append("category", category);
+        return {
+          url: `/bol/categories/recommendations?${params.toString()}`,
+          method: "GET",
+          headers: bolAccountId ? { "x-bol-account-id": bolAccountId } : {},
+        };
+      },
+    }),
   }),
   overrideExisting: false,
 });
 
 export const {
+  useGetCategoryRecommendationsQuery,
+  useLazyGetCategoryRecommendationsQuery,
   useGetConnectionQuery,
   useGetProductsQuery,
   useGetFiltersMetaQuery,
@@ -830,6 +874,8 @@ export const {
   useGetNeedsReviewItemsQuery,
   useDeleteNeedsReviewItemMutation,
   useDeleteNeedsReviewBulkMutation,
+  useDeleteInventoryItemMutation,
+  useDeleteInventoryBulkMutation,
   useRevalidateItemMutation,
   useRevalidateAllMutation,
   useSyncConnectedSheetMutation,
